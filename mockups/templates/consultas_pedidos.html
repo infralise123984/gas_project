@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Consultar Pedidos</h2>
+
+<!-- Filtros -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Cliente</label>
+                <input type="text" class="form-control" placeholder="Nombre">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Fecha desde</label>
+                <input type="date" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Estado</label>
+                <select class="form-select">
+                    <option>Todos</option>
+                    <option>Entregado</option>
+                    <option>En ruta</option>
+                    <option>Pendiente</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary">Buscar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Resultados -->
+<table class="table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Cliente</th>
+            <th>Balón</th>
+            <th>Fecha</th>
+            <th>Estado</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for pedido in pedidos %}
+        <tr>
+            <td>{{ pedido.id }}</td>
+            <td>{{ pedido.cliente }}</td>
+            <td>{{ pedido.balon }}</td>
+            <td>{{ pedido.fecha }}</td>
+            <td>
+                {% if pedido.estado == 'Entregado' %}
+                    <span class="badge bg-success">{{ pedido.estado }}</span>
+                {% else %}
+                    <span class="badge bg-warning text-dark">{{ pedido.estado }}</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

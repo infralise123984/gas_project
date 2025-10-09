@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<!-- Para impresión: quita navbar y usa estilo limpio -->
+<style>
+    @media print {
+        .no-print { display: none; }
+        body { padding-top: 0; }
+        .container { max-width: 100%; }
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-center no-print mb-4">
+    <h2>Reporte de Ventas - Abril 2025</h2>
+    <button onclick="window.print()" class="btn btn-outline-secondary">Imprimir</button>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Resumen</h5>
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item d-flex justify-content-between">
+                <span>Total pedidos:</span>
+                <strong>42</strong>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span>Ventas totales:</span>
+                <strong>S/ 2,850.00</strong>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span>Balón más vendido:</span>
+                <strong>10kg (32 unidades)</strong>
+            </li>
+        </ul>
+    </div>
+</div>
+
+<h4 class="mt-4">Detalles</h4>
+<table class="table table-bordered">
+    <thead class="table-light">
+        <tr>
+            <th>Fecha</th>
+            <th>Cliente</th>
+            <th>Balón</th>
+            <th>Monto</th>
+            <th>Método</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr><td>2025-04-01</td><td>Juan Pérez</td><td>10kg</td><td>S/ 45</td><td>Efectivo</td></tr>
+        <tr><td>2025-04-01</td><td>María López</td><td>45kg</td><td>S/ 120</td><td>Tarjeta</td></tr>
+        <!-- más filas... -->
+    </tbody>
+</table>
+{% endblock %}
