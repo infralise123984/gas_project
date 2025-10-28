@@ -1,0 +1,9 @@
+TO DO LIST:
+
+base de datos
+
+
+
+al hacer el pedido en local, el bodeguero haga el registro, quede en una pantalla para confirmar luego si el cliente hizo el pago, en efectivo o tarjeta
+
+al hacer el pedido mediante llamada de telefono, el telefonista no debe indicar el estado inicial del pedido, si no que se ponga de forma automatica como "pedido enviado a camion"

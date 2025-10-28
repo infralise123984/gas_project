@@ -1,46 +1,171 @@
 {% extends 'base.html' %}
 
-{% block content %}
-<h2>Registrar Nuevo Pedido</h2>
+{% block title %}Registrar Nuevo Pedido{% endblock %}
 
-<form class="row g-3 mt-3">
-    <div class="col-md-6">
-        <label class="form-label">Cliente</label>
-        <input type="text" class="form-control" placeholder="Nombre o ID">
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-10 col-lg-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">Registrar Nuevo Pedido</h4>
+            </div>
+            <div class="card-body">
+                <form method="post" class="row g-3">
+                    {% csrf_token %}<!-- Muy importante para Django -->
+
+                    <!-- Paso 1: Buscar o crear cliente por teléfono -->
+                    <div class="col-12">
+                        <label for="telefono_cliente" class="form-label">Teléfono del Cliente</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="telefono_cliente" name="telefono_cliente"
+                                placeholder="Ej: 987654321" required>
+                            <button class="btn btn-outline-secondary" type="button"
+                                id="buscar_cliente_btn">Buscar</button>
+                        </div>
+                        <div class="form-text">Ingrese el número de teléfono para buscar al cliente o crear uno nuevo.
+                        </div>
+                    </div>
+
+                    <!-- Datos del cliente (se llenan dinámicamente o se muestran si es nuevo) -->
+                    <div id="datos_cliente" style="display: none;" class="col-12 border p-3 rounded bg-light">
+                        <h6 class="mb-3">Datos del Cliente</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="nombre_cliente" class="form-label">Nombre</label>
+                                <input type="text" class="form-control" id="nombre_cliente" name="nombre_cliente"
+                                    required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="direccion_cliente" class="form-label">Dirección por defecto</label>
+                                <input type="text" class="form-control" id="direccion_cliente" name="direccion_cliente">
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <label for="direccion_entrega" class="form-label">Dirección de Entrega</label>
+                            <textarea class="form-control" id="direccion_entrega" name="direccion_entrega" rows="2"
+                                required></textarea>
+                            <div class="form-check mt-1">
+                                <input class="form-check-input" type="checkbox" id="usar_direccion_cliente">
+                                <label class="form-check-label" for="usar_direccion_cliente">
+                                    Usar la dirección por defecto del cliente
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botón para crear nuevo cliente si no existe -->
+                    <div id="crear_cliente" style="display: none;" class="col-12">
+                        <button type="button" class="btn btn-outline-info w-100" id="btn_crear_cliente">Cliente no
+                            encontrado. Crear nuevo.</button>
+                    </div>
+
+                    <!-- Datos del Pedido -->
+                    <div class="col-md-4">
+                        <label for="balon" class="form-label">Tipo de Balón</label>
+                        <select class="form-select" id="balon" name="balon" required>
+                            <option value="">Seleccionar...</option>
+                            <option value="10 kg">10 kg</option>
+                            <option value="45 kg">45 kg</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="cantidad_balon" class="form-label">Cantidad</label>
+                        <input type="number" class="form-control" id="cantidad_balon" name="cantidad_balon" value="1"
+                            min="1" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="metodo_pago" class="form-label">Método de Pago</label>
+                        <select class="form-select" id="metodo_pago" name="metodo_pago" required>
+                            <option value="efectivo">Efectivo</option>
+                            <option value="tarjeta">Tarjeta</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="origen" class="form-label">Origen del Pedido</label>
+                        <select class="form-select" id="origen" name="origen" required>
+                            <option value="telefono" selected>Teléfono</option>
+                            <option value="web">Web</option>
+                            <option value="local">Local</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="estado" class="form-label">Estado Inicial</label>
+                        <select class="form-select" id="estado" name="estado" required>
+                            <option value="pendiente" selected>Pendiente</option>
+                            <option value="en_ruta">En ruta</option>
+                            <option value="entregado">Entregado</option>
+                            <option value="cancelado">Cancelado</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-success w-100 py-2">Registrar Pedido</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
-    <div class="col-md-6">
-        <label class="form-label">Teléfono</label>
-        <input type="text" class="form-control" placeholder="987654321">
-    </div>
-    <div class="col-md-4">
-        <label class="form-label">Tipo de balón</label>
-        <select class="form-select">
-            <option>10kg</option>
-            <option>45kg</option>
-        </select>
-    </div>
-    <div class="col-md-4">
-        <label class="form-label">Método de pago</label>
-        <select class="form-select">
-            <option>Efectivo</option>
-            <option>Tarjeta</option>
-        </select>
-    </div>
-    <div class="col-md-4">
-        <label class="form-label">Origen</label>
-        <select class="form-select">
-            <option>Teléfono</option>
-            <option>Web</option>
-            <option>Local</option>
-        </select>
-    </div>
-    <div class="col-12">
-        <label class="form-label">Dirección de entrega</label>
-        <textarea class="form-control" rows="2"></textarea>
-    </div>
-    <div class="col-12">
-        <button type="submit" class="btn btn-primary">Registrar Pedido</button>
-        <button type="reset" class="btn btn-secondary">Cancelar</button>
-    </div>
-</form>
+</div>
+
+<script>
+    // Este script simula la lógica de búsqueda/creación en el frontend.
+    // En la realidad, esto se haría con AJAX hacia una vista de Django.
+
+    document.getElementById('buscar_cliente_btn').addEventListener('click', function () {
+        const telefono = document.getElementById('telefono_cliente').value.trim();
+
+        if (telefono) {
+            // Simular búsqueda (esto debería ser una llamada AJAX)
+            // Por ahora, simulamos encontrar o no al cliente
+            const clienteExiste = confirm(`¿Cliente con teléfono ${telefono} ya existe? (Simulación)`); // Cambia esto por AJAX
+
+            if (clienteExiste) {
+                // Simular datos encontrados
+                document.getElementById('nombre_cliente').value = 'Juan Pérez'; // Simulado
+                document.getElementById('direccion_cliente').value = 'Av. Los Pinos 123'; // Simulado
+                document.getElementById('direccion_entrega').value = 'Av. Los Pinos 123'; // Usar dirección por defecto
+
+                document.getElementById('datos_cliente').style.display = 'block';
+                document.getElementById('crear_cliente').style.display = 'none';
+                document.getElementById('usar_direccion_cliente').checked = true; // Marcar por defecto
+            } else {
+                // Cliente no encontrado, mostrar formulario para crear nuevo
+                document.getElementById('nombre_cliente').value = '';
+                document.getElementById('direccion_cliente').value = '';
+                document.getElementById('direccion_entrega').value = '';
+
+                document.getElementById('datos_cliente').style.display = 'block';
+                document.getElementById('crear_cliente').style.display = 'block';
+                document.getElementById('usar_direccion_cliente').checked = false;
+            }
+        } else {
+            alert('Por favor, ingrese un número de teléfono.');
+        }
+    });
+
+    // Opción para usar la dirección del cliente como entrega
+    document.getElementById('usar_direccion_cliente').addEventListener('change', function () {
+        const direccionCliente = document.getElementById('direccion_cliente').value;
+        const direccionEntregaField = document.getElementById('direccion_entrega');
+        if (this.checked) {
+            direccionEntregaField.value = direccionCliente;
+            direccionEntregaField.setAttribute('readonly', 'readonly');
+        } else {
+            direccionEntregaField.removeAttribute('readonly');
+        }
+    });
+
+    // Opción para crear nuevo cliente
+    document.getElementById('btn_crear_cliente').addEventListener('click', function () {
+        // Limpiar campos para nuevo cliente
+        document.getElementById('nombre_cliente').value = '';
+        document.getElementById('direccion_cliente').value = '';
+        document.getElementById('direccion_entrega').value = '';
+        document.getElementById('usar_direccion_cliente').checked = false;
+        document.getElementById('datos_cliente').style.display = 'block';
+        document.getElementById('crear_cliente').style.display = 'none';
+    });
+
+</script>
+
 {% endblock %}
