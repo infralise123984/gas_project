@@ -15,7 +15,9 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
+AUTH_USER_MODEL = "mockups.Usuario"
+LOGIN_URL = '/login/'          # ← Django sabrá dónde está tu página de login
+LOGIN_REDIRECT_URL = '/'       # ← después de loguearse, va al index (o puedes dejar '/')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -37,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
     'mockups',
 ]
 

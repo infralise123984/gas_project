@@ -1,23 +1,39 @@
+<!-- templates/login.html -->
 {% extends 'base.html' %}
 
-{% block title  %}Iniciar Sesión{% endblock %}
+{% block title %}Iniciar Sesión - GasFácil{% endblock %}
 
 {% block content %}
 <div class="d-flex align-items-center justify-content-center min-vh-100">
     <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
         <div class="card shadow">
             <div class="card-header bg-primary text-white text-center py-3">
-                <h4 class="mb-0">Iniciar Sesión</h4>
+                <h4 class="mb-0">GasFácil</h4>
+                <small class="d-block">Iniciar Sesión</small>
             </div>
             <div class="card-body p-4">
-                <form>
+
+                <!-- Mensajes de éxito/error -->
+                {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+                {% endif %}
+
+                <form method="post">
+                    {% csrf_token %}
                     <div class="mb-3">
                         <label for="username" class="form-label">Usuario</label>
-                        <input type="text" class="form-control" id="username" placeholder="Nombre de usuario" required>
+                        <input type="text" class="form-control" id="username" name="username"
+                            placeholder="Nombre de usuario" required autofocus>
                     </div>
                     <div class="mb-3">
                         <label for="password" class="form-label">Contraseña</label>
-                        <input type="password" class="form-control" id="password" placeholder="Contraseña" required>
+                        <input type="password" class="form-control" id="password" name="password"
+                            placeholder="Contraseña" required>
                     </div>
                     <button type="submit" class="btn btn-primary w-100 py-2">
                         Ingresar
