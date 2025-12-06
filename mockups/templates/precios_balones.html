@@ -1,0 +1,215 @@
+<!-- templates/precios_balones.html -->
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Gestión de Precios - GasFácil{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10 col-xl-8">
+
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <h2 class="text-primary fw-bold mb-0">
+                    Gestión de Precios de Balones
+                </h2>
+
+                <div>
+                    <!-- Solo visible en desarrollo o para superusuarios -->
+                    {% if user.is_superuser or debug %}
+                    <button type="button" class="btn btn-success me-2" data-bs-toggle="modal"
+                        data-bs-target="#modalNuevoBalon">
+                        Nuevo Balón
+                    </button>
+                    {% endif %}
+
+                    <span
+                        class="badge bg-{% if user.is_superuser %}danger{% else %}secondary{% endif %} fs-6 px-3 py-2">
+                        {% if user.is_superuser %}Admin Total{% else %}Jefe{% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Mensajes -->
+            {% if messages %}
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            <div class="card shadow-lg border-0">
+                <div class="card-header bg-primary text-white text-center py-4">
+                    <h4 class="mb-0 fw-bold">Precios y Disponibilidad de Balones</h4>
+                    <small>Los cambios se registran con historial automático • Última actualización visible</small>
+                </div>
+
+                <div class="card-body p-4">
+                    <form method="post" id="formPrecios">
+                        {% csrf_token %}
+
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-primary text-white">
+                                    <tr>
+                                        <th class="ps-4">Tamaño</th>
+                                        <th class="text-center">Precio (CLP)</th>
+                                        <th class="text-center">Disponible</th>
+                                        <th class="text-center">Última actualización</th>
+                                        <!-- Solo en testing -->
+                                        {% if user.is_superuser or debug %}
+                                        <th class="text-center" style="width: 80px;">Acciones</th>
+                                        {% endif %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for balon in balones %}
+                                    <tr {% if not balon.activo %}class="table-light" style="opacity: 0.75;" {% endif %}>
+                                        <td class="ps-4">
+                                            <span class="fw-bold fs-5">{{ balon.tamaño }}</span>
+                                            {% if not balon.activo %}
+                                            <span class="badge bg-danger ms-2">Inactivo</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <td class="text-center">
+                                            <input type="text" name="precio_{{ balon.id }}" value="{{ balon.precio }}"
+                                                class="form-control form-control-lg text-end fw-bold mx-auto"
+                                                style="width: 160px; font-size: 1.3rem;" placeholder="0"
+                                                inputmode="numeric" required>
+                                            <small class="text-muted">Ej: 32800</small>
+                                        </td>
+
+                                        <td class="text-center">
+                                            <div class="form-check form-switch d-flex justify-content-center">
+                                                <input class="form-check-input" type="checkbox"
+                                                    name="activo_{{ balon.id }}" {% if balon.activo %}checked{% endif %}
+                                                    style="width: 60px; height: 30px;">
+                                            </div>
+                                        </td>
+
+                                        <td class="text-center small">
+                                            {% if balon.actualizado_el %}
+                                            <div>{{ balon.actualizado_el|date:"d/m/Y" }}</div>
+                                            <div class="text-muted">{{ balon.actualizado_el|time:"H:i" }}</div>
+                                            {% if balon.actualizado_por %}
+                                            <div class="text-muted mt-1">por {{ balon.actualizado_por.get_full_name|default:balon.actualizado_por.username}}</div>
+                                            {% endif %}
+                                            {% else %}
+                                            <span class="text-muted">Sin cambios</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <!-- Solo en testing o superuser -->
+                                        {% if user.is_superuser or debug %}
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                                onclick="confirmarEliminacion({{balon.id}} , '{{ balon.tamaño }}')">
+                                                Eliminar
+                                            </button>
+                                        </td>
+                                        {% endif %}
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="{% if user.is_superuser or debug %}5{% else %}4{% endif %}"
+                                            class="text-center py-5 text-muted">
+                                            <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                                            <strong>No hay balones registrados aún</strong>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="text-center mt-5">
+                            <button type="submit" class="btn btn-success btn-lg px-5 shadow">
+                                Guardar Todos los Cambios
+                            </button>
+                            <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-secondary btn-lg px-5 ms-3">
+                                Volver al Reporte
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="text-center mt-4 text-muted small">
+                El historial de cambios está disponible en el Admin
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODAL: AÑADIR NUEVO BALÓN ==================== -->
+{% if user.is_superuser or debug %}
+<div class="modal fade" id="modalNuevoBalon" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{% url 'precios_balones' %}">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="crear_balon">
+
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Añadir Nuevo Tipo de Balón</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Tamaño (ej: 5kg, 15kg, 45kg)</label>
+                        <input type="text" name="nuevo_tamaño" class="form-control form-control-lg" placeholder="15kg"
+                            required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Precio inicial (sin puntos)</label>
+                        <input type="number" name="nuevo_precio" class="form-control form-control-lg text-end" value="0"
+                            min="0" required>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Crear Balón</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ==================== SCRIPT: CONFIRMAR ELIMINACIÓN ==================== -->
+<script>
+    function confirmarEliminacion(id, tamaño) {
+        if (confirm(`¿Estás seguro de eliminar el balón de ${tamaño}?\n\nEsta acción NO se puede deshacer.`)) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '{% url "precios_balones" %}';
+
+            const csrf = document.createElement('input');
+            csrf.type = 'hidden';
+            csrf.name = 'csrfmiddlewaretoken';
+            csrf.value = '{{ csrf_token }}';
+            form.appendChild(csrf);
+
+            const inputAccion = document.createElement('input');
+            inputAccion.type = 'hidden';
+            inputAccion.name = 'accion';
+            inputAccion.value = 'eliminar_balon';
+            form.appendChild(inputAccion);
+
+            const inputId = document.createElement('input');
+            inputId.type = 'hidden';
+            inputId.name = 'balon_id';
+            inputId.value = id;
+            form.appendChild(inputId);
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+</script>
+{% endblock %}

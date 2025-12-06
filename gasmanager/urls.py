@@ -20,12 +20,18 @@ from mockups import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path("", views.sas),
-    path('login/',views.login),
-    path('mantenedor_clientes/',views.mantenedor_clientes),
-    path('consultas_pedidos/',views.consultas_pedidos),
-    path('transaccional_pedido/',views.transaccional_pedido),
-    path('reporte_ventas/',views.reporte_ventas),
-    path('cliente_pedido/',views.cliente_pedido),
-    path('camionero_entregas/',views.camionero_entregas),
+
+    path("", views.index, name="index"),                                   # ← le puse nombre (opcional pero recomendado)
+
+    path('login/', views.login_view, name='login'),      # ← NUEVA RUTA (cambia de login_view/ → login/)
+    path('logout/', views.logout_view, name='logout'),  # ← NUEVA RUTA (para cerrar sesión)
+
+    # Tus rutas originales (sin cambios, solo les agregué nombres)
+    path('mantenedor_clientes/', views.mantenedor_clientes, name='mantenedor_clientes'),
+    path('consultas_pedidos/', views.consultas_pedidos, name='consultas_pedidos'),
+    path('transaccional_pedido/', views.transaccional_pedido, name='transaccional_pedido'),
+    path('reporte_ventas/', views.reporte_ventas, name='reporte_ventas'),
+    path('cliente_pedido/', views.cliente_pedido, name='cliente_pedido'),
+    path('camionero_entregas/', views.camionero_entregas, name='camionero_entregas'),
+    path('precios/', views.precios_balones, name='precios_balones'),
 ]

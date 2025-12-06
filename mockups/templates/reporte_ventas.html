@@ -1,55 +1,189 @@
 {% extends 'base.html' %}
+{% block title %}Reporte de Ventas - GasFácil{% endblock %}
 
 {% block content %}
-<!-- Para impresión: quita navbar y usa estilo limpio -->
-<style>
-    @media print {
-        .no-print { display: none; }
-        body { padding-top: 0; }
-        .container { max-width: 100%; }
-    }
-</style>
+<div class="container mt-5">
 
-<div class="d-flex justify-content-between align-items-center no-print mb-4">
-    <h2>Reporte de Ventas - Abril 2025</h2>
-    <button onclick="window.print()" class="btn btn-outline-secondary">Imprimir</button>
-</div>
+    <h2 class="mb-4 text-primary fw-bold">Reporte de Ventas</h2>
 
-<div class="card">
-    <div class="card-body">
-        <h5 class="card-title">Resumen</h5>
-        <ul class="list-group list-group-flush">
-            <li class="list-group-item d-flex justify-content-between">
-                <span>Total pedidos:</span>
-                <strong>42</strong>
-            </li>
-            <li class="list-group-item d-flex justify-content-between">
-                <span>Ventas totales:</span>
-                <strong>S/ 2,850.00</strong>
-            </li>
-            <li class="list-group-item d-flex justify-content-between">
-                <span>Balón más vendido:</span>
-                <strong>10kg (32 unidades)</strong>
-            </li>
-        </ul>
+    <!-- Filtro por fechas -->
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label fw-bold">Desde</label>
+                    <input type="date" name="fecha_inicio" value="{{ fecha_inicio }}" class="form-control" required>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label fw-bold">Hasta</label>
+                    <input type="date" name="fecha_fin" value="{{ fecha_fin }}" class="form-control" required>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">Buscar</button>
+                </div>
+            </form>
+        </div>
     </div>
+
+    <!-- Resumen rápido -->
+    <div class="row mb-5 g-4">
+        <div class="col-md-6">
+            <div class="card text-center border-primary shadow h-100">
+                <div class="card-body py-4">
+                    <h5 class="card-title text-primary fw-bold">Total Pedidos</h5>
+                    <h1 class="display-5 fw-bold text-primary">{{ total_pedidos }}</h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card text-center border-success shadow h-100">
+                <div class="card-body py-4">
+                    <h5 class="card-title text-success fw-bold">Ventas Totales</h5>
+                    <h1 class="display-5 fw-bold text-success">$ {{ total_ventas }}</h1>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-5">
+
+        <!-- GRÁFICO DE TORTA -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header bg-primary text-white text-center">
+                    <h5 class="mb-0 fw-bold">Balones Más Vendidos</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="pieChartBalones" height="350"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLA DETALLE -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header bg-primary text-white text-center">
+                    <h5 class="mb-0 fw-bold">Detalle por Tipo de Balón</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Balón</th>
+                                    <th class="text-center">Cantidad</th>
+                                    <th class="text-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in por_balon %}
+                                <tr>
+                                    <td class="fw-bold">{{ item.balon }} kg</td>
+                                    <td class="text-center">{{ item.cantidad_vendida }}</td>
+                                    <td class="text-end">$ {{ item.total_monto }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">Sin ventas</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Últimos 10 pedidos -->
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0 fw-bold">Últimos 10 Pedidos</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>#</th>
+                            <th>Fecha</th>
+                            <th>Cliente</th>
+                            <th>Balón</th>
+                            <th>Cant.</th>
+                            <th>Monto</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in ultimos_pedidos %}
+                        <tr>
+                            <td>{{ p.id }}</td>
+                            <td>{{ p.fecha|date:"d/m H:i" }}</td>
+                            <td>{{ p.cliente.nombre|default:"Sin nombre" }}</td>
+                            <td>{{ p.balon }} kg</td>
+                            <td>{{ p.cantidad_balon }}</td>
+                            <td>$ {{ p.monto }}</td>
+                            <td>
+                                {% if p.estado == "entregado" %}
+                                <span class="badge bg-success">Entregado</span>
+                                {% elif p.estado == "en_ruta" %}
+                                <span class="badge bg-warning text-dark">En ruta</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ p.estado|capfirst }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-3">No hay pedidos</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
 </div>
 
-<h4 class="mt-4">Detalles</h4>
-<table class="table table-bordered">
-    <thead class="table-light">
-        <tr>
-            <th>Fecha</th>
-            <th>Cliente</th>
-            <th>Balón</th>
-            <th>Monto</th>
-            <th>Método</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr><td>2025-04-01</td><td>Juan Pérez</td><td>10kg</td><td>S/ 45</td><td>Efectivo</td></tr>
-        <tr><td>2025-04-01</td><td>María López</td><td>45kg</td><td>S/ 120</td><td>Tarjeta</td></tr>
-        <!-- más filas... -->
-    </tbody>
-</table>
+<!-- Chart.js + Gráfico de torta (sin filtros, datos crudos) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const ctx = document.getElementById('pieChartBalones').getContext('2d');
+        new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: [
+                    {% for item in por_balon %}
+                        "balon de {{ item.balon }}",
+                    {% endfor %}
+                ],
+        datasets: [{
+            data: [
+                {% for item in por_balon %}
+                            {{ item.cantidad_vendida }},
+        {% endfor %}
+    ],
+        backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#dc3545'],
+        borderColor: '#fff',
+        borderWidth: 3
+                }]
+            },
+        options: {
+        responsive: true,
+        plugins: {
+            legend: { position: 'bottom' },
+            tooltip: {
+                callbacks: {
+                    label: function (context) {
+                        return context.label + ': ' + context.parsed + ' balones';
+                    }
+                }
+            }
+        }
+    }
+        });
+    });
+</script>
 {% endblock %}

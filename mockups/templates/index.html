@@ -1,14 +1,76 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    <h1>Welcome to the Index Page</h1>
+<!-- mockups/templates/index.html -->
+{% extends "base.html" %}
 
-    
-    <a href="/login/">login</a>
-</body>
-</html>
+{% block title %}GasFácil - Inicio{% endblock %}
+
+{% block content %}
+<div class="min-vh-100 d-flex align-items-center bg-white">
+    <div class="container py-5">
+        <div class="row justify-content-center text-center">
+            <div class="col-12 col-lg-10 col-xl-8">
+
+                <!-- Logo grande -->
+                <div class="mb-5">
+                    <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center shadow-lg"
+                        style="width: 140px; height: 140px;">
+                        <h1 class="mb-0 fw-bold fs-1">GF</h1>
+                    </div>
+                </div>
+
+                <h1 class="display-3 fw-bold text-primary mb-3">GasFácil</h1>
+                <p class="lead text-secondary mb-5 fs-4">
+                    Sistema completo para distribuidores de gas licuado<br>
+                    <strong>Pedidos • Entregas • Reportes</strong> en un solo lugar
+                </p>
+
+                <!-- Botones principales -->
+                <div class="d-grid d-md-flex gap-4 justify-content-center mb-5">
+                    {% if user.is_authenticated %}
+                    <a href="{% url 'transaccional_pedido' %}" class="btn btn-primary btn-lg px-5 shadow">
+                        <i class="bi bi-box-arrow-in-right"></i> Ir al sistema
+                    </a>
+                    {% else %}
+                    <a href="{% url 'login' %}" class="btn btn-primary btn-lg px-5 shadow">
+                        Iniciar Sesión
+                    </a>
+                    <a href="{% url 'cliente_pedido' %}" class="btn btn-outline-primary btn-lg px-5">
+                        Soy cliente → Pedir gas
+                    </a>
+                    {% endif %}
+                </div>
+
+                <!-- Características -->
+                <div class="row g-4 mt-4">
+                    <div class="col-md-4">
+                        <div class="text-center p-4 border rounded-3 shadow-sm bg-light">
+                            <div class="text-primary fs-2 mb-3">☎</div>
+                            <h5 class="fw-bold">Telefonistas</h5>
+                            <small class="text-muted">Registro rápido de pedidos</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center p-4 border rounded-3 shadow-sm bg-light">
+                            <div class="text-success fs-2 mb-3">🚛</div>
+                            <h5 class="fw-bold">Camioneros</h5>
+                            <small class="text-muted">Entregas en tiempo real</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center p-4 border rounded-3 shadow-sm bg-light">
+                            <div class="text-warning fs-2 mb-3">📊</div>
+                            <h5 class="fw-bold">Jefes</h5>
+                            <small class="text-muted">Reportes y control total</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-5 pt-4 text-center text-muted">
+                    <small>
+                        © 2025 GasFácil • Sistema desarrollado para distribuidores de gas licuado
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
