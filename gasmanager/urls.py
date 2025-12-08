@@ -27,7 +27,7 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),  # ← NUEVA RUTA (para cerrar sesión)
 
     # Tus rutas originales (sin cambios, solo les agregué nombres)
-    path('mantenedor_clientes/', views.mantenedor_clientes, name='mantenedor_clientes'),
+    # path('mantenedor_clientes/', views.mantenedor_clientes, name='mantenedor_clientes'),
     path('consultas_pedidos/', views.consultas_pedidos, name='consultas_pedidos'),
     path('transaccional_pedido/', views.transaccional_pedido, name='transaccional_pedido'),
     path('reporte_ventas/', views.reporte_ventas, name='reporte_ventas'),

@@ -1,9 +1,7 @@
-# mockups/forms.py
-# Formulario definitivo para GasFácil - Rancagua (sin Cliente, con TipoBalon)
+# mockups/forms.py → Actualizado para mostrar "Gas de 15 kg - $32.800"
 
 from django import forms
 from .models import Pedido, TipoBalon
-
 
 SECTORES = [
     ("", "— Seleccionar sector —"),
@@ -23,49 +21,52 @@ SECTORES = [
     ("Otro", "Otro (especificar en dirección)"),
 ]
 
+
 class PedidoForm(forms.ModelForm):
     sector = forms.ChoiceField(
         choices=SECTORES,
         widget=forms.Select(attrs={"class": "form-select"}),
         required=False,
-        label="Sector / Población"
+        label="Sector / Población",
     )
 
     class Meta:
         model = Pedido
-        fields = ["balon", "cantidad_balon", "metodo_pago", "sector", "direccion_entrega"]
+        fields = [
+            "balon",
+            "cantidad_balon",
+            "metodo_pago",
+            "sector",
+            "direccion_entrega",
+        ]
         widgets = {
             "balon": forms.Select(attrs={"class": "form-select"}),
-            "cantidad_balon": forms.NumberInput(attrs={
-                "class": "form-control", "min": 1, "value": 1, "style": "width: 100px;"
-            }),
+            "cantidad_balon": forms.NumberInput(
+                attrs={"class": "form-control", "min": 1, "value": 1}
+            ),
             "metodo_pago": forms.Select(attrs={"class": "form-select"}),
-            "direccion_entrega": forms.Textarea(attrs={
-                "class": "form-control", "rows": 3,
-                "placeholder": "Calle, número, casa esquina, depto, referencia clara..."
-            }),
-        }
-        labels = {
-            "balon": "Tipo de balón",
-            "cantidad_balon": "Cantidad",
-            "metodo_pago": "Método de pago",
-            "direccion_entrega": "Dirección completa o referencia",
+            "direccion_entrega": forms.Textarea(
+                attrs={
+                    "class": "form-control",
+                    "rows": 3,
+                    "placeholder": "Calle, número, casa esquina, depto, referencia clara...",
+                }
+            ),
         }
 
     def __init__(self, *args, **kwargs):
-        self.user = kwargs.pop("user", None)  # Inyectamos el usuario
+        self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
 
-        # Cargar solo balones activos con precio
-        balones = TipoBalon.objects.filter(activo=True).order_by("tamaño")
+        # Solo balones activos
+        balones = TipoBalon.objects.filter(activo=True).order_by("peso_neto_gas")
         choices = [("", "— Seleccionar balón —")]
         for b in balones:
             precio_txt = f"${int(b.precio):,}".replace(",", ".")
-            choices.append((b.id, f"{b.tamaño} - {precio_txt}"))
+            choices.append((b.id, f"{b.nombre} - {precio_txt}"))
         self.fields["balon"].choices = choices
-        self.fields["balon"].widget.attrs.update({"class": "form-select"})
 
-        # Si es bodeguero: ocultar dirección y sector
+        # Bodeguero no ve sector ni dirección
         if self.user and self.user.rol == "bodeguero":
             self.fields["sector"].widget = forms.HiddenInput()
             self.fields["direccion_entrega"].widget = forms.HiddenInput()
@@ -77,12 +78,11 @@ class PedidoForm(forms.ModelForm):
         balon = cleaned_data.get("balon")
         cantidad = cleaned_data.get("cantidad_balon", 1)
 
-        if balon and hasattr(balon, "precio"):
+        if balon:
             cleaned_data["monto"] = balon.precio * cantidad
 
-        # Validación solo para telefonistas
         if self.user and self.user.rol == "telefonista":
-            if not cleaned_data.get("sector") or cleaned_data.get("sector") == "":
+            if not cleaned_data.get("sector"):
                 self.add_error("sector", "Debes seleccionar un sector.")
             if not cleaned_data.get("direccion_entrega"):
                 self.add_error("direccion_entrega", "La dirección es obligatoria.")

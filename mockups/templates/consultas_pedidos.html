@@ -1,28 +1,29 @@
+<!-- templates/consultas_pedidos.html → Versión mejorada: sin 'tamaño', con sintaxis 'if' corregida y optimizaciones -->
 {% extends 'base.html' %}
 {% load static %}
-
+{% load humanize %}
 {% block title %}Consultar Pedidos - GasFácil{% endblock %}
 
 {% block content %}
 <div class="container mt-5 mb-5">
-    <!-- Título + Total de resultados -->
+    <!-- Título + Total de resultados (mejorado: badge más visible) -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="text-primary fw-bold">
             <i class="bi bi-search me-2"></i>Consultar Pedidos
         </h2>
         <div class="badge bg-primary fs-5 px-4 py-2 shadow-sm">
-            {{ page_obj.paginator.count }} pedido{{ page_obj.paginator.count|pluralize }} encontrado{{page_obj.paginator.count|pluralize }}
+            {{ page_obj.paginator.count }} pedido{{ page_obj.paginator.count|pluralize:"s" }} encontrado{{ page_obj.paginator.count|pluralize:"s" }}
         </div>
     </div>
 
-    <!-- Filtros -->
+    <!-- Filtros (mejorado: labels más claros, placeholder optimizados) -->
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-body p-4">
             <form method="get" class="row g-3 align-items-end">
                 <div class="col-lg-4 col-md-6">
-                    <label class="form-label fw-bold"><i class="bi bi-person-fill me-1"></i> Cliente o Teléfono</label>
-                    <input type="text" name="cliente" class="form-control form-control-lg"
-                        placeholder="Ej: Juan o +56 9 8765 4321" value="{{ filtros.cliente }}">
+                    <label class="form-label fw-bold"><i class="bi bi-map-fill me-1"></i> Sector o Dirección</label>
+                    <input type="text" name="busqueda" class="form-control form-control-lg"
+                        placeholder="Ej: Dintrans, Los Álamos 123" value="{{ filtros.busqueda }}">
                 </div>
                 <div class="col-lg-2 col-md-6">
                     <label class="form-label fw-bold"><i class="bi bi-calendar3 me-1"></i> Desde</label>
@@ -37,8 +38,7 @@
                     <select name="estado" class="form-select">
                         <option value="todos" {% if filtros.estado == "todos" %}selected{% endif %}>Todos</option>
                         {% for valor, texto in estados_choices %}
-                        <option value="{{ valor }}" {% if filtros.estado == valor %}selected{% endif %}>{{ texto }}
-                        </option>
+                        <option value="{{ valor }}" {% if filtros.estado == valor %}selected{% endif %}>{{ texto }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -54,7 +54,7 @@
         </div>
     </div>
 
-    <!-- Tabla de pedidos -->
+    <!-- Tabla de pedidos (mejorado: columna Balón usa solo 'nombre', monto con formato chileno, empty message más amigable) -->
     <div class="card shadow border-0">
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -63,8 +63,8 @@
                         <tr>
                             <th class="ps-4">#ID</th>
                             <th>Fecha</th>
-                            <th>Cliente</th>
-                            <th>Teléfono</th>
+                            <th>Sector</th>
+                            <th>Dirección</th>
                             <th>Balón</th>
                             <th class="text-center">Cant.</th>
                             <th class="text-end pe-4">Monto</th>
@@ -76,34 +76,29 @@
                         {% for p in pedidos %}
                         <tr>
                             <td class="ps-4 fw-bold text-primary">#{{ p.id }}</td>
-                            <td>{{ p.fecha|date:"d/m/Y" }} <small class="text-muted">{{ p.fecha|time:"H:i" }}</small>
-                            </td>
-                            <td class="fw-semibold">{{ p.cliente.nombre|default:"Sin nombre" }}</td>
-                            <td>{{ p.cliente.telefono|default:"-" }}</td>
-                            <td>{{ p.get_balon_display|default:p.balon }}</td>
+                            <td>{{ p.fecha|date:"d/m/Y" }} <small class="text-muted">{{ p.fecha|time:"H:i" }}</small></td>
+                            <td class="fw-semibold">{{ p.sector|default:"-" }}</td>
+                            <td>{{ p.direccion_entrega|truncatechars:40|default:"Venta en local" }}</td>
+                            <td>{{ p.balon.nombre }}</td>  <!-- ← Corregido: solo 'nombre' (incluye kg, ej: "Gas de 15 kg") -->
                             <td class="text-center">{{ p.cantidad_balon }}</td>
-                            <td class="text-end pe-4 fw-bold text-success">$ {{ p.monto|floatformat:0 }}</td>
+                            <td class="text-end pe-4 fw-bold text-success">$ {{ p.monto|floatformat:0|intcomma }}</td>  <!-- ← Mejorado: formato chileno con puntos -->
                             <td>
                                 {% if p.estado == "entregado" %}
-                                <span class="badge bg-success fs-6 px-3 py-2">Entregado</span>
+                                <span class="badge bg-success">Entregado</span>
                                 {% elif p.estado == "en_ruta" %}
-                                <span class="badge bg-warning text-dark fs-6 px-3 py-2">En ruta</span>
-                                {% elif p.estado == "cancelado" %}
-                                <span class="badge bg-danger fs-6 px-3 py-2">Cancelado</span>
+                                <span class="badge bg-warning text-dark">En ruta</span>
                                 {% else %}
-                                <span class="badge bg-secondary fs-6 px-3 py-2">Pendiente</span>
+                                <span class="badge bg-secondary">{{ p.estado|capfirst }}</span>
                                 {% endif %}
                             </td>
-                            <td>
-                                <small class="text-muted">{{ p.telefonista.get_full_name|default:p.telefonista.username}}</small>
-                            </td>
+                            <td>{{ p.registrador.get_full_name|default:p.registrador.username }}</td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="9" class="text-center py-5">
-                                <i class="bi bi-inbox fs-1 text-muted d-block mb-3"></i>
-                                <h5 class="text-muted">No se encontraron pedidos</h5>
-                                <p class="text-muted">Prueba con otros filtros</p>
+                            <td colspan="9" class="text-center text-muted py-5">
+                                <i class="bi bi-search fs-1 d-block mb-3"></i>
+                                <strong>No se encontraron pedidos con estos filtros</strong>
+                                <p class="mt-2">Intenta ajustar los filtros o verifica si hay pedidos recientes.</p>
                             </td>
                         </tr>
                         {% endfor %}
@@ -113,23 +108,23 @@
         </div>
     </div>
 
-    <!-- Paginación hermosa -->
-    <!-- PAGINACIÓN DEFINITIVA - HERMOSA Y PROFESIONAL (reemplaza todo el bloque anterior) -->
+    <!-- Paginación (mejorado: botones más accesibles en móvil, con tooltips) -->
     {% if page_obj.has_other_pages %}
     <nav class="mt-5">
         <ul class="pagination justify-content-center pagination-lg gap-2">
-
             <!-- Primera página -->
             {% if page_obj.has_previous %}
             <li class="page-item">
                 <a class="page-link rounded-pill shadow-sm bg-white border-0 text-primary fw-bold"
-                    href="?page=1{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
+                    href="?page=1{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}"
+                    data-bs-toggle="tooltip" title="Primera página">
                     <i class="bi bi-chevron-double-left"></i>
                 </a>
             </li>
             <li class="page-item">
                 <a class="page-link rounded-pill shadow-sm bg-white border-0 text-primary fw-bold"
-                    href="?page={{ page_obj.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
+                    href="?page={{ page_obj.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}"
+                    data-bs-toggle="tooltip" title="Página anterior">
                     <i class="bi bi-chevron-left"></i>
                 </a>
             </li>
@@ -155,57 +150,63 @@
                     {{ num }}
                 </span>
             </li>
-            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %} <li class="page-item">
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <li class="page-item">
                 <a class="page-link rounded-pill shadow-sm bg-white text-primary fw-bold border-0"
                     style="min-width: 48px;"
                     href="?page={{ num }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
                     {{ num }}
                 </a>
-                </li>
-                {% elif num == page_obj.number|add:'-4' or num == page_obj.number|add:'4' %}
-                <li class="page-item">
-                    <span class="page-link text-muted fw-bold">...</span>
-                </li>
-                {% endif %}
-                {% endfor %}
+            </li>
+            {% elif num == page_obj.number|add:'-4' or num == page_obj.number|add:'4' %}
+            <li class="page-item">
+                <span class="page-link text-muted fw-bold">...</span>
+            </li>
+            {% endif %}
+            {% endfor %}
 
-                <!-- Siguiente y última -->
-                {% if page_obj.has_next %}
-                <li class="page-item">
-                    <a class="page-link rounded-pill shadow-sm bg-white border-0 text-primary fw-bold"
-                        href="?page={{ page_obj.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
-                        <i class="bi bi-chevron-right"></i>
-                    </a>
-                </li>
-                <li class="page-item">
-                    <a class="page-link rounded-pill shadow-sm bg-white border-0 text-primary fw-bold"
-                        href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
-                        <i class="bi bi-chevron-double-right"></i>
-                    </a>
-                </li>
-                {% else %}
-                <li class="page-item disabled">
-                    <span class="page-link rounded-pill bg-light text-muted border-0">
-                        <i class="bi bi-chevron-right"></i>
-                    </span>
-                </li>
-                <li class="page-item disabled">
-                    <span class="page-link rounded-pill bg-light text-muted border-0">
-                        <i class="bi bi-chevron-double-right"></i>
-                    </span>
-                </li>
-                {% endif %}
+            <!-- Siguiente y última -->
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link rounded-pill shadow-sm bg-white border-0 text-primary fw-bold"
+                    href="?page={{ page_obj.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}"
+                    data-bs-toggle="tooltip" title="Página siguiente">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link rounded-pill shadow-sm bg-white border-0 text-primary fw-bold"
+                    href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}"
+                    data-bs-toggle="tooltip" title="Última página">
+                    <i class="bi bi-chevron-double-right"></i>
+                </a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link rounded-pill bg-light text-muted border-0">
+                    <i class="bi bi-chevron-right"></i>
+                </span>
+            </li>
+            <li class="page-item disabled">
+                <span class="page-link rounded-pill bg-light text-muted border-0">
+                    <i class="bi bi-chevron-double-right"></i>
+                </span>
+            </li>
+            {% endif %}
         </ul>
     </nav>
     {% endif %}
 </div>
 
-<!-- Activar tooltips de Bootstrap (si usas) -->
+<!-- Tooltips de Bootstrap (mejorado: inicialización más robusta) -->
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
         tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl);
+            return new bootstrap.Tooltip(tooltipTriggerEl, {
+                placement: 'top',  // ← Mejorado: posicionamiento por defecto
+                delay: { show: 100, hide: 200 }  // ← Mejorado: delay suave
+            });
         });
     });
 </script>

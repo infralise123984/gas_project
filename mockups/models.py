@@ -5,6 +5,8 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone
+from django.core.exceptions import ValidationError
+import re
 
 
 # ==============================================================
@@ -19,8 +21,12 @@ class Usuario(AbstractUser):
         ("admin", "Administrador"),
     ]
 
-    rol = models.CharField(max_length=20, choices=ROLES, default="telefonista", verbose_name="Rol")
-    telefono = models.CharField(max_length=15, blank=True, null=True, unique=True, verbose_name="Teléfono")
+    rol = models.CharField(
+        max_length=20, choices=ROLES, default="telefonista", verbose_name="Rol"
+    )
+    telefono = models.CharField(
+        max_length=15, blank=True, null=True, unique=True, verbose_name="Teléfono"
+    )
 
     def __str__(self):
         nombre = self.get_full_name().strip() or self.username
@@ -37,29 +43,56 @@ class Usuario(AbstractUser):
 # ==============================================================
 class TipoBalon(models.Model):
     """
-    Cada tamaño de balón tiene su precio actual.
-    Ejemplos reales en Rancagua 2025:
-    - 5kg  → $14.500
-    - 11kg → $25.800
-    - 15kg → $32.800
-    - 45kg → $89.000
+    Representa cada tipo de balón comercializado.
+    Ejemplos reales Rancagua 2025:
+    - Gas de 5 kg   → peso_neto_gas = 5
+    - Gas de 11 kg  → peso_neto_gas = 11
+    - Gas de 15 kg  → peso_neto_gas = 15
+    - Gas de 45 kg  → peso_neto_gas = 45
     """
-    tamaño = models.CharField(max_length=10, unique=True, verbose_name="Tamaño", help_text="Ej: 5kg, 15kg, 45kg")
+
+    nombre = models.CharField(
+        max_length=50,
+        unique=True,
+        null=True,  # ← Temporal: permite migración sin default
+        blank=True,  # ← Temporal
+        verbose_name="Nombre comercial",
+        help_text="Ej: Gas de 5 kg, Gas de 15 kg",
+    )
+    peso_neto_gas = models.PositiveIntegerField(
+        null=True,  # ← Temporal: permite migración
+        blank=True,  # ← Temporal
+        verbose_name="Peso neto de gas (kg)",
+        help_text="Cantidad real de gas licuado (sin envase)",
+    )
     precio = models.DecimalField(
         max_digits=10,
         decimal_places=0,
         default=0,
         verbose_name="Precio actual (CLP)",
-        help_text="Precio entero en pesos chilenos"
     )
     activo = models.BooleanField(default=True, verbose_name="Disponible para venta")
-    actualizado_el = models.DateTimeField(auto_now=True, verbose_name="Última actualización")
+    actualizado_el = models.DateTimeField(auto_now=True)
     actualizado_por = models.ForeignKey(
-        Usuario, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Actualizado por"
+        "Usuario",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
 
+    def clean(self):
+        if self.nombre:
+            # Validar que el número en nombre coincida con peso_neto_gas
+            match = re.search(r"(\d+)", self.nombre)
+            if match and self.peso_neto_gas:
+                peso_en_nombre = int(match.group(1))
+                if peso_en_nombre != self.peso_neto_gas:
+                    raise ValidationError(
+                        f"El peso en el nombre ({peso_en_nombre} kg) debe coincidir con el peso neto ({self.peso_neto_gas} kg)."
+                    )
+
     def save(self, *args, **kwargs):
-        # Solo crear historial si ya existe el registro (es una actualización)
+        self.full_clean()
         if self.pk:
             viejo = TipoBalon.objects.get(pk=self.pk)
             if viejo.precio != self.precio or viejo.activo != self.activo:
@@ -69,42 +102,50 @@ class TipoBalon(models.Model):
                     precio_nuevo=self.precio,
                     activo_anterior=viejo.activo,
                     activo_nuevo=self.activo,
-                    cambiado_por=self.actualizado_por
+                    cambiado_por=self.actualizado_por,
                 )
         super().save(*args, **kwargs)
 
     def __str__(self):
         if not self.activo:
-            return f"{self.tamaño} (inactivo)"
-        return f"{self.tamaño} - ${self.precio:,.0f}".replace(",", ".")
+            return f"{self.nombre or 'Sin nombre'} (inactivo)"
+        return f"{self.nombre or 'Sin nombre'} - ${int(self.precio):,}".replace(
+            ",", "."
+        )
 
     class Meta:
-        verbose_name = "Tipo de Balón"
+        verbose_name = "Tipo de Balon"
         verbose_name_plural = "Tipos de Balones"
-        ordering = ["tamaño"]
+        ordering = ["peso_neto_gas"]
 
 
 # ==============================================================
 # 3. HISTORIAL DE PRECIOS (log automático)
 # ==============================================================
 class HistorialPrecioBalon(models.Model):
-    """
-    Cada vez que el jefe cambia un precio o desactiva un balón,
-    se guarda aquí automáticamente.
-    Ideal para reportes, auditoría o justificar alzas.
-    """
-    tipo_balón = models.ForeignKey(TipoBalon, on_delete=models.CASCADE, related_name="historial")
+    tipo_balón = models.ForeignKey(
+        TipoBalon, on_delete=models.CASCADE, related_name="historial"
+    )
     precio_anterior = models.DecimalField(max_digits=10, decimal_places=0)
     precio_nuevo = models.DecimalField(max_digits=10, decimal_places=0)
     activo_anterior = models.BooleanField()
     activo_nuevo = models.BooleanField()
     fecha_cambio = models.DateTimeField(default=timezone.now)
     cambiado_por = models.ForeignKey(
-        Usuario, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Cambiado por"
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Cambiado por",
     )
 
     def __str__(self):
-        return f"{self.tipo_balón.tamaño}: ${self.precio_anterior:,} → ${self.precio_nuevo:,} ({self.fecha_cambio.date()})"
+        balon = self.tipo_balón
+        nombre = balon.nombre if balon else "Balón eliminado"
+        peso = f" ({balon.peso_neto_gas} kg)" if balon and balon.peso_neto_gas else ""
+        return f"{nombre}{peso}: ${self.precio_anterior:,} → ${self.precio_nuevo:,} ({self.fecha_cambio.date()})".replace(
+            ",", "."
+        )
 
     class Meta:
         verbose_name = "Cambio de Precio"
@@ -132,24 +173,32 @@ class Pedido(models.Model):
         max_length=100,
         blank=True,
         verbose_name="Sector / Población",
-        help_text="Ej: Población Dintrans, Machalí Alto, Villa Los Tilos, Gultro..."
+        help_text="Ej: Población Dintrans, Machalí Alto, Villa Los Tilos, Gultro...",
     )
     direccion_entrega = models.CharField(
         max_length=250,
         blank=True,
         verbose_name="Dirección o referencia",
-        help_text="Ej: Los Álamos 123, casa esquina roja, frente al colegio"
+        help_text="Ej: Los Álamos 123, casa esquina roja, frente al colegio",
     )
 
     # Datos del pedido
-    balon = models.ForeignKey(TipoBalon, on_delete=models.PROTECT, verbose_name="Tipo de balón")
+    balon = models.ForeignKey(
+        TipoBalon, on_delete=models.PROTECT, verbose_name="Tipo de balón"
+    )
     cantidad_balon = models.PositiveIntegerField(default=1, verbose_name="Cantidad")
     metodo_pago = models.CharField(
         max_length=20,
-        choices=[("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("transferencia", "Transferencia")],
-        default="efectivo"
+        choices=[
+            ("efectivo", "Efectivo"),
+            ("tarjeta", "Tarjeta"),
+            ("transferencia", "Transferencia"),
+        ],
+        default="efectivo",
     )
-    monto = models.DecimalField(max_digits=10, decimal_places=0, default=0, verbose_name="Monto total")
+    monto = models.DecimalField(
+        max_digits=10, decimal_places=0, default=0, verbose_name="Monto total"
+    )
 
     # Metadatos
     registrador = models.ForeignKey(
@@ -158,7 +207,7 @@ class Pedido(models.Model):
         null=True,
         blank=True,
         related_name="pedidos_registrados",
-        verbose_name="Registrado por"
+        verbose_name="Registrado por",
     )
     fecha = models.DateTimeField(default=timezone.now)
     estado = models.CharField(max_length=20, choices=ESTADOS, default="pendiente")
