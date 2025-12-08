@@ -3,59 +3,67 @@
 {% block title %}Entregas - GasFácil{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container mt-4 pb-5">
 
     <h2 class="text-center text-primary fw-bold mb-4">
         <i class="bi bi-truck me-2"></i>Mis Entregas
     </h2>
 
-    <!-- Pedido activo (en ruta) -->
-    {% if pedido_en_ruta %}
+    <!-- PEDIDOS EN RUTA (puede haber varios) -->
+    {% if pedidos_en_ruta %}
+    <h4 class="text-success fw-bold mb-3">
+        <i class="bi bi-truck"></i> Pedidos en Ruta ({{ pedidos_en_ruta|length }})
+    </h4>
+    {% for p in pedidos_en_ruta %}
     <div class="card shadow-lg border-success mb-4">
         <div class="card-header bg-success text-white text-center py-3">
-            <h4 class="mb-0">🚚 Pedido en Ruta</h4>
+            <h5 class="mb-0">Pedido #{{ p.id }} - En Ruta</h5>
         </div>
         <div class="card-body text-center py-4">
-            <h5 class="fw-bold">#{{ pedido_en_ruta.id }}</h5>
-            <p class="lead">{{ pedido_en_ruta.balon.nombre }} × {{ pedido_en_ruta.cantidad_balon }}</p>
+            <h5 class="fw-bold">{{ p.balon.nombre }} × {{ p.cantidad_balon }}</h5>
             <p class="mb-2"><strong>Dirección:</strong></p>
-            <p class="fs-5 fw-semibold">{{ pedido_en_ruta.sector|default:"" }}<br>
-               {{ pedido_en_ruta.direccion_entrega }}</p>
-            <p class="text-muted small">Registrado: {{ pedido_en_ruta.fecha|date:"d/m H:i" }}</p>
+            <p class="fs-5 fw-semibold text-primary">
+                {{ p.sector|default:"" }}<br>
+                {{ p.direccion_entrega }}
+            </p>
+            <small class="text-muted d-block mb-3">
+                Tomado: {{ p.fecha|date:"d/m H:i" }}
+            </small>
 
-            <form method="post" action="{% url 'camionero_marcar_entregado' pedido_en_ruta.id %}">
+            <form method="post" action="{% url 'camionero_marcar_entregado' p.id %}">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-success btn-lg px-5 shadow">
-                    <i class="bi bi-check-circle me-2"></i> Marcado como Entregado
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    Marcado como Entregado
                 </button>
             </form>
         </div>
     </div>
+    {% endfor %}
     {% endif %}
 
-    <!-- Lista de pedidos pendientes -->
+    <!-- PEDIDOS PENDIENTES -->
     <h4 class="text-primary fw-bold mt-5 mb-3">
-        {% if pedido_en_ruta %}Otros Pedidos Pendientes{% else %}Pedidos Pendientes{% endif %}
+        {% if pedidos_en_ruta %}Más Pedidos Pendientes{% else %}Pedidos por Tomar{% endif %}
     </h4>
 
     {% if pendientes %}
         {% for p in pendientes %}
-        <div class="card shadow-sm mb-3 border-0">
+        <div class="card shadow-sm mb-3 border-primary">
             <div class="card-body py-4">
-                <div class="row align-items-center">
+                <div class="row align-items-center text-start">
                     <div class="col">
                         <h5 class="fw-bold mb-1">#{{ p.id }}</h5>
                         <p class="mb-1">{{ p.balon.nombre }} × {{ p.cantidad_balon }}</p>
                         <p class="mb-1 fw-semibold">{{ p.sector|default:"Sin sector" }}</p>
-                        <p class="small text-muted">{{ p.direccion_entrega|truncatechars:60 }}</p>
-                        <small class="text-muted">Registrado {{ p.fecha|date:"d/m H:i" }}</small>
+                        <p class="small text-muted">{{ p.direccion_entrega|truncatechars:70 }}</p>
+                        <small class="text-muted">Registrado {{ p.fecha|time:"H:i" }}</small>
                     </div>
                     <div class="col-auto">
                         <form method="post" action="{% url 'camionero_tomar_pedido' p.id %}">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-primary btn-lg shadow">
-                                <i class="bi bi-arrow-right-circle"></i><br>
-                                <small>Tomar</small>
+                            <button type="submit" class="btn btn-primary btn-lg rounded-pill shadow">
+                                <i class="bi bi-arrow-right-circle-fill fs-4"></i>
                             </button>
                         </form>
                     </div>
@@ -66,8 +74,7 @@
     {% else %}
         <div class="text-center py-5 text-muted">
             <i class="bi bi-check2-all fs-1 d-block mb-3"></i>
-            <strong>No hay pedidos pendientes</strong>
-            <p>¡Todo al día!</p>
+            <strong>{% if pedidos_en_ruta %}No hay más pedidos pendientes{% else %}¡Todo al día!{% endif %}</strong>
         </div>
     {% endif %}
 
