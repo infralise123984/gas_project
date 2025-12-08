@@ -54,13 +54,70 @@ def precios_balones(request):
                     cambios_realizados = True
 
         if cambios_realizados:
-            messages.success(request, "Cambios guardados correctamente. Solo se actualizaron los valores modificados.")
+            messages.success(
+                request,
+                "Cambios guardados correctamente. Solo se actualizaron los valores modificados.",
+            )
         else:
             messages.info(request, "No se detectaron cambios.")
 
         return redirect("precios_balones")
 
     return render(request, "precios_balones.html", {"balones": balones})
+
+
+@login_required
+def crear_usuario(request):
+    if request.user.rol not in ["jefe", "admin"]:
+        messages.error(request, "No tienes permiso para crear usuarios.")
+        return redirect("index")
+
+    # Obtenemos las choices del modelo para el select
+    roles_choices = Usuario.ROLES
+
+    if request.method == "POST":
+        username = request.POST.get("username")
+        first_name = request.POST.get("first_name", "")
+        last_name = request.POST.get("last_name", "")
+        telefono = request.POST.get("telefono", "")
+        rol = request.POST.get("rol")
+        password1 = request.POST.get("password1")
+        password2 = request.POST.get("password2")
+
+        # Validaciones básicas
+        if not all([username, rol, password1, password2]):
+            messages.error(
+                request, "Todos los campos obligatorios deben estar completos."
+            )
+        elif password1 != password2:
+            messages.error(request, "Las contraseñas no coinciden.")
+        elif len(password1) < 8:
+            messages.error(request, "La contraseña debe tener al menos 8 caracteres.")
+        else:
+            if Usuario.objects.filter(username=username).exists():
+                messages.error(
+                    request, "Ya existe un usuario con ese nombre de usuario."
+                )
+            else:
+                # Crear el usuario
+                user = Usuario.objects.create_user(
+                    username=username,
+                    first_name=first_name,
+                    last_name=last_name,
+                    telefono=telefono or None,
+                    rol=rol,
+                    password=password1,
+                )
+                user.is_active = True
+                user.save()
+
+                messages.success(
+                    request,
+                    f"Usuario '{user.get_full_name() or user.username}' creado correctamente con rol {user.get_rol_display()}.",
+                )
+                return redirect("reporte_ventas")
+
+    return render(request, "crear_usuario.html", {"roles_choices": roles_choices})
 
 
 def login_view(request):
@@ -239,25 +296,57 @@ def cliente_pedido(request):
 
 @login_required
 def camionero_entregas(request):
-    if not request.user.is_authenticated:
-        messages.error(request, "Debes iniciar sesión con tu cuenta de camionero.")
-        return redirect("login")
+    if request.user.rol != "camionero":
+        messages.error(request, "Acceso restringido a camioneros.")
+        return redirect("index")
 
-    # Datos simulados (pronto serán reales)
-    entrega_activa = {
-        "id": 1042,
-        "cliente": "Juan Pérez",
-        "direccion": "Av. Los Pinos 123, San Miguel",
-        "balon": "10 kg",
-        "metodo_pago": "Efectivo",
-        "monto": "45.00",
-        "distancia": "800 m",
-        "tiempo_estimado": "3 min",
-        "estado": "En ruta",
+    # Pedido que el camionero ya tomó (en_ruta)
+    pedido_en_ruta = Pedido.objects.filter(
+        estado="en_ruta",
+        # Opcional futuro: asignado_a = request.user
+    ).first()
+
+    # Pedidos pendientes (no tomados por nadie aún)
+    pendientes = Pedido.objects.filter(
+        estado="pendiente",
+        origen="telefono",  # solo a domicilio
+    ).order_by("fecha")
+
+    context = {
+        "pedido_en_ruta": pedido_en_ruta,
+        "pendientes": pendientes,
     }
+    return render(request, "camionero_entregas.html", context)
 
-    return render(
-        request,
-        "camionero_entregas.html",
-        {"entrega_activa": entrega_activa, "camion_id": 7},
-    )
+@login_required
+def camionero_tomar_pedido(request, pedido_id):
+    if request.user.rol != "camionero":
+        messages.error(request, "Solo camioneros pueden tomar pedidos.")
+        return redirect("index")
+
+    try:
+        pedido = Pedido.objects.get(id=pedido_id, estado="pendiente")
+        pedido.estado = "en_ruta"
+        pedido.save()
+        messages.success(request, f"Pedido #{pedido.id} tomado. ¡Dirígete al domicilio!")
+    except Pedido.DoesNotExist:
+        messages.error(request, "El pedido ya no está disponible.")
+
+    return redirect("camionero_entregas")
+
+
+@login_required
+def camionero_marcar_entregado(request, pedido_id):
+    if request.user.rol != "camionero":
+        messages.error(request, "Solo camioneros pueden marcar entregas.")
+        return redirect("index")
+
+    try:
+        pedido = Pedido.objects.get(id=pedido_id, estado="en_ruta")
+        pedido.estado = "entregado"
+        pedido.save()
+        messages.success(request, f"¡Pedido #{pedido.id} marcado como entregado!")
+    except Pedido.DoesNotExist:
+        messages.error(request, "El pedido no está en ruta o no existe.")
+
+    return redirect("camionero_entregas")

@@ -1,0 +1,111 @@
+<!-- templates/crear_usuario.html -->
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Crear Nuevo Usuario - GasFácil{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 col-xl-6">
+
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <h2 class="text-primary fw-bold mb-0">
+                    <i class="bi bi-person-plus me-2"></i>Crear Nuevo Usuario
+                </h2>
+                <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i>Volver a Reportes
+                </a>
+            </div>
+
+            {% if messages %}
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            <div class="card shadow-lg border-0">
+                <div class="card-header bg-primary text-white text-center py-4">
+                    <h4 class="mb-0 fw-bold">Formulario de Registro de Usuario</h4>
+                    <small>Solo accesible para Jefe y Administrador</small>
+                </div>
+
+                <div class="card-body p-5">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="row g-4">
+                            <!-- Nombre de usuario -->
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Nombre de usuario <span class="text-danger">*</span></label>
+                                <input type="text" name="username" class="form-control form-control-lg" 
+                                       placeholder="Ej: juan.perez" maxlength="150" required>
+                                <small class="text-muted">Máximo 150 caracteres. Solo letras, números y @ . + - _</small>
+                            </div>
+
+                            <!-- Teléfono (opcional) -->
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Teléfono</label>
+                                <input type="text" name="telefono" class="form-control form-control-lg" 
+                                       placeholder="Ej: +56987654321" maxlength="15">
+                            </div>
+
+                            <!-- Nombre y Apellido -->
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Nombre</label>
+                                <input type="text" name="first_name" class="form-control form-control-lg" 
+                                       placeholder="Ej: Juan" maxlength="150">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Apellido</label>
+                                <input type="text" name="last_name" class="form-control form-control-lg" 
+                                       placeholder="Ej: Pérez" maxlength="150">
+                            </div>
+
+                            <!-- Rol -->
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Rol <span class="text-danger">*</span></label>
+                                <select name="rol" class="form-select form-select-lg" required>
+                                    <option value="">— Seleccionar rol —</option>
+                                    {% for valor, texto in roles_choices %}
+                                    <option value="{{ valor }}">{{ texto }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Contraseñas -->
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Contraseña <span class="text-danger">*</span></label>
+                                <input type="password" name="password1" class="form-control form-control-lg" required>
+                                <small class="text-muted">Mínimo 8 caracteres. No puede ser muy común.</small>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Repetir contraseña <span class="text-danger">*</span></label>
+                                <input type="password" name="password2" class="form-control form-control-lg" required>
+                            </div>
+                        </div>
+
+                        <div class="text-center mt-5">
+                            <button type="submit" class="btn btn-success btn-lg px-5 shadow">
+                                <i class="bi bi-check-circle me-2"></i>Crear Usuario
+                            </button>
+                            <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-secondary btn-lg px-5 ms-3">
+                                Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="text-center mt-4 text-muted small">
+                Los usuarios creados aquí podrán iniciar sesión inmediatamente con las credenciales ingresadas.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

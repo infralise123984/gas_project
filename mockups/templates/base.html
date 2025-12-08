@@ -31,11 +31,20 @@
                 <ul class="navbar-nav me-auto">
 
                     <li class="nav-item"><a class="nav-link" href="{% url 'consultas_pedidos' %}">Consultas</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'transaccional_pedido' %}">Nuevo Pedido</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'precios_balones' %}">Modificar precios</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'transaccional_pedido' %}">Nuevo Pedido</a>
+                    </li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'precios_balones' %}">Modificar precios</a>
+                    </li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'reporte_ventas' %}">Reportes</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'cliente_pedido' %}">Cliente</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'camionero_entregas' %}">Camionero</a></li>
+                    {% if user.rol in "jefe,admin" %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'crear_usuario' %}">
+                            <i class="bi bi-person-plus me-1"></i>Crear Usuario
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
 
                 <!-- Derecha: saludo + logout / login -->
