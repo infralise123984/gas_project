@@ -29,6 +29,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+USE_THOUSAND_SEPARATOR = True  # Esto es clave para activar los separadores de miles
 
 # Application definition
 

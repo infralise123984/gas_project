@@ -39,7 +39,7 @@
             <div class="card text-center border-success shadow h-100">
                 <div class="card-body py-4">
                     <h5 class="card-title text-success fw-bold">Ventas Totales</h5>
-                    <h1 class="display-5 fw-bold text-success">$ {{ total_ventas }}</h1>
+                    <h1 class="display-5 fw-bold text-success">$ {{ total_ventas|floatformat:0 }}</h1>
                 </div>
             </div>
         </div>
@@ -51,7 +51,7 @@
         <div class="col-lg-6 mb-4">
             <div class="card shadow h-100">
                 <div class="card-header bg-primary text-white text-center">
-                    <h5 class="mb-0 fw-bold">Balones Más Vendidos</h5>
+                    <h5 class="mb-0 fw-bold">Balones Más Vendidos (en kilos de gas)</h5>
                 </div>
                 <div class="card-body">
                     <canvas id="pieChartBalones" height="350"></canvas>
@@ -72,22 +72,32 @@
                                 <tr>
                                     <th>Balón</th>
                                     <th class="text-center">Cantidad</th>
+                                    <th class="text-center">Kilos gas</th>
                                     <th class="text-end">Total</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for item in por_balon %}
                                 <tr>
-                                    <td class="fw-bold">{{ item.balon }} kg</td>
+                                    <td class="fw-bold">{{ item.balon__nombre|default:"Sin nombre" }}</td>
                                     <td class="text-center">{{ item.cantidad_vendida }}</td>
-                                    <td class="text-end">$ {{ item.total_monto }}</td>
+                                    <td class="text-center">{{ item.kilos_vendidos }} kg</td>
+                                    <td class="text-end">$ {{ item.total_monto|floatformat:0 }}</td>
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="3" class="text-center text-muted">Sin ventas</td>
+                                    <td colspan="4" class="text-center text-muted">Sin ventas en el período</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
+                            <tfoot class="table-secondary fw-bold">
+                                <tr>
+                                    <td>Total</td>
+                                    <td class="text-center">{{ total_balones }}</td>
+                                    <td class="text-center">{{ total_kilos }} kg</td>
+                                    <td class="text-end">$ {{ total_ventas|floatformat:0 }}</td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
@@ -96,9 +106,9 @@
     </div>
 
     <!-- Últimos 10 pedidos -->
-    <div class="card shadow">
+    <div class="card shadow mb-5">
         <div class="card-header bg-primary text-white">
-            <h5 class="mb-0 fw-bold">Últimos 10 Pedidos</h5>
+            <h5 class="mb-0 fw-bold">Últimos 10 Pedidos Entregados</h5>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -120,9 +130,9 @@
                             <td>{{ p.id }}</td>
                             <td>{{ p.fecha|date:"d/m H:i" }}</td>
                             <td>{{ p.cliente.nombre|default:"Sin nombre" }}</td>
-                            <td>{{ p.balon }} kg</td>
+                            <td>{{ p.balon.nombre|default:"Sin nombre" }}</td>
                             <td>{{ p.cantidad_balon }}</td>
-                            <td>$ {{ p.monto }}</td>
+                            <td>$ {{ p.monto|floatformat:0 }}</td>
                             <td>
                                 {% if p.estado == "entregado" %}
                                 <span class="badge bg-success">Entregado</span>
@@ -135,7 +145,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-3">No hay pedidos</td>
+                            <td colspan="7" class="text-center text-muted py-3">No hay pedidos entregados</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -144,46 +154,49 @@
         </div>
     </div>
 
-</div>
-
-<!-- Chart.js + Gráfico de torta (sin filtros, datos crudos) -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        const ctx = document.getElementById('pieChartBalones').getContext('2d');
-        new Chart(ctx, {
-            type: 'pie',
-            data: {
-                labels: [
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const ctx = document.getElementById('pieChartBalones').getContext('2d');
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: [
+                        {% for item in por_balon %}
+                            "{{ item.balon__nombre|default:'Sin nombre' }}",
+                        {% endfor %}
+                    ],
+            datasets: [{
+                data: [
                     {% for item in por_balon %}
-                        "balon de {{ item.balon }}",
-                    {% endfor %}
-                ],
-        datasets: [{
-            data: [
-                {% for item in por_balon %}
-                            {{ item.cantidad_vendida }},
-        {% endfor %}
-    ],
-        backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#dc3545'],
-        borderColor: '#fff',
-        borderWidth: 3
-                }]
-            },
-        options: {
-        responsive: true,
-        plugins: {
-            legend: { position: 'bottom' },
-            tooltip: {
-                callbacks: {
-                    label: function (context) {
-                        return context.label + ': ' + context.parsed + ' balones';
+                                {{ item.kilos_vendidos }},
+            {% endfor %}
+        ],
+            backgroundColor: [
+            '#0d6efd', '#198754', '#ffc107', '#dc3545',
+            '#6f42c1', '#fd7e14', '#20c997', '#e83e8c'
+        ],
+                    }]
+                },
+            options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            const label = context.label || '';
+                            const value = context.parsed;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                            return `${label}: ${value} kg (${percentage}%)`;
+                        }
                     }
                 }
             }
         }
-    }
+            });
         });
-    });
-</script>
-{% endblock %}
+    </script>
+    {% endblock %}

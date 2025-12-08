@@ -1,4 +1,4 @@
-<!-- templates/transaccional_pedido.html -->
+<!-- templates/transaccional_pedido.html → Actualizado para mostrar nombre completo del balón -->
 {% extends 'base.html' %}
 {% block title %}Nuevo Pedido - GasFácil{% endblock %}
 
@@ -31,7 +31,7 @@
                         {% csrf_token %}
 
                         <div class="row g-3">
-                            <!-- Balón -->
+                            <!-- Balón (muestra nombre completo + precio) -->
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Balón <span class="text-danger">*</span></label>
                                 {{ form.balon }}
@@ -50,7 +50,7 @@
                                 {{ form.metodo_pago }}
                             </div>
 
-                            <!-- Solo para telefonistas: Sector -->
+                            <!-- Solo para telefonistas -->
                             {% if es_telefonista %}
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Sector / Población <span class="text-danger">*</span></label>
@@ -60,7 +60,7 @@
                             <div class="col-12">
                                 <label class="form-label fw-bold">Dirección exacta <span class="text-danger">*</span></label>
                                 {{ form.direccion_entrega }}
-                                <small class="text-muted">Ej: Los Alamos 123, casa esquina roja, depto 402, frente al colegio...</small>
+                                <small class="text-muted">Ej: Los Álamos 123, casa esquina roja, frente al colegio...</small>
                             </div>
                             {% endif %}
                         </div>
