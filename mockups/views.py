@@ -300,23 +300,25 @@ def camionero_entregas(request):
         messages.error(request, "Acceso restringido a camioneros.")
         return redirect("index")
 
-    # Pedido que el camionero ya tomó (en_ruta)
-    pedido_en_ruta = Pedido.objects.filter(
+    # TODOS los pedidos que están en ruta (el camionero puede tener varios)
+    pedidos_en_ruta = Pedido.objects.filter(
         estado="en_ruta",
-        # Opcional futuro: asignado_a = request.user
-    ).first()
+        origen="telefono"
+    ).order_by("fecha")
 
-    # Pedidos pendientes (no tomados por nadie aún)
+    # Pedidos pendientes (aún no tomados por nadie)
     pendientes = Pedido.objects.filter(
         estado="pendiente",
-        origen="telefono",  # solo a domicilio
+        origen="telefono"
     ).order_by("fecha")
 
     context = {
-        "pedido_en_ruta": pedido_en_ruta,
+        "pedidos_en_ruta": pedidos_en_ruta,      # ← Cambiado: ahora es una lista
         "pendientes": pendientes,
+        "hay_en_ruta": pedidos_en_ruta.exists(),
     }
     return render(request, "camionero_entregas.html", context)
+
 
 @login_required
 def camionero_tomar_pedido(request, pedido_id):
@@ -328,7 +330,9 @@ def camionero_tomar_pedido(request, pedido_id):
         pedido = Pedido.objects.get(id=pedido_id, estado="pendiente")
         pedido.estado = "en_ruta"
         pedido.save()
-        messages.success(request, f"Pedido #{pedido.id} tomado. ¡Dirígete al domicilio!")
+        messages.success(
+            request, f"Pedido #{pedido.id} tomado. ¡Dirígete al domicilio!"
+        )
     except Pedido.DoesNotExist:
         messages.error(request, "El pedido ya no está disponible.")
 
