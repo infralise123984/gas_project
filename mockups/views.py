@@ -20,7 +20,7 @@ def index(request):
 @login_required
 def precios_balones(request):
     if request.user.rol not in ["jefe", "admin"]:
-        messages.error(request, "No tienes permiso para modificar precios.")
+        messages.error(request, "Solo telefonista y/o camionero pueden generar pedidos.")
         return redirect("index")
 
     balones = TipoBalon.objects.all().order_by("peso_neto_gas")
@@ -297,7 +297,7 @@ def cliente_pedido(request):
 @login_required
 def camionero_entregas(request):
     if request.user.rol != "camionero":
-        messages.error(request, "Acceso restringido a camioneros.")
+        messages.error(request, "Acceso restringido, unicamente camioneros pueden acceder.")
         return redirect("index")
 
     # TODOS los pedidos que están en ruta (el camionero puede tener varios)
