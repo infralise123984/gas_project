@@ -117,7 +117,7 @@
                         <tr>
                             <th>#</th>
                             <th>Fecha</th>
-                            <th>Cliente</th>
+                            <!-- <th>Cliente</th> -->
                             <th>Balón</th>
                             <th>Cant.</th>
                             <th>Monto</th>
@@ -129,7 +129,7 @@
                         <tr>
                             <td>{{ p.id }}</td>
                             <td>{{ p.fecha|date:"d/m H:i" }}</td>
-                            <td>{{ p.cliente.nombre|default:"Sin nombre" }}</td>
+                            <!-- <td>{{ p.cliente.nombre|default:"Sin nombre" }}</td> -->
                             <td>{{ p.balon.nombre|default:"Sin nombre" }}</td>
                             <td>{{ p.cantidad_balon }}</td>
                             <td>$ {{ p.monto|floatformat:0 }}</td>
