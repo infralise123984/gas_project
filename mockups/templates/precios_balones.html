@@ -35,7 +35,7 @@
                                 <thead class="table-primary text-white">
                                     <tr>
                                         <th class="ps-4">Nombre comercial</th>
-                                        <th class="text-center">Peso neto gas (kg)</th>
+                                        <!-- <th class="text-center">Peso neto gas (kg)</th> -->
                                         <th class="text-center">Precio (CLP)</th>
                                         <th class="text-center">Disponible</th>
                                         <th class="text-center">Última actualización</th>
@@ -45,7 +45,7 @@
                                     {% for balon in balones %}
                                     <tr {% if not balon.activo %}class="table-light" style="opacity: 0.75;" {% endif %}>
                                         <td class="ps-4 fw-bold fs-5">{{ balon.nombre }}</td>
-                                        <td class="text-center">{{ balon.peso_neto_gas }} kg</td>
+                                        <!-- <td class="text-center">{{ balon.peso_neto_gas }} kg</td> -->
                                         <td class="text-center">
                                             <input type="number" name="precio_{{ balon.id }}"
                                                 value="{{ balon.precio|unlocalize }}"

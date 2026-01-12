@@ -142,7 +142,6 @@
                 <table class="table table-hover table-striped mb-0">
                     <thead class="table-primary">
                         <tr>
-                            <th>#</th>
                             <th>Fecha</th>
                             <th>Balón</th>
                             <th>Cant.</th>
@@ -150,12 +149,12 @@
                             <th>Estado</th>
                             <th>Registrador</th>
                             <th>Sector / Dirección</th>
+                            <th>Origen</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for p in page_obj %}
                         <tr>
-                            <td>{{ p.id }}</td>
                             <td>{{ p.fecha|date:"d/m/Y H:i" }}</td>
                             <td>{{ p.balon.nombre }}</td>
                             <td>{{ p.cantidad_balon }}</td>
@@ -165,10 +164,19 @@
                                     {{ p.get_estado_display }}
                                 </span>
                             </td>
-                            <td>{{ p.registrador.get_full_name|default:p.registrador.username }}</td>
+                            <td>{{ p.registrador.get_full_name|default:p.registrador.username }} </td>
                             <td>
                                 <strong>{{ p.sector|default:"—" }}</strong><br>
                                 {{ p.direccion_entrega|truncatechars:50|default:"—" }}
+                            </td>
+                            <td>    
+                                {% if p.origen == "telefono" %}
+                                Pedido por telefono<i class="bi bi-telephone-fill"></i>
+                                {% elif p.origen == "local" %}
+                                Compra por local <i class="bi bi-building"></i>
+                                {% else %}
+                                icono random
+                                {% endif %}
                             </td>
                         </tr>
                         {% empty %}
