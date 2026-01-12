@@ -1,9 +1,11 @@
 # mockups/views.py
+
 # Django core y utilidades
 from datetime import date, datetime
 from calendar import monthrange
 from django.utils import timezone
-
+from zoneinfo import ZoneInfo
+from datetime import timedelta
 # Django contrib
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -158,75 +160,79 @@ def logout_view(request):
     return redirect("login")
 
 
+
+
 @login_required
 def consultas_pedidos(request):
-    if request.user.rol not in ["jefe", "admin"]:
-        messages.error(request, "No tienes permiso para consultar pedidos.")
-        return redirect("index")
-
     # ── Captura de parámetros GET ───────────────────────────────────────────────
     busqueda    = request.GET.get("busqueda", "").strip()
     fechas_str  = request.GET.get("fechas", "").strip()
     estado      = request.GET.get("estado", "todos")
 
-    # Variables para el contexto (mostrar valores en el formulario)
+    # Variables para mantener valores en el formulario
+    fechas_display = ""
     fecha_desde_str = ""
     fecha_hasta_str = ""
-    fechas_display  = ""   # para el value bonito en el input
 
-    # ── Procesar el rango de fechas ─────────────────────────────────────────────
-    if fechas_str:
-        # Limpiar encoding URL (+ → espacio)
+    # ── Determinar qué puede ver el usuario ─────────────────────────────────────
+    es_jefe_o_admin = request.user.rol in ["jefe", "admin"]
+
+    if not es_jefe_o_admin:
+        # Roles operativos: solo sus pedidos del día actual en Chile
+        chile_tz = ZoneInfo('America/Santiago')
+        fechas_str = ""
+        estado = "todos"
+
+        # Alternativa más explícita (Opción 2: usando rango) → descomenta si prefieres esta
+        inicio_hoy = timezone.now().astimezone(chile_tz).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        fin_hoy = inicio_hoy + timedelta(days=1) - timedelta(microseconds=1)
+        queryset = Pedido.objects.filter(
+            registrador=request.user,
+            fecha__range=(inicio_hoy, fin_hoy)
+        ).select_related("balon", "registrador").order_by("-fecha")
+
+    else:
+        # Jefe y admin: todo el historial
+        queryset = Pedido.objects.select_related("balon", "registrador").order_by("-fecha")
+
+    # ── Procesar rango de fechas (solo aplica si es jefe/admin y se envió) ──────
+    if es_jefe_o_admin and fechas_str:
         fechas_str_clean = fechas_str.replace("+", " ").strip()
-
-        # Flatpickr envía: "2025-01-01 to 2025-01-02"
-        if " to " in fechas_str_clean:
+        if " a " in fechas_str_clean or " al " in fechas_str_clean:
             try:
-                desde_str, hasta_str = fechas_str_clean.split(" to ", 1)
-                desde_str = desde_str.strip()
-                hasta_str = hasta_str.strip()
-
+                # Flatpickr puede enviar con " a " o " al " dependiendo de configuración
+                sep = " a " if " a " in fechas_str_clean else " al "
+                desde_str, hasta_str = [x.strip() for x in fechas_str_clean.split(sep, 1)]
+                
                 desde = datetime.strptime(desde_str, "%Y-%m-%d")
                 hasta = datetime.strptime(hasta_str, "%Y-%m-%d")
-
-                # Preparar para zona horaria Chile
+                
                 desde_aware = timezone.make_aware(desde.replace(hour=0, minute=0, second=0, microsecond=0))
-                # Hasta el final del día
-                hasta_fin = hasta.replace(hour=23, minute=59, second=59, microsecond=999999)
-                hasta_aware = timezone.make_aware(hasta_fin)
-
+                hasta_fin = timezone.make_aware(hasta.replace(hour=23, minute=59, second=59, microsecond=999999))
+                
+                queryset = queryset.filter(fecha__range=(desde_aware, hasta_fin))
+                
                 fecha_desde_str = desde.strftime("%Y-%m-%d")
                 fecha_hasta_str = hasta.strftime("%Y-%m-%d")
                 fechas_display = f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
-
             except ValueError:
-                messages.warning(request, f"Rango de fechas inválido: {fechas_str}. Usa el selector.")
-                fechas_str = ""  # invalidar el filtro
+                messages.warning(request, "Formato de fechas inválido. Usa el selector de fechas.")
+                fechas_str = ""
 
-    # ── Consulta base optimizada ────────────────────────────────────────────────
-    queryset = Pedido.objects.select_related("balon", "registrador").order_by("-fecha")
-
-    # Filtro por texto (sector o dirección)
+    # ── Filtro por texto (sector, dirección o nombre del registrador) ───────────
     if busqueda:
         queryset = queryset.filter(
             Q(sector__icontains=busqueda) |
-            Q(direccion_entrega__icontains=busqueda)
+            Q(direccion_entrega__icontains=busqueda) |
+            Q(registrador__first_name__icontains=busqueda) |
+            Q(registrador__last_name__icontains=busqueda) |
+            Q(registrador__username__icontains=busqueda)
         )
 
-    # Filtro por rango de fechas
-    if fecha_desde_str:
-        queryset = queryset.filter(fecha__gte=timezone.make_aware(
-            datetime.strptime(fecha_desde_str, "%Y-%m-%d")
-        ))
-
-    if fecha_hasta_str:
-        hasta_fin = datetime.strptime(fecha_hasta_str, "%Y-%m-%d").replace(
-            hour=23, minute=59, second=59, microsecond=999999
-        )
-        queryset = queryset.filter(fecha__lte=timezone.make_aware(hasta_fin))
-
-    # Filtro por estado
-    if estado != "todos":
+    # ── Filtro por estado (solo jefe/admin) ─────────────────────────────────────
+    if es_jefe_o_admin and estado != "todos":
         queryset = queryset.filter(estado=estado)
 
     # ── Paginación ──────────────────────────────────────────────────────────────
@@ -238,17 +244,20 @@ def consultas_pedidos(request):
     context = {
         "page_obj": page_obj,
         "estados_choices": Pedido.ESTADOS,
+        "es_jefe_o_admin": es_jefe_o_admin,
+        "hoy": timezone.now().astimezone(ZoneInfo('America/Santiago')).date(),  # actualizado para mostrar la fecha correcta
         "filtros": {
             "busqueda": busqueda,
-            "fechas": fechas_display,         # ← valor bonito para el input
+            "fechas": fechas_display,
             "estado": estado,
-            # Opcional: mantener compatibilidad si alguien usa los parámetros viejos
             "fecha_desde": fecha_desde_str,
             "fecha_hasta": fecha_hasta_str,
         },
     }
 
     return render(request, "consultas_pedidos.html", context)
+
+
 
 @login_required
 def transaccional_pedido(request):
@@ -302,9 +311,9 @@ def reporte_ventas(request):
     # Caso 1: Hay filtro explícito del usuario
     if fechas_str:
         fechas_clean = fechas_str.replace("+", " ").strip()
-        if " to " in fechas_clean:
+        if " a " in fechas_clean:
             try:
-                desde_str, hasta_str = fechas_clean.split(" to ", 1)
+                desde_str, hasta_str = fechas_clean.split(" a ", 1)
                 desde_str = desde_str.strip()
                 hasta_str = hasta_str.strip()
 

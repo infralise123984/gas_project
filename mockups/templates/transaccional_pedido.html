@@ -18,14 +18,6 @@
                 </div>
 
                 <div class="card-body p-4">
-                    {% if messages %}
-                        {% for message in messages %}
-                        <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                        {% endfor %}
-                    {% endif %}
 
                     <form method="post">
                         {% csrf_token %}
