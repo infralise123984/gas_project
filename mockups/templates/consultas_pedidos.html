@@ -1,14 +1,20 @@
-<!-- templates/consultas_pedidos.html → Versión mejorada: sin 'tamaño', con sintaxis 'if' corregida y optimizaciones -->
+<!-- templates/consultas_pedidos.html -->
 {% extends 'base.html' %}
 {% load static %}
 {% load humanize %}
+
 {% block title %}Consultar Pedidos - GasFácil{% endblock %}
+
+{% block extra_head %}
+<!-- Locale español para Flatpickr -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+{% endblock %}
 
 {% block content %}
 <div class="container mt-5 mb-5">
-    <!-- Título + Total de resultados (mejorado: badge más visible) -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-primary fw-bold">
+    <!-- Encabezado -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <h2 class="text-primary fw-bold mb-0">
             <i class="bi bi-search me-2"></i>Consultar Pedidos
         </h2>
         <div class="badge bg-primary fs-5 px-4 py-2 shadow-sm">
@@ -16,37 +22,49 @@
         </div>
     </div>
 
-    <!-- Filtros (mejorado: labels más claros, placeholder optimizados) -->
-    <div class="card shadow-sm border-0 mb-4">
+    <!-- Formulario de filtros -->
+    <div class="card shadow-sm border-0 mb-5">
         <div class="card-body p-4">
             <form method="get" class="row g-3 align-items-end">
+                <!-- Búsqueda por sector o dirección -->
                 <div class="col-lg-4 col-md-6">
-                    <label class="form-label fw-bold"><i class="bi bi-map-fill me-1"></i> Sector o Dirección</label>
+                    <label class="form-label fw-bold">
+                        <i class="bi bi-map-fill me-1"></i>Sector o Dirección
+                    </label>
                     <input type="text" name="busqueda" class="form-control form-control-lg"
-                        placeholder="Ej: Dintrans, Los Álamos 123" value="{{ filtros.busqueda }}">
+                           placeholder="Ej: Dintrans, Los Álamos 123, Machalí Alto"
+                           value="{{ filtros.busqueda|default:'' }}">
                 </div>
-                <div class="col-lg-2 col-md-6">
-                    <label class="form-label fw-bold"><i class="bi bi-calendar3 me-1"></i> Desde</label>
-                    <input type="date" name="fecha_desde" class="form-control" value="{{ filtros.fecha_desde }}">
+
+                <!-- Rango de fechas con Flatpickr -->
+                <div class="col-lg-4 col-md-6">
+                    <label class="form-label fw-bold">
+                        <i class="bi bi-calendar-range me-1"></i>Rango de Fechas
+                    </label>
+                    <input type="text" name="fechas" id="rangoFechas" class="form-control form-control-lg"
+                           placeholder="Selecciona rango (ej: 01/01/2026 al 31/01/2026)"
+                           value="{% if filtros.fecha_desde and filtros.fecha_hasta %}{{ filtros.fecha_desde|date:'d/m/Y' }} al {{ filtros.fecha_hasta|date:'d/m/Y' }}{% endif %}">
                 </div>
+
+                <!-- Estado -->
                 <div class="col-lg-2 col-md-6">
-                    <label class="form-label fw-bold"><i class="bi bi-calendar3 me-1"></i> Hasta</label>
-                    <input type="date" name="fecha_hasta" class="form-control" value="{{ filtros.fecha_hasta }}">
-                </div>
-                <div class="col-lg-2 col-md-6">
-                    <label class="form-label fw-bold"><i class="bi bi-tag-fill me-1"></i> Estado</label>
-                    <select name="estado" class="form-select">
-                        <option value="todos" {% if filtros.estado == "todos" %}selected{% endif %}>Todos</option>
+                    <label class="form-label fw-bold">
+                        <i class="bi bi-tag-fill me-1"></i>Estado
+                    </label>
+                    <select name="estado" class="form-select form-select-lg">
+                        <option value="todos" {% if filtros.estado == "todos" or not filtros.estado %}selected{% endif %}>Todos</option>
                         {% for valor, texto in estados_choices %}
-                        <option value="{{ valor }}" {% if filtros.estado == valor %}selected{% endif %}>{{ texto }}</option>
+                            <option value="{{ valor }}" {% if filtros.estado == valor %}selected{% endif %}>{{ texto }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-lg-2 d-flex gap-2">
+
+                <!-- Botones -->
+                <div class="col-lg-2 col-md-6 d-flex gap-2">
                     <button type="submit" class="btn btn-primary btn-lg flex-fill">
                         <i class="bi bi-search"></i> Buscar
                     </button>
-                    <a href="{% url 'consultas_pedidos' %}" class="btn btn-outline-secondary btn-lg">
+                    <a href="{% url 'consultas_pedidos' %}" class="btn btn-outline-secondary btn-lg" title="Limpiar filtros">
                         <i class="bi bi-arrow-counterclockwise"></i>
                     </a>
                 </div>
@@ -54,51 +72,55 @@
         </div>
     </div>
 
-    <!-- Tabla de pedidos (mejorado: columna Balón usa solo 'nombre', monto con formato chileno, empty message más amigable) -->
+    <!-- Tabla de resultados -->
     <div class="card shadow border-0">
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-striped table-hover mb-0 align-middle">
                     <thead class="table-primary text-white">
                         <tr>
-                            <th class="ps-4">#ID</th>
                             <th>Fecha</th>
-                            <th>Sector</th>
-                            <th>Dirección</th>
                             <th>Balón</th>
                             <th class="text-center">Cant.</th>
-                            <th class="text-end pe-4">Monto</th>
+                            <th class="text-end">Monto</th>
+                            <th>Origen</th>
                             <th>Estado</th>
-                            <th>Registrado por</th>
+                            <th>Registrador</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for p in pedidos %}
+                        {% for pedido in page_obj %}
                         <tr>
-                            <td class="ps-4 fw-bold text-primary">#{{ p.id }}</td>
-                            <td>{{ p.fecha|date:"d/m/Y" }} <small class="text-muted">{{ p.fecha|time:"H:i" }}</small></td>
-                            <td class="fw-semibold">{{ p.sector|default:"-" }}</td>
-                            <td>{{ p.direccion_entrega|truncatechars:40|default:"Venta en local" }}</td>
-                            <td>{{ p.balon.nombre }}</td>  <!-- ← Corregido: solo 'nombre' (incluye kg, ej: "Gas de 15 kg") -->
-                            <td class="text-center">{{ p.cantidad_balon }}</td>
-                            <td class="text-end pe-4 fw-bold text-success">$ {{ p.monto|floatformat:0|intcomma }}</td>  <!-- ← Mejorado: formato chileno con puntos -->
+                            <td>{{ pedido.fecha|date:"d/m/Y H:i" }}</td>
+                            <td>{{ pedido.balon.nombre|default:"—" }}</td>
+                            <td class="text-center">{{ pedido.cantidad_balon }}</td>
+                            <td class="text-end">$ {{ pedido.monto|intcomma }}</td>
                             <td>
-                                {% if p.estado == "entregado" %}
-                                <span class="badge bg-success">Entregado</span>
-                                {% elif p.estado == "en_ruta" %}
-                                <span class="badge bg-warning text-dark">En ruta</span>
+                                {% if pedido.origen == "local" %}
+                                    <span class="badge bg-warning text-dark">Local</span>
                                 {% else %}
-                                <span class="badge bg-secondary">{{ p.estado|capfirst }}</span>
+                                    <span class="badge bg-info text-dark">Teléfono</span>
                                 {% endif %}
                             </td>
-                            <td>{{ p.registrador.get_full_name|default:p.registrador.username }}</td>
+                            <td class="text-center">
+                                {% if pedido.estado == "pendiente" %}
+                                    <span class="badge bg-secondary">Pendiente</span>
+                                {% elif pedido.estado == "en_ruta" %}
+                                    <span class="badge bg-warning text-dark">En ruta</span>
+                                {% elif pedido.estado == "entregado" %}
+                                    <span class="badge bg-success">Entregado</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Cancelado</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ pedido.registrador.get_full_name|default:pedido.registrador.username|default:"—" }}</td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="9" class="text-center text-muted py-5">
-                                <i class="bi bi-search fs-1 d-block mb-3"></i>
-                                <strong>No se encontraron pedidos con estos filtros</strong>
-                                <p class="mt-2">Intenta ajustar los filtros o verifica si hay pedidos recientes.</p>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                                <strong>No se encontraron pedidos</strong><br>
+                                <small>Intenta con otros filtros o verifica si hay registros en el período seleccionado.</small>
                             </td>
                         </tr>
                         {% endfor %}
@@ -108,106 +130,83 @@
         </div>
     </div>
 
-    <!-- Paginación (mejorado: botones más accesibles en móvil, con tooltips) -->
-    {% if page_obj.has_other_pages %}
-    <nav class="mt-5">
-        <ul class="pagination justify-content-center pagination-lg gap-2">
-            <!-- Primera página -->
+    <!-- Paginación -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <nav aria-label="Paginación" class="mt-4">
+        <ul class="pagination justify-content-center gap-2 flex-wrap">
             {% if page_obj.has_previous %}
             <li class="page-item">
-                <a class="page-link rounded-pill shadow-sm bg-white border-0 text-primary fw-bold"
-                    href="?page=1{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}"
-                    data-bs-toggle="tooltip" title="Primera página">
+                <a class="page-link rounded-pill shadow-sm" href="?page=1{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
                     <i class="bi bi-chevron-double-left"></i>
                 </a>
             </li>
             <li class="page-item">
-                <a class="page-link rounded-pill shadow-sm bg-white border-0 text-primary fw-bold"
-                    href="?page={{ page_obj.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}"
-                    data-bs-toggle="tooltip" title="Página anterior">
+                <a class="page-link rounded-pill shadow-sm" href="?page={{ page_obj.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
                     <i class="bi bi-chevron-left"></i>
                 </a>
             </li>
             {% else %}
-            <li class="page-item disabled">
-                <span class="page-link rounded-pill bg-light text-muted border-0">
-                    <i class="bi bi-chevron-double-left"></i>
-                </span>
-            </li>
-            <li class="page-item disabled">
-                <span class="page-link rounded-pill bg-light text-muted border-0">
-                    <i class="bi bi-chevron-left"></i>
-                </span>
-            </li>
+            <li class="page-item disabled"><span class="page-link rounded-pill"><i class="bi bi-chevron-double-left"></i></span></li>
+            <li class="page-item disabled"><span class="page-link rounded-pill"><i class="bi bi-chevron-left"></i></span></li>
             {% endif %}
 
-            <!-- Números de página -->
             {% for num in page_obj.paginator.page_range %}
-            {% if page_obj.number == num %}
-            <li class="page-item active">
-                <span class="page-link rounded-pill shadow-lg fw-bold"
-                    style="background: #0d6efd; border: none; min-width: 48px;">
-                    {{ num }}
-                </span>
-            </li>
-            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
-            <li class="page-item">
-                <a class="page-link rounded-pill shadow-sm bg-white text-primary fw-bold border-0"
-                    style="min-width: 48px;"
-                    href="?page={{ num }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
-                    {{ num }}
-                </a>
-            </li>
-            {% elif num == page_obj.number|add:'-4' or num == page_obj.number|add:'4' %}
-            <li class="page-item">
-                <span class="page-link text-muted fw-bold">...</span>
-            </li>
-            {% endif %}
+                {% if page_obj.number == num %}
+                <li class="page-item active">
+                    <span class="page-link rounded-pill shadow">{{ num }}</span>
+                </li>
+                {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+                <li class="page-item">
+                    <a class="page-link rounded-pill shadow-sm" href="?page={{ num }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">{{ num }}</a>
+                </li>
+                {% elif num == page_obj.number|add:"-4" or num == page_obj.number|add:"4" %}
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
             {% endfor %}
 
-            <!-- Siguiente y última -->
             {% if page_obj.has_next %}
             <li class="page-item">
-                <a class="page-link rounded-pill shadow-sm bg-white border-0 text-primary fw-bold"
-                    href="?page={{ page_obj.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}"
-                    data-bs-toggle="tooltip" title="Página siguiente">
+                <a class="page-link rounded-pill shadow-sm" href="?page={{ page_obj.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
                     <i class="bi bi-chevron-right"></i>
                 </a>
             </li>
             <li class="page-item">
-                <a class="page-link rounded-pill shadow-sm bg-white border-0 text-primary fw-bold"
-                    href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}"
-                    data-bs-toggle="tooltip" title="Última página">
+                <a class="page-link rounded-pill shadow-sm" href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
                     <i class="bi bi-chevron-double-right"></i>
                 </a>
             </li>
             {% else %}
-            <li class="page-item disabled">
-                <span class="page-link rounded-pill bg-light text-muted border-0">
-                    <i class="bi bi-chevron-right"></i>
-                </span>
-            </li>
-            <li class="page-item disabled">
-                <span class="page-link rounded-pill bg-light text-muted border-0">
-                    <i class="bi bi-chevron-double-right"></i>
-                </span>
-            </li>
+            <li class="page-item disabled"><span class="page-link rounded-pill"><i class="bi bi-chevron-right"></i></span></li>
+            <li class="page-item disabled"><span class="page-link rounded-pill"><i class="bi bi-chevron-double-right"></i></span></li>
             {% endif %}
         </ul>
     </nav>
     {% endif %}
 </div>
 
-<!-- Tooltips de Bootstrap (mejorado: inicialización más robusta) -->
+<!-- Inicialización de Flatpickr -->
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl, {
-                placement: 'top',  // ← Mejorado: posicionamiento por defecto
-                delay: { show: 100, hide: 200 }  // ← Mejorado: delay suave
-            });
-        });
+document.addEventListener('DOMContentLoaded', function () {
+    flatpickr("#rangoFechas", {
+        mode: "range",
+        dateFormat: "Y-m-d",          // formato que se envía al backend
+        altInput: true,
+        altFormat: "d/m/Y",           // formato visible para el usuario
+        locale: flatpickr.l10ns.es,
+        showMonths: 1,
+        weekNumbers: true,
+        allowInput: true,
     });
+});
+</script>
+
+<!-- Tooltips (si los usas en otros lugares) -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
 </script>
 {% endblock %}

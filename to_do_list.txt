@@ -1,0 +1,3 @@
+venta de camiones
+precios de venta diferentes
+vista simplificada de ventas de bodega y de camiones

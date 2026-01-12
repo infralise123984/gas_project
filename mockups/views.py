@@ -1,18 +1,22 @@
 # mockups/views.py
+# Django core y utilidades
+from datetime import date, datetime
+from calendar import monthrange
+from django.utils import timezone
 
+# Django contrib
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
-from django.db.models import Count, Q, Sum, F
-from django.shortcuts import redirect, render
-from django.utils import timezone
-from datetime import datetime, date
 
+# Modelos, consultas y paginación
+from django.db.models import Count, F, Q, Sum
+from django.core.paginator import Paginator
+from django.shortcuts import redirect, render
+
+# App local
 from .forms import PedidoForm
 from .models import Pedido, TipoBalon, Usuario
-
-
 def index(request):
     return render(request, "index.html")
 
@@ -160,45 +164,91 @@ def consultas_pedidos(request):
         messages.error(request, "No tienes permiso para consultar pedidos.")
         return redirect("index")
 
-    # === FILTROS ===
-    busqueda = request.GET.get("busqueda", "").strip()
-    fecha_desde_str = request.GET.get("fecha_desde")
-    fecha_hasta_str = request.GET.get("fecha_hasta")
-    estado = request.GET.get("estado", "todos")
+    # ── Captura de parámetros GET ───────────────────────────────────────────────
+    busqueda    = request.GET.get("busqueda", "").strip()
+    fechas_str  = request.GET.get("fechas", "").strip()
+    estado      = request.GET.get("estado", "todos")
 
-    pedidos = Pedido.objects.select_related("balon", "registrador").all()
+    # Variables para el contexto (mostrar valores en el formulario)
+    fecha_desde_str = ""
+    fecha_hasta_str = ""
+    fechas_display  = ""   # para el value bonito en el input
 
+    # ── Procesar el rango de fechas ─────────────────────────────────────────────
+    if fechas_str:
+        # Limpiar encoding URL (+ → espacio)
+        fechas_str_clean = fechas_str.replace("+", " ").strip()
+
+        # Flatpickr envía: "2025-01-01 to 2025-01-02"
+        if " to " in fechas_str_clean:
+            try:
+                desde_str, hasta_str = fechas_str_clean.split(" to ", 1)
+                desde_str = desde_str.strip()
+                hasta_str = hasta_str.strip()
+
+                desde = datetime.strptime(desde_str, "%Y-%m-%d")
+                hasta = datetime.strptime(hasta_str, "%Y-%m-%d")
+
+                # Preparar para zona horaria Chile
+                desde_aware = timezone.make_aware(desde.replace(hour=0, minute=0, second=0, microsecond=0))
+                # Hasta el final del día
+                hasta_fin = hasta.replace(hour=23, minute=59, second=59, microsecond=999999)
+                hasta_aware = timezone.make_aware(hasta_fin)
+
+                fecha_desde_str = desde.strftime("%Y-%m-%d")
+                fecha_hasta_str = hasta.strftime("%Y-%m-%d")
+                fechas_display = f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
+
+            except ValueError:
+                messages.warning(request, f"Rango de fechas inválido: {fechas_str}. Usa el selector.")
+                fechas_str = ""  # invalidar el filtro
+
+    # ── Consulta base optimizada ────────────────────────────────────────────────
+    queryset = Pedido.objects.select_related("balon", "registrador").order_by("-fecha")
+
+    # Filtro por texto (sector o dirección)
     if busqueda:
-        pedidos = pedidos.filter(
-            Q(sector__icontains=busqueda) | Q(direccion_entrega__icontains=busqueda)
+        queryset = queryset.filter(
+            Q(sector__icontains=busqueda) |
+            Q(direccion_entrega__icontains=busqueda)
         )
+
+    # Filtro por rango de fechas
     if fecha_desde_str:
-        pedidos = pedidos.filter(fecha__date__gte=fecha_desde_str)
+        queryset = queryset.filter(fecha__gte=timezone.make_aware(
+            datetime.strptime(fecha_desde_str, "%Y-%m-%d")
+        ))
+
     if fecha_hasta_str:
-        pedidos = pedidos.filter(fecha__date__lte=fecha_hasta_str)
+        hasta_fin = datetime.strptime(fecha_hasta_str, "%Y-%m-%d").replace(
+            hour=23, minute=59, second=59, microsecond=999999
+        )
+        queryset = queryset.filter(fecha__lte=timezone.make_aware(hasta_fin))
+
+    # Filtro por estado
     if estado != "todos":
-        pedidos = pedidos.filter(estado=estado)
+        queryset = queryset.filter(estado=estado)
 
-    pedidos = pedidos.order_by("-fecha")
-
-    paginator = Paginator(pedidos, 20)
+    # ── Paginación ──────────────────────────────────────────────────────────────
+    paginator = Paginator(queryset, 20)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
+    # ── Contexto para la plantilla ──────────────────────────────────────────────
     context = {
-        "pedidos": page_obj,  # ← Esto es para el loop en la tabla
-        "page_obj": page_obj,  # Necesario para la paginación personalizada
+        "page_obj": page_obj,
         "estados_choices": Pedido.ESTADOS,
         "filtros": {
             "busqueda": busqueda,
+            "fechas": fechas_display,         # ← valor bonito para el input
+            "estado": estado,
+            # Opcional: mantener compatibilidad si alguien usa los parámetros viejos
             "fecha_desde": fecha_desde_str,
             "fecha_hasta": fecha_hasta_str,
-            "estado": estado,
         },
     }
 
     return render(request, "consultas_pedidos.html", context)
-
 
 @login_required
 def transaccional_pedido(request):
@@ -237,22 +287,58 @@ def transaccional_pedido(request):
         },
     )
 
-
 @login_required
 def reporte_ventas(request):
     if request.user.rol not in ["jefe", "admin"]:
+        messages.error(request, "Solo jefes y administradores pueden acceder a los reportes.")
         return redirect("index")
 
-    fecha_inicio = request.GET.get("fecha_inicio")
-    fecha_fin = request.GET.get("fecha_fin")
+    fechas_str = request.GET.get("fechas", "").strip()
 
-    pedidos = Pedido.objects.filter(estado="entregado")
-    if fecha_inicio:
-        pedidos = pedidos.filter(fecha__date__gte=fecha_inicio)
-    if fecha_fin:
-        pedidos = pedidos.filter(fecha__date__lte=fecha_fin)
+    fecha_inicio = None
+    fecha_fin = None
+    fechas_display = ""
 
-    # Agregación por balón con kilos
+    # Caso 1: Hay filtro explícito del usuario
+    if fechas_str:
+        fechas_clean = fechas_str.replace("+", " ").strip()
+        if " to " in fechas_clean:
+            try:
+                desde_str, hasta_str = fechas_clean.split(" to ", 1)
+                desde_str = desde_str.strip()
+                hasta_str = hasta_str.strip()
+
+                desde = datetime.strptime(desde_str, "%Y-%m-%d")
+                hasta = datetime.strptime(hasta_str, "%Y-%m-%d")
+
+                fecha_inicio = timezone.make_aware(desde.replace(hour=0, minute=0, second=0, microsecond=0))
+                hasta_fin = hasta.replace(hour=23, minute=59, second=59, microsecond=999999)
+                fecha_fin = timezone.make_aware(hasta_fin)
+
+                fechas_display = f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
+            except ValueError:
+                messages.warning(request, "Rango de fechas inválido. Se muestra el mes actual por defecto.")
+                fechas_str = ""  # fallback al mes actual
+
+    # Caso 2: No hay filtro → usar mes actual por defecto
+    if not fecha_inicio or not fecha_fin:
+        hoy = timezone.now().date()
+        primer_dia = date(hoy.year, hoy.month, 1)
+        ultimo_dia = date(hoy.year, hoy.month, monthrange(hoy.year, hoy.month)[1])
+
+        fecha_inicio = timezone.make_aware(datetime.combine(primer_dia, datetime.min.time()))
+        fecha_fin = timezone.make_aware(datetime.combine(ultimo_dia, datetime.max.time()))
+
+        fechas_display = f"1 al {ultimo_dia.day} de {hoy.strftime('%B %Y')}"  # ej: "1 al 31 de enero 2026"
+
+    # Consulta base
+    pedidos = Pedido.objects.filter(
+        estado="entregado",
+        fecha__gte=fecha_inicio,
+        fecha__lte=fecha_fin
+    ).select_related("balon", "registrador")
+
+    # Agregaciones
     por_balon = (
         pedidos.values("balon__nombre", "balon__peso_neto_gas")
         .annotate(
@@ -267,13 +353,11 @@ def reporte_ventas(request):
     total_ventas = pedidos.aggregate(total=Sum("monto"))["total"] or 0
     total_balones = pedidos.aggregate(total=Sum("cantidad_balon"))["total"] or 0
     total_kilos = (
-        pedidos.aggregate(total=Sum(F("cantidad_balon") * F("balon__peso_neto_gas")))[
-            "total"
-        ]
+        pedidos.aggregate(total=Sum(F("cantidad_balon") * F("balon__peso_neto_gas")))["total"]
         or 0
     )
 
-    ultimos_pedidos = pedidos.select_related("balon", "registrador")[:10]
+    ultimos_pedidos = pedidos.order_by("-fecha")[:10]
 
     context = {
         "por_balon": por_balon,
@@ -282,12 +366,14 @@ def reporte_ventas(request):
         "total_balones": total_balones,
         "total_kilos": total_kilos,
         "ultimos_pedidos": ultimos_pedidos,
-        "fecha_inicio": fecha_inicio,
-        "fecha_fin": fecha_fin,
+        "filtros": {
+            "fechas": fechas_display,
+            "fecha_inicio": fecha_inicio.date(),
+            "fecha_fin": fecha_fin.date(),
+        },
     }
+
     return render(request, "reporte_ventas.html", context)
-
-
 @login_required
 def cliente_pedido(request):
     # El cliente final NO necesita login → lo dejamos sin protección
@@ -331,7 +417,7 @@ def camionero_tomar_pedido(request, pedido_id):
         pedido.estado = "en_ruta"
         pedido.save()
         messages.success(
-            request, f"Pedido #{pedido.id} tomado. ¡Dirígete al domicilio!"
+            request, f"Pedido #{pedido.id} tomado. Dirígete al domicilio"
         )
     except Pedido.DoesNotExist:
         messages.error(request, "El pedido ya no está disponible.")
@@ -349,7 +435,7 @@ def camionero_marcar_entregado(request, pedido_id):
         pedido = Pedido.objects.get(id=pedido_id, estado="en_ruta")
         pedido.estado = "entregado"
         pedido.save()
-        messages.success(request, f"¡Pedido #{pedido.id} marcado como entregado!")
+        messages.success(request, f"Pedido #{pedido.id} marcado como entregado!")
     except Pedido.DoesNotExist:
         messages.error(request, "El pedido no está en ruta o no existe.")
 
