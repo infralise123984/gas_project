@@ -80,6 +80,7 @@ class PedidoAdmin(admin.ModelAdmin):
         "monto",
         "estado",
         "registrador",
+        "entregador",
     )
     list_filter = ("estado", "balon__peso_neto_gas", "fecha")
     search_fields = ("balon__nombre", "registrador__username")

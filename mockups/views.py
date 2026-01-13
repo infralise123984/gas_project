@@ -74,7 +74,7 @@ def precios_balones(request):
 
 @login_required
 def crear_usuario(request):
-    if request.user.rol not in ["jefe", "admin"]:
+    if request.user.rol not in ["admin"]:
         messages.error(request, "No tienes permiso para crear usuarios.")
         return redirect("index")
 
@@ -261,40 +261,82 @@ def consultas_pedidos(request):
 
 @login_required
 def transaccional_pedido(request):
-    if request.user.rol not in ["telefonista", "bodeguero"]:
+    user = request.user
+    rol = user.rol
+
+    # ────────────────────────────────────────────────────────────────
+    # Permisos básicos
+    # ────────────────────────────────────────────────────────────────
+    if rol not in ["telefonista", "bodeguero", "camionero", "admin"]:
         messages.error(request, "No tienes permiso para registrar pedidos.")
         return redirect("index")
 
     if request.method == "POST":
-        form = PedidoForm(request.POST, user=request.user)
+        form = PedidoForm(request.POST, user=user)
+
         if form.is_valid():
             pedido = form.save(commit=False)
-            pedido.registrador = request.user
-            pedido.origen = "local" if request.user.rol == "bodeguero" else "telefono"
+            pedido.registrador = user
 
-            # Bodeguero: venta local
+            # Determinar origen según rol (con flexibilidad para admin y camionero)
+            if rol == "bodeguero":
+                pedido.origen = "local"
+            elif rol == "telefonista":
+                pedido.origen = "telefono"
+            elif rol == "camionero":
+                # Camionero puede elegir tarreo o venta_extra desde el formulario
+                pedido.origen = form.cleaned_data.get("origen", "tarreo")  # fallback por seguridad
+            else:  # admin
+                pedido.origen = form.cleaned_data.get("origen", "telefono")
+
+            # Lógica específica según origen
             if pedido.origen == "local":
                 pedido.estado = "entregado"
                 pedido.sector = ""
                 pedido.direccion_entrega = "Venta en local"
+                # Opcional: pedido.entregador = user  # si quieres que bodeguero sea entregador
 
+            elif pedido.origen in ["tarreo", "venta_extra"]:
+                # Camionero o admin → asignamos automáticamente
+                pedido.entregador = user
+                pedido.estado = "entregado"  # se considera entregado en el momento
+                # sector y direccion_entrega pueden quedar vacíos (validado en model.clean())
+
+            elif pedido.origen == "telefono":
+                pedido.estado = "pendiente"
+                # entregador se asignará después por camionero
+
+            # Monto ya viene calculado del form (cleaned_data)
             pedido.monto = form.cleaned_data["monto"]
-            pedido.save()
 
-            messages.success(request, f"Pedido #{pedido.id} registrado correctamente.")
-            return redirect("transaccional_pedido")
+            try:
+                pedido.save()  # Aquí se ejecuta full_clean() y clean() del modelo
+                messages.success(request, f"{pedido.get_origen_display()} #{pedido.id} registrado correctamente.")
+                return redirect("transaccional_pedido")
+            except Exception as e:
+                messages.error(request, f"Error al guardar: {str(e)}")
+
     else:
-        form = PedidoForm(user=request.user)
+        form = PedidoForm(user=user)
 
-    return render(
-        request,
-        "transaccional_pedido.html",
-        {
-            "form": form,
-            "es_bodeguero": request.user.rol == "bodeguero",
-            "es_telefonista": request.user.rol == "telefonista",
-        },
-    )
+    # ────────────────────────────────────────────────────────────────
+    # Contexto para la plantilla
+    # ────────────────────────────────────────────────────────────────
+    context = {
+        "form": form,
+        "es_bodeguero": rol == "bodeguero",
+        "es_telefonista": rol == "telefonista",
+        "es_camionero": rol == "camionero",
+        "es_admin": rol == "admin",
+        "titulo": {
+            "bodeguero": "Registrar Venta en Local",
+            "telefonista": "Registrar Pedido a Domicilio",
+            "camionero": "Registrar Venta por Tarreo o Extra",
+            "admin": "Registrar Pedido (Admin)",
+        }.get(rol, "Registrar Pedido"),
+    }
+
+    return render(request, "transaccional_pedido.html", context)
 
 @login_required
 def reporte_ventas(request):
@@ -388,30 +430,44 @@ def cliente_pedido(request):
     # El cliente final NO necesita login → lo dejamos sin protección
     return render(request, "cliente_pedido.html")
 
-
 @login_required
 def camionero_entregas(request):
-    if request.user.rol != "camionero":
-        messages.error(request, "Acceso restringido, unicamente camioneros pueden acceder.")
+    if request.user.rol not in ["camionero", "admin"]:
+        messages.error(request, "Acceso restringido, únicamente camioneros pueden acceder.")
         return redirect("index")
 
-    # TODOS los pedidos que están en ruta (el camionero puede tener varios)
+    user = request.user
+
+    # Pedidos que este camionero ya tomó y están en ruta
     pedidos_en_ruta = Pedido.objects.filter(
         estado="en_ruta",
-        origen="telefono"
+        entregador=user
     ).order_by("fecha")
 
-    # Pedidos pendientes (aún no tomados por nadie)
+    # Pedidos entregados por este camionero (hoy o últimos días, opcional limitar)
+    pedidos_entregados_hoy = Pedido.objects.filter(
+        estado="entregado",
+        entregador=user,
+        fecha__date=timezone.now().date()
+    ).order_by("-fecha")
+
+    # Pedidos pendientes que aún no tienen camionero asignado
+    # (solo origen telefono, porque tarreo/venta_extra se registran directamente)
     pendientes = Pedido.objects.filter(
         estado="pendiente",
-        origen="telefono"
+        origen="telefono",
+        entregador__isnull=True
     ).order_by("fecha")
 
     context = {
-        "pedidos_en_ruta": pedidos_en_ruta,      # ← Cambiado: ahora es una lista
+        "pedidos_en_ruta": pedidos_en_ruta,
         "pendientes": pendientes,
+        "pedidos_entregados_hoy": pedidos_entregados_hoy,  # opcional, pero útil para ver lo del día
         "hay_en_ruta": pedidos_en_ruta.exists(),
+        "hay_pendientes": pendientes.exists(),
+        "hay_entregados_hoy": pedidos_entregados_hoy.exists(),
     }
+
     return render(request, "camionero_entregas.html", context)
 
 
@@ -422,14 +478,22 @@ def camionero_tomar_pedido(request, pedido_id):
         return redirect("index")
 
     try:
-        pedido = Pedido.objects.get(id=pedido_id, estado="pendiente")
+        pedido = Pedido.objects.get(
+            id=pedido_id,
+            estado="pendiente",
+            entregador__isnull=True,           # ← seguridad extra
+            origen="telefono"                  # solo permite tomar pedidos telefónicos
+        )
         pedido.estado = "en_ruta"
+        pedido.entregador = request.user       # ← asignamos al camionero que lo toma
         pedido.save()
+
         messages.success(
-            request, f"Pedido #{pedido.id} tomado. Dirígete al domicilio"
+            request,
+            f"Pedido #{pedido.id} tomado. Dirígete al domicilio"
         )
     except Pedido.DoesNotExist:
-        messages.error(request, "El pedido ya no está disponible.")
+        messages.error(request, "El pedido ya no está disponible o ya fue tomado.")
 
     return redirect("camionero_entregas")
 
@@ -441,11 +505,17 @@ def camionero_marcar_entregado(request, pedido_id):
         return redirect("index")
 
     try:
-        pedido = Pedido.objects.get(id=pedido_id, estado="en_ruta")
+        pedido = Pedido.objects.get(
+            id=pedido_id,
+            estado="en_ruta",
+            entregador=request.user            # ← solo puede marcar los suyos
+        )
         pedido.estado = "entregado"
+        # entregador ya está asignado desde que lo tomó, no es necesario volver a ponerlo
         pedido.save()
+
         messages.success(request, f"Pedido #{pedido.id} marcado como entregado!")
     except Pedido.DoesNotExist:
-        messages.error(request, "El pedido no está en ruta o no existe.")
+        messages.error(request, "El pedido no está en ruta, no existe o no te pertenece.")
 
     return redirect("camionero_entregas")
