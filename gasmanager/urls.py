@@ -34,8 +34,11 @@ urlpatterns = [
     path('cliente_pedido/', views.cliente_pedido, name='cliente_pedido'),
     # path('camionero_entregas/', views.camionero_entregas, name='camionero_entregas'),
     path('precios/', views.precios_balones, name='precios_balones'),
-    
+    path('consultas-pedidos/', views.consultas_pedidos, name='consultas_pedidos'),
+    path('mis-entregas-camionero/', views.mis_entregas, name='mis_entregas'),
+    path('mis-pedidos-hoy/',   views.mis_pedidos_hoy,        name='mis_pedidos_hoy'),
     path("camionero/", views.camionero_entregas, name="camionero_entregas"),
     path("camionero/tomar/<int:pedido_id>/", views.camionero_tomar_pedido, name="camionero_tomar_pedido"),
     path("camionero/entregado/<int:pedido_id>/", views.camionero_marcar_entregado, name="camionero_marcar_entregado"),
+    path('camionero/cancelar/<int:pedido_id>/', views.camionero_cancelar_entrega, name='camionero_cancelar_entrega'),
 ]

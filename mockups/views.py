@@ -1,18 +1,24 @@
 # mockups/views.py
 
+# Django core y utilidades
+from datetime import date, datetime
+from calendar import monthrange
+from django.utils import timezone
+from zoneinfo import ZoneInfo
+from datetime import timedelta
+# Django contrib
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
-from django.db.models import Count, Q, Sum, F
-from django.shortcuts import redirect, render
-from django.utils import timezone
-from datetime import datetime, date
 
+# Modelos, consultas y paginación
+from django.db.models import Count, F, Q, Sum
+from django.core.paginator import Paginator
+from django.shortcuts import redirect, render
+
+# App local
 from .forms import PedidoForm
 from .models import Pedido, TipoBalon, Usuario
-
-
 def index(request):
     return render(request, "index.html")
 
@@ -20,7 +26,7 @@ def index(request):
 @login_required
 def precios_balones(request):
     if request.user.rol not in ["jefe", "admin"]:
-        messages.error(request, "No tienes permiso para modificar precios.")
+        messages.error(request, "Solo telefonista y/o camionero pueden generar pedidos.")
         return redirect("index")
 
     balones = TipoBalon.objects.all().order_by("peso_neto_gas")
@@ -68,7 +74,7 @@ def precios_balones(request):
 
 @login_required
 def crear_usuario(request):
-    if request.user.rol not in ["jefe", "admin"]:
+    if request.user.rol not in ["admin"]:
         messages.error(request, "No tienes permiso para crear usuarios.")
         return redirect("index")
 
@@ -137,11 +143,11 @@ def login_view(request):
 
             # Redirección según rol
             if user.rol == "camionero":
-                return redirect("camionero_entregas")
+                return redirect("/")
             elif user.rol in ["jefe", "admin"]:
-                return redirect("reporte_ventas")
+                return redirect("/")
             else:  # Para telefonista y bodeguero
-                return redirect("transaccional_pedido")
+                return redirect("/")
         else:
             messages.error(request, "Usuario o contraseña incorrectos")
 
@@ -154,105 +160,274 @@ def logout_view(request):
     return redirect("login")
 
 
+
+
+# ────────────────────────────────────────────────────────────────
+# 1. Vista completa: Consultas avanzadas (solo Jefe y Administrador)
+# ────────────────────────────────────────────────────────────────
 @login_required
 def consultas_pedidos(request):
     if request.user.rol not in ["jefe", "admin"]:
-        messages.error(request, "No tienes permiso para consultar pedidos.")
+        messages.error(request, "No tienes permiso para acceder a esta sección.")
         return redirect("index")
 
-    # === FILTROS ===
-    busqueda = request.GET.get("busqueda", "").strip()
-    fecha_desde_str = request.GET.get("fecha_desde")
-    fecha_hasta_str = request.GET.get("fecha_hasta")
-    estado = request.GET.get("estado", "todos")
+    # Captura de parámetros GET
+    busqueda    = request.GET.get("busqueda", "").strip()
+    fechas_str  = request.GET.get("fechas", "").strip()
+    estado      = request.GET.get("estado", "todos")
 
-    pedidos = Pedido.objects.select_related("balon", "registrador").all()
+    # Variables para devolver al template (mantener valores en formulario)
+    fechas_display = ""
+    fecha_desde_str = ""
+    fecha_hasta_str = ""
 
+    # Base queryset: TODO el historial
+    queryset = Pedido.objects.select_related(
+        "balon", "registrador", "entregador"
+    ).order_by("-fecha")
+
+    # Filtro por rango de fechas
+    if fechas_str:
+        fechas_str_clean = fechas_str.replace("+", " ").strip()
+        if " a " in fechas_str_clean or " al " in fechas_str_clean:
+            try:
+                sep = " a " if " a " in fechas_str_clean else " al "
+                desde_str, hasta_str = [x.strip() for x in fechas_str_clean.split(sep, 1)]
+
+                desde = datetime.strptime(desde_str, "%Y-%m-%d")
+                hasta = datetime.strptime(hasta_str, "%Y-%m-%d")
+
+                desde_aware = timezone.make_aware(desde.replace(hour=0, minute=0, second=0, microsecond=0))
+                hasta_fin = timezone.make_aware(hasta.replace(hour=23, minute=59, second=59, microsecond=999999))
+
+                queryset = queryset.filter(fecha__range=(desde_aware, hasta_fin))
+
+                fecha_desde_str = desde.strftime("%Y-%m-%d")
+                fecha_hasta_str = hasta.strftime("%Y-%m-%d")
+                fechas_display = f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
+            except ValueError:
+                messages.warning(request, "Formato de fechas inválido. Usa el selector de fechas.")
+
+    # Filtro por texto (búsqueda)
     if busqueda:
-        pedidos = pedidos.filter(
-            Q(sector__icontains=busqueda) | Q(direccion_entrega__icontains=busqueda)
+        queryset = queryset.filter(
+            Q(sector__icontains=busqueda) |
+            Q(direccion_entrega__icontains=busqueda) |
+            Q(registrador__first_name__icontains=busqueda) |
+            Q(registrador__last_name__icontains=busqueda) |
+            Q(registrador__username__icontains=busqueda) |
+            Q(entregador__first_name__icontains=busqueda) |
+            Q(entregador__last_name__icontains=busqueda) |
+            Q(entregador__username__icontains=busqueda) |
+            Q(balon__nombre__icontains=busqueda)
         )
-    if fecha_desde_str:
-        pedidos = pedidos.filter(fecha__date__gte=fecha_desde_str)
-    if fecha_hasta_str:
-        pedidos = pedidos.filter(fecha__date__lte=fecha_hasta_str)
+
+    # Filtro por estado
     if estado != "todos":
-        pedidos = pedidos.filter(estado=estado)
+        queryset = queryset.filter(estado=estado)
 
-    pedidos = pedidos.order_by("-fecha")
-
-    paginator = Paginator(pedidos, 20)
+    # Paginación
+    paginator = Paginator(queryset, 20)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
     context = {
-        "pedidos": page_obj,  # ← Esto es para el loop en la tabla
-        "page_obj": page_obj,  # Necesario para la paginación personalizada
+        "page_obj": page_obj,
         "estados_choices": Pedido.ESTADOS,
+        "es_jefe_o_admin": True,
         "filtros": {
             "busqueda": busqueda,
+            "fechas": fechas_display,
+            "estado": estado,
             "fecha_desde": fecha_desde_str,
             "fecha_hasta": fecha_hasta_str,
-            "estado": estado,
         },
     }
-
     return render(request, "consultas_pedidos.html", context)
 
 
+# ────────────────────────────────────────────────────────────────
+# 2. Vista camionero: Mis Entregas Realizadas
+# ────────────────────────────────────────────────────────────────
+@login_required
+def mis_entregas(request):
+    if request.user.rol != "camionero":
+        messages.error(request, "Acceso restringido.")
+        return redirect("index")
+
+    tz = ZoneInfo('America/Santiago')
+    hoy_inicio = timezone.now().astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    hoy_fin = hoy_inicio + timedelta(days=1) - timedelta(microseconds=1)
+
+    pedidos_hoy = Pedido.objects.filter(
+        entregador=request.user,
+        estado="entregado",
+        fecha__range=(hoy_inicio, hoy_fin)
+    ).select_related("balon", "registrador").order_by("-fecha")
+
+    return render(request, "mis_entregas_camionero.html", {
+        "pedidos_hoy": pedidos_hoy,
+    })
+
+
+# ────────────────────────────────────────────────────────────────
+# 3. Vista telefonista / bodeguero: Mis pedidos / ventas de hoy
+# ────────────────────────────────────────────────────────────────
+@login_required
+def mis_pedidos_hoy(request):
+    if request.user.rol not in ["telefonista", "bodeguero"]:
+        messages.error(request, "Acceso no permitido en esta sección.")
+        return redirect("index")
+
+    tz = ZoneInfo('America/Santiago')
+    hoy_inicio = timezone.now().astimezone(tz).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    hoy_fin = hoy_inicio + timedelta(days=1) - timedelta(microseconds=1)
+
+    pedidos = Pedido.objects.filter(
+        registrador=request.user,
+        fecha__range=(hoy_inicio, hoy_fin)
+    ).select_related("balon").order_by("-fecha")
+
+    context = {
+        "pedidos": pedidos,           # sin paginación (normalmente pocos)
+        "total_hoy": pedidos.count(),
+        "es_telefonista": request.user.rol == "telefonista",
+        "es_bodeguero":   request.user.rol == "bodeguero",
+    }
+    return render(request, "mis_pedidos_hoy.html", context)
 @login_required
 def transaccional_pedido(request):
-    if request.user.rol not in ["telefonista", "bodeguero"]:
+    user = request.user
+    rol = user.rol
+
+    # ────────────────────────────────────────────────────────────────
+    # Permisos básicos
+    # ────────────────────────────────────────────────────────────────
+    if rol not in ["telefonista", "bodeguero", "camionero", "admin"]:
         messages.error(request, "No tienes permiso para registrar pedidos.")
         return redirect("index")
 
     if request.method == "POST":
-        form = PedidoForm(request.POST, user=request.user)
+        form = PedidoForm(request.POST, user=user)
+
         if form.is_valid():
             pedido = form.save(commit=False)
-            pedido.registrador = request.user
-            pedido.origen = "local" if request.user.rol == "bodeguero" else "telefono"
+            pedido.registrador = user
 
-            # Bodeguero: venta local
+            # Determinar origen según rol (con flexibilidad para admin y camionero)
+            if rol == "bodeguero":
+                pedido.origen = "local"
+            elif rol == "telefonista":
+                pedido.origen = "telefono"
+            elif rol == "camionero":
+                # Camionero puede elegir tarreo o venta_extra desde el formulario
+                pedido.origen = form.cleaned_data.get("origen", "tarreo")  # fallback por seguridad
+            else:  # admin
+                pedido.origen = form.cleaned_data.get("origen", "telefono")
+
+            # Lógica específica según origen
             if pedido.origen == "local":
                 pedido.estado = "entregado"
                 pedido.sector = ""
                 pedido.direccion_entrega = "Venta en local"
+                # Opcional: pedido.entregador = user  # si quieres que bodeguero sea entregador
 
+            elif pedido.origen in ["tarreo", "venta_extra"]:
+                # Camionero o admin → asignamos automáticamente
+                pedido.entregador = user
+                pedido.estado = "entregado"  # se considera entregado en el momento
+                # sector y direccion_entrega pueden quedar vacíos (validado en model.clean())
+
+            elif pedido.origen == "telefono":
+                pedido.estado = "pendiente"
+                # entregador se asignará después por camionero
+
+            # Monto ya viene calculado del form (cleaned_data)
             pedido.monto = form.cleaned_data["monto"]
-            pedido.save()
 
-            messages.success(request, f"Pedido #{pedido.id} registrado correctamente.")
-            return redirect("transaccional_pedido")
+            try:
+                pedido.save()  # Aquí se ejecuta full_clean() y clean() del modelo
+                messages.success(request, f"{pedido.get_origen_display()} #{pedido.id} registrado correctamente.")
+                return redirect("transaccional_pedido")
+            except Exception as e:
+                messages.error(request, f"Error al guardar: {str(e)}")
+
     else:
-        form = PedidoForm(user=request.user)
+        form = PedidoForm(user=user)
 
-    return render(
-        request,
-        "transaccional_pedido.html",
-        {
-            "form": form,
-            "es_bodeguero": request.user.rol == "bodeguero",
-            "es_telefonista": request.user.rol == "telefonista",
-        },
-    )
+    # ────────────────────────────────────────────────────────────────
+    # Contexto para la plantilla
+    # ────────────────────────────────────────────────────────────────
+    context = {
+        "form": form,
+        "es_bodeguero": rol == "bodeguero",
+        "es_telefonista": rol == "telefonista",
+        "es_camionero": rol == "camionero",
+        "es_admin": rol == "admin",
+        "titulo": {
+            "bodeguero": "Registrar Venta en Local",
+            "telefonista": "Registrar Pedido a Domicilio",
+            "camionero": "Registrar Venta por Tarreo o Extra",
+            "admin": "Registrar Pedido (Admin)",
+        }.get(rol, "Registrar Pedido"),
+    }
 
+    return render(request, "transaccional_pedido.html", context)
 
 @login_required
 def reporte_ventas(request):
     if request.user.rol not in ["jefe", "admin"]:
+        messages.error(request, "Solo jefes y administradores pueden acceder a los reportes.")
         return redirect("index")
 
-    fecha_inicio = request.GET.get("fecha_inicio")
-    fecha_fin = request.GET.get("fecha_fin")
+    fechas_str = request.GET.get("fechas", "").strip()
 
-    pedidos = Pedido.objects.filter(estado="entregado")
-    if fecha_inicio:
-        pedidos = pedidos.filter(fecha__date__gte=fecha_inicio)
-    if fecha_fin:
-        pedidos = pedidos.filter(fecha__date__lte=fecha_fin)
+    fecha_inicio = None
+    fecha_fin = None
+    fechas_display = ""
 
-    # Agregación por balón con kilos
+    # Caso 1: Hay filtro explícito del usuario
+    if fechas_str:
+        fechas_clean = fechas_str.replace("+", " ").strip()
+        if " a " in fechas_clean:
+            try:
+                desde_str, hasta_str = fechas_clean.split(" a ", 1)
+                desde_str = desde_str.strip()
+                hasta_str = hasta_str.strip()
+
+                desde = datetime.strptime(desde_str, "%Y-%m-%d")
+                hasta = datetime.strptime(hasta_str, "%Y-%m-%d")
+
+                fecha_inicio = timezone.make_aware(desde.replace(hour=0, minute=0, second=0, microsecond=0))
+                hasta_fin = hasta.replace(hour=23, minute=59, second=59, microsecond=999999)
+                fecha_fin = timezone.make_aware(hasta_fin)
+
+                fechas_display = f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
+            except ValueError:
+                messages.warning(request, "Rango de fechas inválido. Se muestra el mes actual por defecto.")
+                fechas_str = ""  # fallback al mes actual
+
+    # Caso 2: No hay filtro → usar mes actual por defecto
+    if not fecha_inicio or not fecha_fin:
+        hoy = timezone.now().date()
+        primer_dia = date(hoy.year, hoy.month, 1)
+        ultimo_dia = date(hoy.year, hoy.month, monthrange(hoy.year, hoy.month)[1])
+
+        fecha_inicio = timezone.make_aware(datetime.combine(primer_dia, datetime.min.time()))
+        fecha_fin = timezone.make_aware(datetime.combine(ultimo_dia, datetime.max.time()))
+
+        fechas_display = f"1 al {ultimo_dia.day} de {hoy.strftime('%B %Y')}"  # ej: "1 al 31 de enero 2026"
+
+    # Consulta base
+    pedidos = Pedido.objects.filter(
+        estado="entregado",
+        fecha__gte=fecha_inicio,
+        fecha__lte=fecha_fin
+    ).select_related("balon", "registrador")
+
+    # Agregaciones
     por_balon = (
         pedidos.values("balon__nombre", "balon__peso_neto_gas")
         .annotate(
@@ -267,13 +442,11 @@ def reporte_ventas(request):
     total_ventas = pedidos.aggregate(total=Sum("monto"))["total"] or 0
     total_balones = pedidos.aggregate(total=Sum("cantidad_balon"))["total"] or 0
     total_kilos = (
-        pedidos.aggregate(total=Sum(F("cantidad_balon") * F("balon__peso_neto_gas")))[
-            "total"
-        ]
+        pedidos.aggregate(total=Sum(F("cantidad_balon") * F("balon__peso_neto_gas")))["total"]
         or 0
     )
 
-    ultimos_pedidos = pedidos.select_related("balon", "registrador")[:10]
+    ultimos_pedidos = pedidos.order_by("-fecha")[:10]
 
     context = {
         "por_balon": por_balon,
@@ -282,41 +455,57 @@ def reporte_ventas(request):
         "total_balones": total_balones,
         "total_kilos": total_kilos,
         "ultimos_pedidos": ultimos_pedidos,
-        "fecha_inicio": fecha_inicio,
-        "fecha_fin": fecha_fin,
+        "filtros": {
+            "fechas": fechas_display,
+            "fecha_inicio": fecha_inicio.date(),
+            "fecha_fin": fecha_fin.date(),
+        },
     }
+
     return render(request, "reporte_ventas.html", context)
-
-
 @login_required
 def cliente_pedido(request):
     # El cliente final NO necesita login → lo dejamos sin protección
     return render(request, "cliente_pedido.html")
 
-
 @login_required
 def camionero_entregas(request):
-    if request.user.rol != "camionero":
-        messages.error(request, "Acceso restringido a camioneros.")
+    if request.user.rol not in ["camionero", "admin"]:
+        messages.error(request, "Acceso restringido, únicamente camioneros pueden acceder.")
         return redirect("index")
 
-    # TODOS los pedidos que están en ruta (el camionero puede tener varios)
+    user = request.user
+
+    # Pedidos que este camionero ya tomó y están en ruta
     pedidos_en_ruta = Pedido.objects.filter(
         estado="en_ruta",
-        origen="telefono"
+        entregador=user
     ).order_by("fecha")
 
-    # Pedidos pendientes (aún no tomados por nadie)
+    # Pedidos entregados por este camionero (hoy o últimos días, opcional limitar)
+    pedidos_entregados_hoy = Pedido.objects.filter(
+        estado="entregado",
+        entregador=user,
+        fecha__date=timezone.now().date()
+    ).order_by("-fecha")
+
+    # Pedidos pendientes que aún no tienen camionero asignado
+    # (solo origen telefono, porque tarreo/venta_extra se registran directamente)
     pendientes = Pedido.objects.filter(
         estado="pendiente",
-        origen="telefono"
+        origen="telefono",
+        entregador__isnull=True
     ).order_by("fecha")
 
     context = {
-        "pedidos_en_ruta": pedidos_en_ruta,      # ← Cambiado: ahora es una lista
+        "pedidos_en_ruta": pedidos_en_ruta,
         "pendientes": pendientes,
+        "pedidos_entregados_hoy": pedidos_entregados_hoy,  # opcional, pero útil para ver lo del día
         "hay_en_ruta": pedidos_en_ruta.exists(),
+        "hay_pendientes": pendientes.exists(),
+        "hay_entregados_hoy": pedidos_entregados_hoy.exists(),
     }
+
     return render(request, "camionero_entregas.html", context)
 
 
@@ -327,14 +516,22 @@ def camionero_tomar_pedido(request, pedido_id):
         return redirect("index")
 
     try:
-        pedido = Pedido.objects.get(id=pedido_id, estado="pendiente")
+        pedido = Pedido.objects.get(
+            id=pedido_id,
+            estado="pendiente",
+            entregador__isnull=True,           # ← seguridad extra
+            origen="telefono"                  # solo permite tomar pedidos telefónicos
+        )
         pedido.estado = "en_ruta"
+        pedido.entregador = request.user       # ← asignamos al camionero que lo toma
         pedido.save()
+
         messages.success(
-            request, f"Pedido #{pedido.id} tomado. ¡Dirígete al domicilio!"
+            request,
+            f"Pedido #{pedido.id} tomado. Dirígete al domicilio"
         )
     except Pedido.DoesNotExist:
-        messages.error(request, "El pedido ya no está disponible.")
+        messages.error(request, "El pedido ya no está disponible o ya fue tomado.")
 
     return redirect("camionero_entregas")
 
@@ -346,11 +543,38 @@ def camionero_marcar_entregado(request, pedido_id):
         return redirect("index")
 
     try:
-        pedido = Pedido.objects.get(id=pedido_id, estado="en_ruta")
+        pedido = Pedido.objects.get(
+            id=pedido_id,
+            estado="en_ruta",
+            entregador=request.user            # ← solo puede marcar los suyos
+        )
         pedido.estado = "entregado"
+        # entregador ya está asignado desde que lo tomó, no es necesario volver a ponerlo
         pedido.save()
-        messages.success(request, f"¡Pedido #{pedido.id} marcado como entregado!")
+
+        messages.success(request, f"Pedido #{pedido.id} marcado como entregado!")
     except Pedido.DoesNotExist:
-        messages.error(request, "El pedido no está en ruta o no existe.")
+        messages.error(request, "El pedido no está en ruta, no existe o no te pertenece.")
+
+    return redirect("camionero_entregas")
+
+@login_required
+def camionero_cancelar_entrega(request, pedido_id):
+    if request.user.rol != "camionero":
+        messages.error(request, "Solo camioneros pueden cancelar entregas.")
+        return redirect("camionero_entregas")
+
+    try:
+        pedido = Pedido.objects.get(
+            id=pedido_id,
+            estado="en_ruta",
+            entregador=request.user
+        )
+        pedido.estado = "pendiente"
+        pedido.entregador = None  # lo libera para que otro camionero lo tome
+        pedido.save()
+        messages.warning(request, f"Pedido #{pedido.id} liberado y devuelto a pendientes.")
+    except Pedido.DoesNotExist:
+        messages.error(request, "El pedido no está en ruta o no te pertenece.")
 
     return redirect("camionero_entregas")
