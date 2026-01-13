@@ -23,7 +23,7 @@
             <h3 class="fw-bold mb-3">Pedido #{{ p.id }}</h3>
 
             <div class="mb-3">
-                <h5 class="mb-1">Cantidad: {{ p.cantidad_balon }} × {{ p.balon.nombre }}</h5>
+                <h5 class="mb-1">Cantidad: {{ p.cantidad_balon }} X {{ p.balon.nombre }}</h5>
                 {% if p.direccion_entrega %}
                 <div class="fs-5 fw-semibold text-primary">
                     <p class="mb-2">{{ p.direccion_entrega|truncatechars:60 }}</p>
@@ -74,7 +74,7 @@
             <h5 class="fw-bold mb-3 text-center">Pedido #{{ p.id }}</h5>
 
             <div class="text-center mb-3">
-                <h5 class="mb-1">Cantidad: {{ p.cantidad_balon }} × {{ p.balon.nombre }}</h5>
+                <h5 class="mb-1">Cantidad: {{ p.cantidad_balon }} X {{ p.balon.nombre }}</h5>
                 {% if p.direccion_entrega %}
                 <p class="mb-2 text-primary fw-semibold fs-5">
                     {{ p.direccion_entrega|truncatechars:50 }}
