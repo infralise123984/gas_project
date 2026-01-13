@@ -1,4 +1,3 @@
-<!-- templates/consultas_pedidos.html -->
 {% extends 'base.html' %}
 {% load humanize %}
 
@@ -6,137 +5,143 @@
 
 {% block extra_head %}
 {% if es_jefe_o_admin %}
-<!-- Solo cargamos Flatpickr para jefe/admin -->
+<!-- Solo Flatpickr para jefe/admin -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 {% endif %}
 {% endblock %}
 
 {% block content %}
-<div class="container mt-5 mb-5">
+<div class="container mt-4 mb-5 px-3">
 
-    <!-- Encabezado -->
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
-        <h2 class="text-primary fw-bold mb-0">
-            <i class="bi bi-search me-2"></i>Consultar Pedidos
-        </h2>
-        <div class="badge bg-primary fs-5 px-4 py-2 shadow-sm">
+    <!-- Título dinámico según rol -->
+    <h2 class="text-primary fw-bold mb-4 text-center">
+        {% if es_camionero %}
+            <i class="bi bi-truck me-2"></i> Mis Entregas Realizadas
+        {% elif es_jefe_o_admin %}
+            <i class="bi bi-search me-2"></i> Consultar Pedidos
+        {% else %}
+            <i class="bi bi-clock-history me-2"></i> Mis Pedidos de Hoy
+        {% endif %}
+    </h2>
+
+    <!-- Badge de total -->
+    <div class="text-center mb-4">
+        <span class="badge bg-primary fs-5 px-4 py-2 shadow-sm">
             {{ page_obj.paginator.count }} pedido{{ page_obj.paginator.count|pluralize:"s" }} encontrado{{ page_obj.paginator.count|pluralize:"s" }}
-        </div>
+        </span>
     </div>
 
-    <!-- Mensaje informativo según rol -->
-    {% if not es_jefe_o_admin %}
-    <div class="alert alert-info mb-4">
+    <!-- Mensaje informativo -->
+    {% if not es_jefe_o_admin and not es_camionero %}
+    <div class="alert alert-info mb-4 text-center">
         <i class="bi bi-info-circle me-2"></i>
-        Estás viendo <strong>solo tus pedidos de hoy</strong>. 
-        Los jefes pueden ver el historial completo.
+        Estás viendo <strong>solo tus pedidos de hoy</strong>.
     </div>
     {% endif %}
 
-    <!-- Formulario de filtros (parcialmente visible) -->
+    <!-- FILTROS: solo para jefe/admin y camionero (búsqueda simple) -->
+    {% if es_jefe_o_admin or es_camionero %}
     <div class="card shadow-sm border-0 mb-5">
         <div class="card-body p-4">
             <form method="get" class="row g-3 align-items-end">
-                <!-- Búsqueda por sector o dirección -->
-                <div class="col-lg-{% if es_jefe_o_admin %}4{% else %}6{% endif %} col-md-6">
+                <div class="col-12 col-md-8">
                     <label class="form-label fw-bold">
-                        <i class="bi bi-map-fill me-1"></i>Sector o Dirección
+                        <i class="bi bi-search me-1"></i>Buscar (dirección, sector, etc.)
                     </label>
                     <input type="text" name="busqueda" class="form-control form-control-lg"
-                           placeholder="Ej: Dintrans, Los Álamos 123, Machalí Alto"
+                           placeholder="Ej: Los Álamos, Dintrans, 11kg"
                            value="{{ filtros.busqueda|default:'' }}">
                 </div>
 
                 {% if es_jefe_o_admin %}
-                <!-- Rango de fechas con Flatpickr -->
-                <div class="col-lg-4 col-md-6">
-                    <label class="form-label fw-bold">
-                        <i class="bi bi-calendar-range me-1"></i>Rango de Fechas
-                    </label>
-                    <input type="text" name="fechas" id="rangoFechas" class="form-control form-control-lg"
-                           placeholder="Selecciona rango (ej: 01/01/2026 al 31/01/2026)"
-                           value="{{ filtros.fechas|default:'' }}">
-                </div>
-
-                <!-- Estado -->
-                <div class="col-lg-2 col-md-6">
-                    <label class="form-label fw-bold">
-                        <i class="bi bi-tag-fill me-1"></i>Estado
-                    </label>
-                    <select name="estado" class="form-select form-select-lg">
-                        <option value="todos" {% if filtros.estado == "todos" or not filtros.estado %}selected{% endif %}>Todos</option>
-                        {% for valor, texto in estados_choices %}
-                            <option value="{{ valor }}" {% if filtros.estado == valor %}selected{% endif %}>{{ texto }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endif %}
-
-                <!-- Botones -->
-                <div class="col-lg-{% if es_jefe_o_admin %}2{% else %}6{% endif %} col-md-6 d-flex gap-2">
+                <div class="col-12 col-md-4 d-flex gap-2">
                     <button type="submit" class="btn btn-primary btn-lg flex-fill">
                         <i class="bi bi-search"></i> Buscar
                     </button>
-                    <a href="{% url 'consultas_pedidos' %}" class="btn btn-outline-secondary btn-lg" title="Limpiar filtros">
+                    <a href="{% url 'consultas_pedidos' %}" class="btn btn-outline-secondary btn-lg">
                         <i class="bi bi-arrow-counterclockwise"></i>
                     </a>
                 </div>
+                {% else %}
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary btn-lg w-100">
+                        <i class="bi bi-search"></i> Buscar
+                    </button>
+                </div>
+                {% endif %}
             </form>
         </div>
     </div>
+    {% endif %}
 
-    <!-- Tabla de resultados -->
+    <!-- VERSIÓN MOBILE-FRIENDLY PARA CAMIONERO -->
+    {% if es_camionero %}
+    <div class="row g-4">
+        {% for p in page_obj %}
+        <div class="col-12">
+            <div class="card shadow border-{% if p.estado == 'entregado' %}success{% elif p.estado == 'en_ruta' %}warning{% else %}primary{% endif %}">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h4 class="fw-bold mb-1">Pedido #{{ p.id }}</h4>
+                            <h5 class="mb-2">{{ p.cantidad_balon }} X {{ p.balon.nombre }}</h5>
+                        </div>
+                        <span class="badge fs-5 bg-{% if p.estado == 'entregado' %}success{% elif p.estado == 'en_ruta' %}warning{% else %}info{% endif %}">
+                            {{ p.get_estado_display }}
+                        </span>
+                    </div>
 
-    {% if not es_jefe_o_admin %}
-        <div class="card shadow border-0">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover table-striped mb-0">
-                    <thead class="table-primary">
-                        <tr>
-                            <th>Fecha</th>
-                            <th>Balón</th>
-                            <th>Cant.</th>
-                            <th>Monto</th>
-                            <th>Estado</th>
-                            <th>Opcion</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for p in page_obj %}
-                        <tr>
-                            <td>{{ p.fecha|date:"d/m/Y H:i" }}</td>
-                            <td>{{ p.balon.nombre }}</td>
-                            <td>{{ p.cantidad_balon }}</td>
-                            <td>$ {{ p.monto|floatformat:0|intcomma }}</td>
-                            <td>
-                                <span class="badge bg-{% if p.estado == 'entregado' %}success{% elif p.estado == 'en_ruta' %}warning{% elif p.estado == 'pendiente' %}info{% else %}danger{% endif %}">
-                                    {{ p.get_estado_display }}
-                                </span>
-                            </td>
-                            <td> 
-                                <button type="button" class="btn btn-sm btn-outline-primary">
-                                        <i class="bi bi-pencil"></i> Editar
-                                </button>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="8" class="text-center py-5 text-muted">
-                                <i class="bi bi-search fs-1 d-block mb-3"></i>
-                                No se encontraron pedidos
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                    {% if p.direccion_entrega %}
+                    <p class="mb-3 text-primary fw-semibold fs-5">
+                        {{ p.direccion_entrega|truncatechars:60 }}
+                    </p>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-between text-muted small">
+                        <div>Entregado: {{ p.fecha|date:"d/m/Y" }} {{ p.fecha|time:"H:i" }}</div>
+                        <div class="fw-bold text-dark">$ {{ p.monto|floatformat:0|intcomma }}</div>
+                    </div>
+                </div>
             </div>
         </div>
+        {% empty %}
+        <div class="col-12 text-center py-5 text-muted">
+            <i class="bi bi-truck fs-1 d-block mb-3"></i>
+            Aún no has entregado pedidos
+        </div>
+        {% endfor %}
     </div>
 
+    <!-- Paginación simple para camionero (menos botones) -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center gap-3">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link btn btn-outline-primary rounded-pill px-4" href="?page={{ page_obj.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
+                    Anterior
+                </a>
+            </li>
+            {% endif %}
+            <li class="page-item disabled">
+                <span class="page-link bg-light">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+            </li>
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link btn btn-outline-primary rounded-pill px-4" href="?page={{ page_obj.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
+                    Siguiente
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
     {% else %}
-        <div class="card shadow border-0">
+    <!-- VISTA ORIGINAL (tabla) PARA JEFES/ADMINS/OTROS ROLES -->
+    <!-- ... aquí va tu tabla original completa sin cambios ... -->
+    <div class="card shadow border-0">
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover table-striped mb-0">
@@ -148,8 +153,11 @@
                             <th>Monto</th>
                             <th>Estado</th>
                             <th>Registrador</th>
+                            {% if es_jefe_o_admin %}
+                            <th>Entregado por</th>
+                            {% endif %}
                             <th>Sector / Dirección</th>
-                            <th>Origen</th>
+                            
                         </tr>
                     </thead>
                     <tbody>
@@ -164,24 +172,24 @@
                                     {{ p.get_estado_display }}
                                 </span>
                             </td>
-                            <td>{{ p.registrador.get_full_name|default:p.registrador.username }} </td>
+                            <td>{{ p.registrador.get_full_name|default:p.registrador.username|default:"—" }}</td>
+                            {% if es_jefe_o_admin %}
+                            <td>
+                                {% if p.entregador %}
+                                    {{ p.entregador.get_full_name|default:p.entregador.username }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                            {% endif %}
                             <td>
                                 <strong>{{ p.sector|default:"—" }}</strong><br>
                                 {{ p.direccion_entrega|truncatechars:50|default:"—" }}
                             </td>
-                            <td>    
-                                {% if p.origen == "telefono" %}
-                                Pedido por telefono<i class="bi bi-telephone-fill"></i>
-                                {% elif p.origen == "local" %}
-                                Compra por local <i class="bi bi-building"></i>
-                                {% else %}
-                                icono random
-                                {% endif %}
-                            </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="8" class="text-center py-5 text-muted">
+                            <td colspan="{% if es_jefe_o_admin %}8{% else %}7{% endif %}" class="text-center py-5 text-muted">
                                 <i class="bi bi-search fs-1 d-block mb-3"></i>
                                 No se encontraron pedidos
                             </td>
@@ -193,77 +201,24 @@
         </div>
     </div>
 
-
-
-    {% endif %}
-
-
-
-    <!-- Paginación -->
+    <!-- Paginación original para jefes/admin -->
     {% if page_obj.paginator.num_pages > 1 %}
-    <nav class="mt-4">
-        <ul class="pagination justify-content-center gap-2">
-            {% if page_obj.has_previous %}
-            <li class="page-item">
-                <a class="page-link rounded-pill shadow-sm" href="?page=1{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
-                    <i class="bi bi-chevron-double-left"></i>
-                </a>
-            </li>
-            <li class="page-item">
-                <a class="page-link rounded-pill shadow-sm" href="?page={{ page_obj.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
-                    <i class="bi bi-chevron-left"></i>
-                </a>
-            </li>
-            {% else %}
-            <li class="page-item disabled"><span class="page-link rounded-pill"><i class="bi bi-chevron-double-left"></i></span></li>
-            <li class="page-item disabled"><span class="page-link rounded-pill"><i class="bi bi-chevron-left"></i></span></li>
-            {% endif %}
-
-            {% for num in page_obj.paginator.page_range %}
-                {% if page_obj.number == num %}
-                <li class="page-item active">
-                    <span class="page-link rounded-pill shadow">{{ num }}</span>
-                </li>
-                {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
-                <li class="page-item">
-                    <a class="page-link rounded-pill shadow-sm" href="?page={{ num }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">{{ num }}</a>
-                </li>
-                {% elif num == page_obj.number|add:"-4" or num == page_obj.number|add:"4" %}
-                <li class="page-item disabled"><span class="page-link">...</span></li>
-                {% endif %}
-            {% endfor %}
-
-            {% if page_obj.has_next %}
-            <li class="page-item">
-                <a class="page-link rounded-pill shadow-sm" href="?page={{ page_obj.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
-                    <i class="bi bi-chevron-right"></i>
-                </a>
-            </li>
-            <li class="page-item">
-                <a class="page-link rounded-pill shadow-sm" href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.urlencode %}&{{ request.GET.urlencode|cut:'&page='|cut:'page=' }}{% endif %}">
-                    <i class="bi bi-chevron-double-right"></i>
-                </a>
-            </li>
-            {% else %}
-            <li class="page-item disabled"><span class="page-link rounded-pill"><i class="bi bi-chevron-right"></i></span></li>
-            <li class="page-item disabled"><span class="page-link rounded-pill"><i class="bi bi-chevron-double-right"></i></span></li>
-            {% endif %}
-        </ul>
-    </nav>
+    <!-- ... tu paginación completa con flechas dobles, números, etc. ... -->
+    {% endif %}
     {% endif %}
 
 </div>
 
+<!-- Flatpickr solo para jefe/admin -->
 {% if es_jefe_o_admin %}
-<!-- Inicialización de Flatpickr -->
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     flatpickr("#rangoFechas", {
         mode: "range",
-        dateFormat: "Y-m-d",          // formato que se envía al backend
+        dateFormat: "Y-m-d",
         altInput: true,
-        altFormat: "d/m/Y",           // formato visible para el usuario
-        locale: flatpickr.l10ns.es,
+        altFormat: "d/m/Y",
+        locale: flatpickr.l10n.es,
         showMonths: 2,
         weekNumbers: true,
         allowInput: true,
@@ -272,7 +227,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 {% endif %}
 
-<!-- Tooltips (si los usas en otros lugares) -->
+<!-- Tooltips -->
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));

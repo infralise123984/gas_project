@@ -3,6 +3,35 @@
 <html lang="es">
 
 <head>
+    
+    {% load static %}
+        <!-- Favicon principal -->
+    <link rel="icon" href="{% static 'img/favicon.ico' %}" type="image/x-icon">
+    <link rel="icon" type="image/png" sizes="96x96" href="{% static 'img/favicon-96x96.png' %}">
+    <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
+
+    <!-- Apple Touch Icon -->
+    <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}">
+
+    <!-- Android / PWA Icons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="{% static 'img/web-app-manifest-192x192.png' %}">
+    <link rel="icon" type="image/png" sizes="512x512" href="{% static 'img/web-app-manifest-512x512.png' %}">
+
+    <!-- Manifest (nombre original del generador) -->
+    <link rel="manifest" href="{% static 'site.webmanifest' %}">
+
+    <!-- Theme y standalone mode -->
+    <meta name="theme-color" content="#0d6efd">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+
+
+
+
+
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Kim Gas{% endblock %}</title>
@@ -157,7 +186,7 @@
     </div>
     {% endif %}
 
-    <div class="container mt-4">
+    <div class="container mt-5">
         {% block content %}
         {% endblock %}
     </div>
@@ -167,6 +196,8 @@
             <small class="text-muted">© 2025 Kim Gas - Todos los derechos reservados</small>
         </div>
     </footer>
+    {% load static %}
+    <link rel="manifest" href="{% static 'manifest.json' %}">   
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
