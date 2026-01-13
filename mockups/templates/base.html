@@ -29,6 +29,7 @@
     <link rel="manifest" href="{% static 'manifest.json' %}">
 
     {% load static %}
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
     <title>{% block title %}Kim Gas{% endblock %}</title>
 
     <!-- Estilos -->
@@ -193,11 +194,13 @@
 
     <footer class="bg-light border-top mt-auto py-4">
         <div class="container text-center text-muted small">
-            © 2025–2026 Kim Gas - Todos los derechos reservados
+            © 2025-2026 Kim Gas - Todos los derechos reservados
         </div>
     </footer>
 
     <!-- Scripts -->
+     
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     {% block extra_js %}{% endblock %}
 </body>
