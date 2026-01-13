@@ -176,33 +176,36 @@ def consultas_pedidos(request):
 
     # ── Determinar qué puede ver el usuario ─────────────────────────────────────
     es_jefe_o_admin = request.user.rol in ["jefe", "admin"]
+    es_camionero    = request.user.rol == "camionero"
 
-    if not es_jefe_o_admin:
-        # Roles operativos: solo sus pedidos del día actual en Chile
+    if es_jefe_o_admin:
+        # Jefe y admin: todo el historial
+        queryset = Pedido.objects.select_related("balon", "registrador", "entregador").order_by("-fecha")
+
+    elif es_camionero:
+        # Camionero: solo los pedidos donde él es el entregador (historial completo)
+        queryset = Pedido.objects.filter(
+            entregador=request.user
+        ).select_related("balon", "registrador", "entregador").order_by("-fecha")
+
+    else:
+        # Telefonista, bodeguero u otros roles operativos: solo sus pedidos registrados hoy
         chile_tz = ZoneInfo('America/Santiago')
-        fechas_str = ""
-        estado = "todos"
-
-        # Alternativa más explícita (Opción 2: usando rango) → descomenta si prefieres esta
         inicio_hoy = timezone.now().astimezone(chile_tz).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         fin_hoy = inicio_hoy + timedelta(days=1) - timedelta(microseconds=1)
+
         queryset = Pedido.objects.filter(
             registrador=request.user,
             fecha__range=(inicio_hoy, fin_hoy)
-        ).select_related("balon", "registrador").order_by("-fecha")
+        ).select_related("balon", "registrador", "entregador").order_by("-fecha")
 
-    else:
-        # Jefe y admin: todo el historial
-        queryset = Pedido.objects.select_related("balon", "registrador").order_by("-fecha")
-
-    # ── Procesar rango de fechas (solo aplica si es jefe/admin y se envió) ──────
-    if es_jefe_o_admin and fechas_str:
+    # ── Procesar rango de fechas (solo aplica si es jefe/admin o camionero y se envió) ──────
+    if (es_jefe_o_admin or es_camionero) and fechas_str:
         fechas_str_clean = fechas_str.replace("+", " ").strip()
         if " a " in fechas_str_clean or " al " in fechas_str_clean:
             try:
-                # Flatpickr puede enviar con " a " o " al " dependiendo de configuración
                 sep = " a " if " a " in fechas_str_clean else " al "
                 desde_str, hasta_str = [x.strip() for x in fechas_str_clean.split(sep, 1)]
                 
@@ -221,18 +224,21 @@ def consultas_pedidos(request):
                 messages.warning(request, "Formato de fechas inválido. Usa el selector de fechas.")
                 fechas_str = ""
 
-    # ── Filtro por texto (sector, dirección o nombre del registrador) ───────────
+    # ── Filtro por texto (sector, dirección, registrador o entregador) ───────────
     if busqueda:
         queryset = queryset.filter(
             Q(sector__icontains=busqueda) |
             Q(direccion_entrega__icontains=busqueda) |
             Q(registrador__first_name__icontains=busqueda) |
             Q(registrador__last_name__icontains=busqueda) |
-            Q(registrador__username__icontains=busqueda)
+            Q(registrador__username__icontains=busqueda) |
+            Q(entregador__first_name__icontains=busqueda) |          # ← nuevo: buscar por nombre del camionero
+            Q(entregador__last_name__icontains=busqueda) |
+            Q(entregador__username__icontains=busqueda)
         )
 
-    # ── Filtro por estado (solo jefe/admin) ─────────────────────────────────────
-    if es_jefe_o_admin and estado != "todos":
+    # ── Filtro por estado (solo jefe/admin y camionero) ─────────────────────────────────────
+    if (es_jefe_o_admin or es_camionero) and estado != "todos":
         queryset = queryset.filter(estado=estado)
 
     # ── Paginación ──────────────────────────────────────────────────────────────
@@ -245,7 +251,8 @@ def consultas_pedidos(request):
         "page_obj": page_obj,
         "estados_choices": Pedido.ESTADOS,
         "es_jefe_o_admin": es_jefe_o_admin,
-        "hoy": timezone.now().astimezone(ZoneInfo('America/Santiago')).date(),  # actualizado para mostrar la fecha correcta
+        "es_camionero": es_camionero,                     # ← nuevo flag para la plantilla
+        "hoy": timezone.now().astimezone(ZoneInfo('America/Santiago')).date(),
         "filtros": {
             "busqueda": busqueda,
             "fechas": fechas_display,
@@ -256,8 +263,6 @@ def consultas_pedidos(request):
     }
 
     return render(request, "consultas_pedidos.html", context)
-
-
 
 @login_required
 def transaccional_pedido(request):
@@ -517,5 +522,26 @@ def camionero_marcar_entregado(request, pedido_id):
         messages.success(request, f"Pedido #{pedido.id} marcado como entregado!")
     except Pedido.DoesNotExist:
         messages.error(request, "El pedido no está en ruta, no existe o no te pertenece.")
+
+    return redirect("camionero_entregas")
+
+@login_required
+def camionero_cancelar_entrega(request, pedido_id):
+    if request.user.rol != "camionero":
+        messages.error(request, "Solo camioneros pueden cancelar entregas.")
+        return redirect("camionero_entregas")
+
+    try:
+        pedido = Pedido.objects.get(
+            id=pedido_id,
+            estado="en_ruta",
+            entregador=request.user
+        )
+        pedido.estado = "pendiente"
+        pedido.entregador = None  # lo libera para que otro camionero lo tome
+        pedido.save()
+        messages.warning(request, f"Pedido #{pedido.id} liberado y devuelto a pendientes.")
+    except Pedido.DoesNotExist:
+        messages.error(request, "El pedido no está en ruta o no te pertenece.")
 
     return redirect("camionero_entregas")
