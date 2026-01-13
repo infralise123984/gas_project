@@ -21,10 +21,11 @@ Reemplaza planillas de Excel y grupos de WhatsApp por una solución simple, segu
 - Gráficos interactivos adicionales (ventas diarias, por sector, por trabajador)
 
 ## Tecnologías utilizadas
-- **Backend**: Django 5.2 (Python 3.12)  
-- **Frontend**: Bootstrap 5 + Bootstrap Icons  
-- **Base de datos**: MySQL (desarrollo) / PostgreSQL (producción)  
-- **Gestión de entorno**: python-dotenv  
+- **Backend**: Django 5.2 (Python 3.12)
+- **Frontend**: Bootstrap 5 + Bootstrap Icons
+- **Bibliotecas adicionales**: Flatpickr (selectores de fecha), Chart.js (gráficos interactivos), Django Humanize (formateo de números y fechas)
+- **Base de datos**: MySQL (desarrollo) / PostgreSQL (producción)
+- **Gestión de entorno**: python-dotenv
 - **Despliegue**: Preparado para Render.com (Web Service + PostgreSQL)
 
 ## Requisitos
