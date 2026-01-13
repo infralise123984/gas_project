@@ -57,7 +57,21 @@
                     </li>
                     {% endif %}
 
-                    {% if user.rol in "jefe,admin" %}
+                    {% if user.rol in "jefe" %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'precios_balones' %}active{% endif %}" 
+                           href="{% url 'precios_balones' %}">
+                            <i class="bi bi-currency-dollar me-1"></i>Precios
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'reporte_ventas' %}active{% endif %}" 
+                           href="{% url 'reporte_ventas' %}">
+                            <i class="bi bi-graph-up me-1"></i>Reportes
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if user.rol in "admin" %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'precios_balones' %}active{% endif %}" 
                            href="{% url 'precios_balones' %}">
@@ -76,6 +90,19 @@
                             <i class="bi bi-person-plus me-1"></i>Usuarios
                         </a>
                     </li>
+                                        <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'camionero_entregas' %}active{% endif %}" 
+                           href="{% url 'camionero_entregas' %}">
+                            <i class="bi bi-truck me-1"></i>Entregas
+                        </a>
+                    </li>
+                                        <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'transaccional_pedido' %}active{% endif %}" 
+                           href="{% url 'transaccional_pedido' %}">
+                            <i class="bi bi-plus-circle me-1"></i>Nuevo Pedido
+                        </a>
+                    </li>
+
                     {% endif %}
 
                     {% if user.rol == "camionero" %}
