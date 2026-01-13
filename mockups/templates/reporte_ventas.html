@@ -1,25 +1,57 @@
+<!-- templates/reporte_ventas.html -->
 {% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
 {% block title %}Reporte de Ventas - GasFácil{% endblock %}
+
+{% block extra_head %}
+<!-- Locale español para Flatpickr -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+{% endblock %}
 
 {% block content %}
 <div class="container mt-5">
 
-    <h2 class="mb-4 text-primary fw-bold">Reporte de Ventas</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <h2 class="text-primary fw-bold mb-0">
+            <i class="bi bi-bar-chart-line-fill me-2"></i>Reporte de Ventas
+        </h2>
+        {% if user.rol == "jefe" %}
+        <span class="badge bg-primary fs-5 px-4 py-2 shadow-sm">Vista Jefe</span>
+        {% else %}
+        <span class="badge bg-secondary fs-5 px-4 py-2 shadow-sm">Vista Administrador</span>
+        {% endif %}
+    </div>
 
-    <!-- Filtro por fechas -->
-    <div class="card mb-4 shadow-sm">
-        <div class="card-body">
+    <!-- Filtro de fechas con Flatpickr -->
+    <div class="card shadow-sm border-0 mb-5">
+        <div class="card-body p-4">
             <form method="get" class="row g-3 align-items-end">
-                <div class="col-md-5">
-                    <label class="form-label fw-bold">Desde</label>
-                    <input type="date" name="fecha_inicio" value="{{ fecha_inicio }}" class="form-control" required>
+                <div class="col-lg-5 col-md-6">
+                    <label class="form-label fw-bold">
+                        <i class="bi bi-calendar-range me-1"></i>Rango de Fechas
+                    </label>
+                    <input type="text" name="fechas" id="rangoFechas" class="form-control form-control-lg"
+                           placeholder="Selecciona rango (ej: 01/01/2026 al 31/01/2026)"
+                           value="{{ filtros.fechas|default:'' }}">
                 </div>
-                <div class="col-md-5">
-                    <label class="form-label fw-bold">Hasta</label>
-                    <input type="date" name="fecha_fin" value="{{ fecha_fin }}" class="form-control" required>
+
+                <div class="col-lg-3 col-md-4 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-lg flex-fill">
+                        <i class="bi bi-search"></i> Filtrar
+                    </button>
+                    <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-secondary btn-lg">
+                        <i class="bi bi-arrow-counterclockwise"></i> Limpiar
+                    </a>
                 </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary w-100">Buscar</button>
+
+                <div class="col-lg-4 col-md-12 text-end text-muted small align-self-end">
+                    {% if filtros.fecha_inicio and filtros.fecha_fin %}
+                        Mostrando datos del {{ filtros.fecha_inicio|date:"d/m/Y" }} al {{ filtros.fecha_fin|date:"d/m/Y" }}
+                    {% else %}
+                        Mostrando todos los registros disponibles
+                    {% endif %}
                 </div>
             </form>
         </div>
@@ -27,31 +59,46 @@
 
     <!-- Resumen rápido -->
     <div class="row mb-5 g-4">
-        <div class="col-md-6">
+        <div class="col-md-6 col-lg-3">
             <div class="card text-center border-primary shadow h-100">
                 <div class="card-body py-4">
                     <h5 class="card-title text-primary fw-bold">Total Pedidos</h5>
-                    <h1 class="display-5 fw-bold text-primary">{{ total_pedidos }}</h1>
+                    <h1 class="display-5 fw-bold text-primary">{{ total_pedidos|default:0 }}</h1>
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-6 col-lg-3">
             <div class="card text-center border-success shadow h-100">
                 <div class="card-body py-4">
                     <h5 class="card-title text-success fw-bold">Ventas Totales</h5>
-                    <h1 class="display-5 fw-bold text-success">$ {{ total_ventas|floatformat:0 }}</h1>
+                    <h1 class="display-5 fw-bold text-success">$ {{ total_ventas|floatformat:0|intcomma|default:"0" }}</h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="card text-center border-info shadow h-100">
+                <div class="card-body py-4">
+                    <h5 class="card-title text-info fw-bold">Balones Vendidos</h5>
+                    <h1 class="display-5 fw-bold text-info">{{ total_balones|default:0 }}</h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="card text-center border-warning shadow h-100">
+                <div class="card-body py-4">
+                    <h5 class="card-title text-warning fw-bold">Kilos de Gas</h5>
+                    <h1 class="display-5 fw-bold text-warning">{{ total_kilos|default:0 }}</h1>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="row mb-5">
-
-        <!-- GRÁFICO DE TORTA -->
+        <!-- Gráfico de torta: Balones más vendidos (en kilos) -->
         <div class="col-lg-6 mb-4">
             <div class="card shadow h-100">
                 <div class="card-header bg-primary text-white text-center">
-                    <h5 class="mb-0 fw-bold">Balones Más Vendidos (en kilos de gas)</h5>
+                    <h5 class="mb-0 fw-bold">Balones Más Vendidos (kilos de gas)</h5>
                 </div>
                 <div class="card-body">
                     <canvas id="pieChartBalones" height="350"></canvas>
@@ -59,13 +106,13 @@
             </div>
         </div>
 
-        <!-- TABLA DETALLE -->
+        <!-- Tabla detalle por tipo de balón -->
         <div class="col-lg-6 mb-4">
             <div class="card shadow h-100">
                 <div class="card-header bg-primary text-white text-center">
                     <h5 class="mb-0 fw-bold">Detalle por Tipo de Balón</h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
                             <thead class="table-light">
@@ -80,24 +127,18 @@
                                 {% for item in por_balon %}
                                 <tr>
                                     <td class="fw-bold">{{ item.balon__nombre|default:"Sin nombre" }}</td>
-                                    <td class="text-center">{{ item.cantidad_vendida }}</td>
-                                    <td class="text-center">{{ item.kilos_vendidos }} kg</td>
-                                    <td class="text-end">$ {{ item.total_monto|floatformat:0 }}</td>
+                                    <td class="text-center">{{ item.cantidad_vendida|default:0 }}</td>
+                                    <td class="text-center">{{ item.kilos_vendidos|default:0 }}</td>
+                                    <td class="text-end">$ {{ item.total_monto|floatformat:0|intcomma|default:"0" }}</td>
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="4" class="text-center text-muted">Sin ventas en el período</td>
+                                    <td colspan="4" class="text-center py-4 text-muted">
+                                        No hay ventas en este período
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
-                            <tfoot class="table-secondary fw-bold">
-                                <tr>
-                                    <td>Total</td>
-                                    <td class="text-center">{{ total_balones }}</td>
-                                    <td class="text-center">{{ total_kilos }} kg</td>
-                                    <td class="text-end">$ {{ total_ventas|floatformat:0 }}</td>
-                                </tr>
-                            </tfoot>
                         </table>
                     </div>
                 </div>
@@ -105,47 +146,37 @@
         </div>
     </div>
 
-    <!-- Últimos 10 pedidos -->
-    <div class="card shadow mb-5">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0 fw-bold">Últimos 10 Pedidos Entregados</h5>
+    <!-- Últimos pedidos entregados -->
+    <div class="card shadow border-0 mb-5">
+        <div class="card-header bg-primary text-white text-center">
+            <h5 class="mb-0 fw-bold">Últimos Pedidos Entregados</h5>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-sm mb-0">
                     <thead class="table-dark">
                         <tr>
-                            <th>#</th>
                             <th>Fecha</th>
-                            <th>Cliente</th>
                             <th>Balón</th>
                             <th>Cant.</th>
                             <th>Monto</th>
-                            <th>Estado</th>
+                            <th>Registrador</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for p in ultimos_pedidos %}
                         <tr>
-                            <td>{{ p.id }}</td>
                             <td>{{ p.fecha|date:"d/m H:i" }}</td>
-                            <td>{{ p.cliente.nombre|default:"Sin nombre" }}</td>
-                            <td>{{ p.balon.nombre|default:"Sin nombre" }}</td>
+                            <td>{{ p.balon.nombre|default:"—" }}</td>
                             <td>{{ p.cantidad_balon }}</td>
-                            <td>$ {{ p.monto|floatformat:0 }}</td>
-                            <td>
-                                {% if p.estado == "entregado" %}
-                                <span class="badge bg-success">Entregado</span>
-                                {% elif p.estado == "en_ruta" %}
-                                <span class="badge bg-warning text-dark">En ruta</span>
-                                {% else %}
-                                <span class="badge bg-secondary">{{ p.estado|capfirst }}</span>
-                                {% endif %}
-                            </td>
+                            <td>$ {{ p.monto|floatformat:0|intcomma }}</td>
+                            <td>{{ p.registrador.get_full_name|default:p.registrador.username|default:"—" }}</td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-3">No hay pedidos entregados</td>
+                            <td colspan="6" class="text-center py-4 text-muted">
+                                No hay pedidos entregados en este período
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -154,32 +185,52 @@
         </div>
     </div>
 
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            const ctx = document.getElementById('pieChartBalones').getContext('2d');
-            new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: [
-                        {% for item in por_balon %}
-                            "{{ item.balon__nombre|default:'Sin nombre' }}",
-                        {% endfor %}
-                    ],
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- Inicialización de Flatpickr -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    flatpickr("#rangoFechas", {
+        mode: "range",
+        dateFormat: "Y-m-d",          // formato que se envía al backend
+        altInput: true,
+        altFormat: "d/m/Y",           // formato visible para el usuario
+        locale: flatpickr.l10ns.es,
+        showMonths: 2,
+        weekNumbers: false,
+        allowInput: true,
+    });
+});
+</script>
+
+<!-- Gráfico de torta -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const ctx = document.getElementById('pieChartBalones').getContext('2d');
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: [
+                {% for item in por_balon %}
+                    "{{ item.balon__nombre|default:'Sin nombre' }}",
+                {% endfor %}
+            ],
             datasets: [{
                 data: [
                     {% for item in por_balon %}
-                                {{ item.kilos_vendidos }},
-            {% endfor %}
-        ],
-            backgroundColor: [
-            '#0d6efd', '#198754', '#ffc107', '#dc3545',
-            '#6f42c1', '#fd7e14', '#20c997', '#e83e8c'
-        ],
-                    }]
-                },
-            options: {
+                        {{ item.kilos_vendidos|default:0 }},
+                    {% endfor %}
+                ],
+                backgroundColor: [
+                    '#0d6efd', '#198754', '#ffc107', '#dc3545',
+                    '#6f42c1', '#fd7e14', '#20c997', '#e83e8c'
+                ],
+            }]
+        },
+        options: {
             responsive: true,
             plugins: {
                 legend: { position: 'bottom' },
@@ -196,7 +247,7 @@
                 }
             }
         }
-            });
-        });
-    </script>
-    {% endblock %}
+    });
+});
+</script>
+{% endblock %}

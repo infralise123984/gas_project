@@ -1,82 +1,146 @@
-<!-- templates/camionero_entregas.html -->
 {% extends 'base.html' %}
-{% block title %}Entregas - GasFácil{% endblock %}
+{% load static %}
+
+{% block title %}Mis Entregas - GasFácil{% endblock %}
 
 {% block content %}
-<div class="container mt-4 pb-5">
+<div class="container-fluid px-3 py-4">
 
-    <h2 class="text-center text-primary fw-bold mb-4">
-        <i class="bi bi-truck me-2"></i>Mis Entregas
+    <!-- Título -->
+    <h2 class="text-center fw-bold text-primary mb-4">
+        <i class="bi bi-truck fs-3 me-2"></i> Mis Entregas
     </h2>
 
-    <!-- PEDIDOS EN RUTA (puede haber varios) -->
+    <!-- PEDIDOS EN RUTA -->
     {% if pedidos_en_ruta %}
-    <h4 class="text-success fw-bold mb-3">
-        <i class="bi bi-truck"></i> Pedidos en Ruta ({{ pedidos_en_ruta|length }})
+    <h4 class="text-success fw-bold mb-3 text-center">
+        <i class="bi bi-truck fs-4 me-2"></i> En Ruta ({{ pedidos_en_ruta.count }})
     </h4>
-    {% for p in pedidos_en_ruta %}
-    <div class="card shadow-lg border-success mb-4">
-        <div class="card-header bg-success text-white text-center py-3">
-            <h5 class="mb-0">Pedido #{{ p.id }} - En Ruta</h5>
-        </div>
-        <div class="card-body text-center py-4">
-            <h5 class="fw-bold">{{ p.balon.nombre }} × {{ p.cantidad_balon }}</h5>
-            <p class="mb-2"><strong>Dirección:</strong></p>
-            <p class="fs-5 fw-semibold text-primary">
-                {{ p.sector|default:"" }}<br>
-                {{ p.direccion_entrega }}
-            </p>
-            <small class="text-muted d-block mb-3">
-                Tomado: {{ p.fecha|date:"d/m H:i" }}
-            </small>
 
+    {% for p in pedidos_en_ruta %}
+    <div class="card shadow border-success mb-4">
+        <div class="card-body text-center p-4">
+            <h3 class="fw-bold mb-3">Pedido #{{ p.id }}</h3>
+
+            <div class="mb-3">
+                <h5 class="mb-1">Cantidad: {{ p.cantidad_balon }} X {{ p.balon.nombre }}</h5>
+                {% if p.direccion_entrega %}
+                <div class="fs-5 fw-semibold text-primary">
+                    <p class="mb-2">{{ p.direccion_entrega|truncatechars:60 }}</p>
+                </div>
+                {% else %}
+                <p class="text-muted mb-2">Sin dirección específica</p>
+                {% endif %}
+            </div>
+
+            <div class="mb-4 text-muted">
+                Registrado: {{ p.fecha|date:"d/m" }} {{ p.fecha|time:"H:i" }}
+            </div>
+
+            <!-- Botones separados -->
             <form method="post" action="{% url 'camionero_marcar_entregado' p.id %}">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-success btn-lg px-5 shadow">
-                    <i class="bi bi-check-circle-fill me-2"></i>
-                    Marcado como Entregado
+                <button type="submit" class="btn btn-success btn-lg w-100 py-3 fs-4 shadow mb-2">
+                    <i class="bi bi-check-circle-fill me-2"></i> MARCAR ENTREGADO
+                </button>
+            </form>
+
+            <form method="post" action="{% url 'camionero_cancelar_entrega' p.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-warning btn-lg w-100 py-3 fs-4 shadow">
+                    <i class="bi bi-x-circle-fill me-2"></i> CANCELAR ENTREGA
                 </button>
             </form>
         </div>
     </div>
     {% endfor %}
+    {% else %}
+    <div class="alert alert-light text-center py-4 mb-5">
+        <i class="bi bi-check-circle fs-1 text-success d-block mb-3"></i>
+        <h5 class="mb-1">Todo al día</h5>
+        <p class="text-muted mb-0">No tienes pedidos en ruta ahora</p>
+    </div>
     {% endif %}
 
     <!-- PEDIDOS PENDIENTES -->
-    <h4 class="text-primary fw-bold mt-5 mb-3">
-        {% if pedidos_en_ruta %}Más Pedidos Pendientes{% else %}Pedidos por Tomar{% endif %}
+    {% if pendientes %}
+    <h4 class="text-primary fw-bold mt-5 mb-3 text-center">
+        <i class="bi bi-hourglass-split fs-4 me-2"></i> Pendientes por tomar ({{ pendientes.count }})
     </h4>
 
-    {% if pendientes %}
-        {% for p in pendientes %}
-        <div class="card shadow-sm mb-3 border-primary">
-            <div class="card-body py-4">
-                <div class="row align-items-center text-start">
-                    <div class="col">
-                        <h5 class="fw-bold mb-1">#{{ p.id }}</h5>
-                        <p class="mb-1">{{ p.balon.nombre }} × {{ p.cantidad_balon }}</p>
-                        <p class="mb-1 fw-semibold">{{ p.sector|default:"Sin sector" }}</p>
-                        <p class="small text-muted">{{ p.direccion_entrega|truncatechars:70 }}</p>
-                        <small class="text-muted">Registrado {{ p.fecha|time:"H:i" }}</small>
-                    </div>
-                    <div class="col-auto">
-                        <form method="post" action="{% url 'camionero_tomar_pedido' p.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-primary btn-lg rounded-pill shadow">
-                                <i class="bi bi-arrow-right-circle-fill fs-4"></i>
-                            </button>
-                        </form>
-                    </div>
-                </div>
+    {% for p in pendientes %}
+    <div class="card shadow border-primary mb-4">
+        <div class="card-body p-4">
+            <h5 class="fw-bold mb-3 text-center">Pedido #{{ p.id }}</h5>
+
+            <div class="text-center mb-3">
+                <h5 class="mb-1">Cantidad: {{ p.cantidad_balon }} X {{ p.balon.nombre }}</h5>
+                {% if p.direccion_entrega %}
+                <p class="mb-2 text-primary fw-semibold fs-5">
+                    {{ p.direccion_entrega|truncatechars:50 }}
+                </p>
+                {% else %}
+                <p class="text-muted mb-2">Sin dirección específica</p>
+                {% endif %}
+                <small class="text-muted d-block">
+                    Registrado: {{ p.fecha|time:"H:i" }}
+                </small>
             </div>
+
+            <!-- Botón grande con confirmación -->
+            <form method="post" action="{% url 'camionero_tomar_pedido' p.id %}"
+                onsubmit="return confirm('¿Estás seguro de TOMAR este pedido #{{ p.id }}?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary btn-lg w-100 py-3 fs-4 shadow">
+                    <i class="bi bi-arrow-right-circle-fill me-2"></i> TOMAR PEDIDO
+                </button>
+            </form>
         </div>
-        {% endfor %}
+    </div>
+    {% endfor %}
     {% else %}
-        <div class="text-center py-5 text-muted">
-            <i class="bi bi-check2-all fs-1 d-block mb-3"></i>
-            <strong>{% if pedidos_en_ruta %}No hay más pedidos pendientes{% else %}¡Todo al día!{% endif %}</strong>
-        </div>
+    <div class="text-center text-muted py-4">
+        <i class="bi bi-check2-all fs-1 d-block mb-3"></i>
+        No hay pedidos pendientes por tomar
+    </div>
     {% endif %}
 
 </div>
+
+<!-- Recarga automática cada 45 segundos -->
+<script>
+    setTimeout(function () {
+        window.location.reload(true);
+    }, 20000);
+</script>
+
+<!-- Sonido de alerta cuando hay pendientes (opcional - sube un archivo notify.mp3 corto a static/sounds/) -->
+{% if pendientes %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const audio = new Audio("{% static 'sounds/notify.mp3' %}");
+        audio.volume = 0.5;
+        audio.play().catch(() => { });  // Evita error si autoplay está bloqueado
+    });
+</script>
+{% endif %}
+
+<style>
+    .card {
+        border-radius: 16px;
+        overflow: hidden;
+    }
+
+    .btn-lg {
+        font-size: 1.3rem;
+        min-height: 60px;
+    }
+
+    @media (min-width: 576px) {
+        .container-fluid {
+            max-width: 540px;
+            margin: 0 auto;
+        }
+    }
+</style>
 {% endblock %}

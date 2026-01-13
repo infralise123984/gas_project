@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Mis Pedidos de Hoy - GasFácil{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5 px-3">
+
+    <!-- Título -->
+    <h2 class="text-primary fw-bold mb-4 text-center">
+        <i class="bi bi-clock-history me-2"></i> 
+        {% if es_telefonista %}Mis Pedidos{% else %}Mis Ventas{% endif %} de Hoy
+    </h2>
+
+    <!-- Badge de total -->
+    <div class="text-center mb-4">
+        <span class="badge bg-primary fs-5 px-4 py-2 shadow-sm">
+            {{ total_hoy }} pedido{{ total_hoy|pluralize:"s" }} registrado{{ total_hoy|pluralize:"s" }}
+        </span>
+    </div>
+
+    <!-- Mensaje informativo -->
+    <div class="alert alert-info mb-4 text-center">
+        <i class="bi bi-info-circle me-2"></i>
+        Estás viendo <strong>solo tus {% if es_telefonista %}pedidos{% else %}ventas{% endif %} de hoy</strong>.
+    </div>
+
+    <!-- Tabla simple (sin filtros, sin paginación) -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-primary text-white">
+                        <tr>
+                            <th>hora</th>
+                            <th>Balón</th>
+                            <th>Cant.</th>
+                            <th>Monto</th>
+                            <th>Estado</th>
+                            <th>Sector / Dirección</th>  <!-- Solo si es telefonista -->
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in pedidos %}
+                        <tr>
+                            <td>{{ p.fecha|date:"H:i" }}</td>
+                            <td>{{ p.balon.nombre }}</td>
+                            <td>{{ p.cantidad_balon }}</td>
+                            <td>$ {{ p.monto|floatformat:0|intcomma }}</td>
+                            <td>
+                                <span class="badge bg-{% if p.estado == 'entregado' %}success{% elif p.estado == 'en_ruta' %}warning{% elif p.estado == 'pendiente' %}info{% else %}danger{% endif %}">
+                                    {{ p.get_estado_display }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if es_telefonista %}
+                                <strong>{{ p.sector|default:"—" }}</strong><br>
+                                {{ p.direccion_entrega|truncatechars:50|default:"—" }}
+                                {% else %}
+                                —  <!-- Bodeguero no ve sector/dirección -->
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <i class="bi bi-search fs-1 d-block mb-3"></i>
+                                No hay pedidos registrados hoy
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Tooltips (opcional) -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

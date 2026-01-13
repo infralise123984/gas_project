@@ -6,7 +6,7 @@ from .models import Pedido, TipoBalon
 SECTORES = [
     ("", "— Seleccionar sector —"),
     ("Población Dintrans", "Población Dintrans"),
-    ("Machalí Alto", "Machalí Alto"),
+    ("Machalí Alto", "Machalí Alto"),   
     ("Gultro", "Gultro"),
     ("Villa Los Tilos", "Villa Los Tilos"),
     ("Centro Rancagua", "Centro Rancagua"),

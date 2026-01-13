@@ -157,70 +157,159 @@ class HistorialPrecioBalon(models.Model):
 # 4. PEDIDO (simplificado para la realidad de Rancagua)
 # ==============================================================
 class Pedido(models.Model):
+    """Registro de pedidos (a domicilio, local, tarreo o venta adicional en ruta)"""
+    
     ESTADOS = [
-        ("pendiente", "Pendiente"),
-        ("en_ruta", "En ruta"),
-        ("entregado", "Entregado"),
-        ("cancelado", "Cancelado"),
-    ]
-    ORIGENES = [
-        ("telefono", "Teléfono"),
-        ("local", "Local"),
+        ("pendiente",   "Pendiente"),
+        ("en_ruta",     "En ruta"),
+        ("entregado",   "Entregado"),
+        ("cancelado",   "Cancelado"),
     ]
 
-    # Solo para pedidos a domicilio (telefonista)
+    ORIGENES = [
+        ("telefono",     "Teléfono"),
+        ("local",        "Venta en local"),
+        ("tarreo",       "Venta por tarreo"),
+        ("venta_extra",  "Venta añadida durante la entrega"),
+    ]
+
+    # ────────────────────────────────────────────────────────────────
+    # Campos de dirección (solo relevantes para telefono)
+    # ────────────────────────────────────────────────────────────────
     sector = models.CharField(
         max_length=100,
         blank=True,
         verbose_name="Sector / Población",
-        help_text="Ej: Población Dintrans, Machalí Alto, Villa Los Tilos, Gultro...",
+        help_text="Ej: Población Dintrans, Machalí Alto, Villa Los Tilos, Gultro... (obligatorio solo para pedidos por teléfono)"
     )
+
     direccion_entrega = models.CharField(
         max_length=250,
         blank=True,
         verbose_name="Dirección o referencia",
-        help_text="Ej: Los Álamos 123, casa esquina roja, frente al colegio",
+        help_text="Ej: Los Álamos 123, casa esquina roja, frente al colegio (obligatorio solo para pedidos por teléfono)"
     )
 
-    # Datos del pedido
+    # ────────────────────────────────────────────────────────────────
+    # Datos del pedido / venta
+    # ────────────────────────────────────────────────────────────────
     balon = models.ForeignKey(
-        TipoBalon, on_delete=models.PROTECT, verbose_name="Tipo de balón"
+        TipoBalon,
+        on_delete=models.PROTECT,
+        verbose_name="Tipo de balón"
     )
-    cantidad_balon = models.PositiveIntegerField(default=1, verbose_name="Cantidad")
+
+    cantidad_balon = models.PositiveIntegerField(
+        default=1,
+        verbose_name="Cantidad"
+    )
+
     metodo_pago = models.CharField(
         max_length=20,
         choices=[
-            ("efectivo", "Efectivo"),
-            ("tarjeta", "Tarjeta"),
+            ("efectivo",      "Efectivo"),
+            ("tarjeta",       "Tarjeta"),
             ("transferencia", "Transferencia"),
         ],
         default="efectivo",
-    )
-    monto = models.DecimalField(
-        max_digits=10, decimal_places=0, default=0, verbose_name="Monto total"
+        verbose_name="Método de pago"
     )
 
-    # Metadatos
+    monto = models.DecimalField(
+        max_digits=10,
+        decimal_places=0,
+        default=0,
+        verbose_name="Monto total"
+    )
+
+    # ────────────────────────────────────────────────────────────────
+    # Responsables
+    # ────────────────────────────────────────────────────────────────
     registrador = models.ForeignKey(
         Usuario,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="pedidos_registrados",
-        verbose_name="Registrado por",
+        verbose_name="Registrado por"
     )
-    fecha = models.DateTimeField(default=timezone.now)
-    estado = models.CharField(max_length=20, choices=ESTADOS, default="pendiente")
-    origen = models.CharField(max_length=20, choices=ORIGENES, default="telefono")
+
+    entregador = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pedidos_entregados",
+        verbose_name="Entregado por",
+        help_text="Camionero que realizó la entrega o venta (obligatorio en tarreo y venta_extra)"
+    )
+
+    # ────────────────────────────────────────────────────────────────
+    # Metadatos temporales y de estado
+    # ────────────────────────────────────────────────────────────────
+    fecha = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Fecha de registro"
+    )
+
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADOS,
+        default="pendiente",
+        verbose_name="Estado"
+    )
+
+    origen = models.CharField(
+        max_length=20,
+        choices=ORIGENES,
+        default="telefono",
+        verbose_name="Origen del pedido"
+    )
+
+    def clean(self):
+        """Validaciones de negocio según origen del pedido"""
+        errors = {}
+
+        # 1. Dirección y sector obligatorios SOLO para pedidos por teléfono
+        if self.origen == "telefono":
+            if not self.sector.strip():
+                errors["sector"] = "El sector es obligatorio para pedidos por teléfono."
+            if not self.direccion_entrega.strip():
+                errors["direccion_entrega"] = "La dirección es obligatoria para pedidos por teléfono."
+
+        # 2. Entregador obligatorio para tarreo y venta_extra
+        if self.origen in ["tarreo", "venta_extra"]:
+            if not self.entregador:
+                errors["entregador"] = (
+                    "Para ventas por tarreo o ventas añadidas en ruta "
+                    "es obligatorio indicar el camionero que realizó la venta."
+                )
+
+        # 3. Opcional: más reglas según necesidades futuras
+        # if self.origen == "local" and self.entregador:
+        #     if self.entregador.rol != "bodeguero":
+        #         errors["entregador"] = "Solo bodegueros pueden ser entregadores en ventas locales."
+
+        if errors:
+            raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
-        # Si es venta local (bodeguero), se marca como entregado automáticamente
+        # Ejecutar todas las validaciones
+        self.full_clean()
+
+        # Ventas en local → marcar como entregado automáticamente
         if self.origen == "local" and self.estado == "pendiente":
             self.estado = "entregado"
+            # Opcional: self.entregador = self.registrador  # si quieres que el bodeguero sea considerado entregador
+
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Pedido #{self.id} - {self.balon} x{self.cantidad_balon} ({self.get_origen_display()})"
+        texto = f"Pedido #{self.id} - {self.balon}"
+        if self.cantidad_balon > 1:
+            texto += f" ×{self.cantidad_balon}"
+        texto += f" ({self.get_origen_display()})"
+        return texto
 
     class Meta:
         verbose_name = "Pedido"
@@ -228,6 +317,297 @@ class Pedido(models.Model):
         ordering = ["-fecha"]
         indexes = [
             models.Index(fields=["fecha"]),
-            models.Index(fields=["origen"]),
             models.Index(fields=["estado"]),
+            models.Index(fields=["origen"]),
+            models.Index(fields=["registrador"]),
+            models.Index(fields=["entregador"]),
+        ]
+    """Registro de pedidos (a domicilio, local, tarreo o venta adicional en ruta)"""
+    
+    ESTADOS = [
+        ("pendiente",   "Pendiente"),
+        ("en_ruta",     "En ruta"),
+        ("entregado",   "Entregado"),
+        ("cancelado",   "Cancelado"),
+    ]
+
+    ORIGENES = [
+        ("telefono",     "Teléfono"),
+        ("local",        "Venta en local"),
+        ("tarreo",       "Venta por tarreo"),
+        ("venta_extra",  "Venta añadida durante la entrega"),
+    ]
+
+    # ────────────────────────────────────────────────────────────────
+    # Campos de dirección (solo relevantes para telefono)
+    # ────────────────────────────────────────────────────────────────
+    sector = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Sector / Población",
+        help_text="Ej: Población Dintrans, Machalí Alto, Villa Los Tilos, Gultro... (obligatorio solo para pedidos por teléfono)"
+    )
+
+    direccion_entrega = models.CharField(
+        max_length=250,
+        blank=True,
+        verbose_name="Dirección o referencia",
+        help_text="Ej: Los Álamos 123, casa esquina roja, frente al colegio (obligatorio solo para pedidos por teléfono)"
+    )
+
+    # ────────────────────────────────────────────────────────────────
+    # Datos del pedido / venta
+    # ────────────────────────────────────────────────────────────────
+    balon = models.ForeignKey(
+        TipoBalon,
+        on_delete=models.PROTECT,
+        verbose_name="Tipo de balón"
+    )
+
+    cantidad_balon = models.PositiveIntegerField(
+        default=1,
+        verbose_name="Cantidad"
+    )
+
+    metodo_pago = models.CharField(
+        max_length=20,
+        choices=[
+            ("efectivo",      "Efectivo"),
+            ("tarjeta",       "Tarjeta"),
+            ("transferencia", "Transferencia"),
+        ],
+        default="efectivo",
+        verbose_name="Método de pago"
+    )
+
+    monto = models.DecimalField(
+        max_digits=10,
+        decimal_places=0,
+        default=0,
+        verbose_name="Monto total"
+    )
+
+    # ────────────────────────────────────────────────────────────────
+    # Responsables
+    # ────────────────────────────────────────────────────────────────
+    registrador = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pedidos_registrados",
+        verbose_name="Registrado por"
+    )
+
+    entregador = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pedidos_entregados",
+        verbose_name="Entregado por",
+        help_text="Camionero que realizó la entrega o venta (obligatorio en tarreo y venta_extra)"
+    )
+
+    # ────────────────────────────────────────────────────────────────
+    # Metadatos temporales y de estado
+    # ────────────────────────────────────────────────────────────────
+    fecha = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Fecha de registro"
+    )
+
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADOS,
+        default="pendiente",
+        verbose_name="Estado"
+    )
+
+    origen = models.CharField(
+        max_length=20,
+        choices=ORIGENES,
+        default="telefono",
+        verbose_name="Origen del pedido"
+    )
+
+    def clean(self):
+        """Validaciones de negocio según origen del pedido"""
+        errors = {}
+
+        # 1. Dirección y sector obligatorios SOLO para pedidos por teléfono
+        if self.origen == "telefono":
+            if not self.sector.strip():
+                errors["sector"] = "El sector es obligatorio para pedidos por teléfono."
+            if not self.direccion_entrega.strip():
+                errors["direccion_entrega"] = "La dirección es obligatoria para pedidos por teléfono."
+
+        # 2. Entregador obligatorio para tarreo y venta_extra
+        if self.origen in ["tarreo", "venta_extra"]:
+            if not self.entregador:
+                errors["entregador"] = (
+                    "Para ventas por tarreo o ventas añadidas en ruta "
+                    "es obligatorio indicar el camionero que realizó la venta."
+                )
+
+        # 3. Opcional: más reglas según necesidades futuras
+        # if self.origen == "local" and self.entregador:
+        #     if self.entregador.rol != "bodeguero":
+        #         errors["entregador"] = "Solo bodegueros pueden ser entregadores en ventas locales."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        # Ejecutar todas las validaciones
+        self.full_clean()
+
+        # Ventas en local → marcar como entregado automáticamente
+        if self.origen == "local" and self.estado == "pendiente":
+            self.estado = "entregado"
+            # Opcional: self.entregador = self.registrador  # si quieres que el bodeguero sea considerado entregador
+
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        texto = f"Pedido #{self.id} - {self.balon}"
+        if self.cantidad_balon > 1:
+            texto += f" ×{self.cantidad_balon}"
+        texto += f" ({self.get_origen_display()})"
+        return texto
+
+    class Meta:
+        verbose_name = "Pedido"
+        verbose_name_plural = "Pedidos"
+        ordering = ["-fecha"]
+        indexes = [
+            models.Index(fields=["fecha"]),
+            models.Index(fields=["estado"]),
+            models.Index(fields=["origen"]),
+            models.Index(fields=["registrador"]),
+            models.Index(fields=["entregador"]),
+        ]
+    """Registro de pedidos (a domicilio o venta en local)"""
+    ESTADOS = [
+        ("pendiente",  "Pendiente"),
+        ("en_ruta",    "En ruta"),
+        ("entregado",  "Entregado"),
+        ("cancelado",  "Cancelado"),
+    ]
+    
+    ORIGENES = [
+        ("telefono", "Teléfono"),          
+        ("local",    "Venta en local"),
+        ("tarreo",    "venta por tarreo"),
+        ("venta_extra",    "venta añadida durante la entrega"),
+    ]
+
+    # Campos específicos para pedidos a domicilio
+    sector = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Sector / Población",
+        help_text="Ej: Población Dintrans, Machalí Alto, Villa Los Tilos, Gultro..."
+    )
+    
+    direccion_entrega = models.CharField(
+        max_length=250,
+        blank=True,
+        verbose_name="Dirección o referencia",
+        help_text="Ej: Los Álamos 123, casa esquina roja, frente al colegio"
+    )
+
+    # Datos principales del pedido
+    balon = models.ForeignKey(
+        TipoBalon,
+        on_delete=models.PROTECT,
+        verbose_name="Tipo de balón"
+    )
+    
+    cantidad_balon = models.PositiveIntegerField(
+        default=1,
+        verbose_name="Cantidad"
+    )
+    
+    metodo_pago = models.CharField(
+        max_length=20,
+        choices=[
+            ("efectivo",      "Efectivo"),
+            ("tarjeta",       "Tarjeta"),
+            ("transferencia", "Transferencia"),
+        ],
+        default="efectivo",
+        verbose_name="Método de pago"
+    )
+    
+    monto = models.DecimalField(
+        max_digits=10,
+        decimal_places=0,
+        default=0,
+        verbose_name="Monto total"
+    )
+
+    # Personas involucradas
+    registrador = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pedidos_registrados",
+        verbose_name="Registrado por"
+    )
+    
+    entregador = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pedidos_entregados",
+        verbose_name="Entregado por",
+        help_text="Camionero que tomó y entregó el pedido"
+    )
+
+    # Metadatos temporales y de estado
+    fecha = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Fecha de registro"
+    )
+    
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADOS,
+        default="pendiente",
+        verbose_name="Estado"
+    )
+    
+    origen = models.CharField(
+        max_length=20,
+        choices=ORIGENES,
+        default="telefono",
+        verbose_name="Origen del pedido"
+    )
+
+    def save(self, *args, **kwargs):
+        # Las ventas en local se marcan como entregadas automáticamente
+        if self.origen == "local" and self.estado == "pendiente":
+            self.estado = "entregado"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        texto = f"Pedido #{self.id} - {self.balon}"
+        if self.cantidad_balon and self.cantidad_balon > 1:
+            texto += f" x{self.cantidad_balon}"
+        texto += f" ({self.get_origen_display()})"
+        return texto
+
+    class Meta:
+        verbose_name = "Pedido"
+        verbose_name_plural = "Pedidos"
+        ordering = ["-fecha"]
+        indexes = [
+            models.Index(fields=["fecha"]),
+            models.Index(fields=["estado"]),
+            models.Index(fields=["origen"]),
+            models.Index(fields=["registrador"]),
+            models.Index(fields=["entregador"]),
         ]

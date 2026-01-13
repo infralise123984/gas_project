@@ -9,25 +9,42 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-
+import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()  # Carga las variables de entorno desde el archivo .env
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 AUTH_USER_MODEL = "mockups.Usuario"
 LOGIN_URL = '/login/'          # ← Django sabrá dónde está tu página de login
-LOGIN_REDIRECT_URL = '/'       # ← después de loguearse, va al index (o puedes dejar '/')
+LOGIN_REDIRECT_URL = '/'       # ← después de loguearse, va al index    (o puedes dejar '/')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-7h)i6$!^=d&t2h40489p93qm5k21^y(af@9s(e#^t0+=il!o5#'
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "False") == "True"
 
-ALLOWED_HOSTS = []
+# Si tienes ALLOWED_HOSTS en .env → lo usa. Si no → falla rápido (mejor que un ataque silencioso)
+_allowed = os.getenv("ALLOWED_HOSTS")
+if not _allowed:
+    raise ValueError("¡ALLOWED_HOSTS no está definida! Agréguela en .env o en Render")
+ALLOWED_HOSTS = [host.strip() for host in _allowed.split(",") if host.strip()]
+# --------------------------------------------------------------------
+# CSRF_TRUSTED_ORIGINS  ← esta parte es crítica para ngrok y HTTPS
+# --------------------------------------------------------------------
+_csrf_origins = os.getenv("CSRF_TRUSTED_ORIGINS")
+if not _csrf_origins:
+    raise ValueError("¡CSRF_TRUSTED_ORIGINS no está definida! Agréguela en .env")
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in _csrf_origins.split(",") if origin.strip()
+]
 
 USE_THOUSAND_SEPARATOR = True  # Esto es clave para activar los separadores de miles
 
@@ -42,6 +59,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.humanize',
     'mockups',
+    
 ]
 
 MIDDLEWARE = [
@@ -77,12 +95,22 @@ WSGI_APPLICATION = 'gasmanager.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+DB_ENGINE = os.getenv("DB_ENGINE")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "3306")
+
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'gas_app_bd',
-        'USER': 'root',     
-        'PASSWORD': 'juanito',
+        "ENGINE": DB_ENGINE,
+        "NAME": DB_NAME,
+        "USER": DB_USER,
+        "PASSWORD": DB_PASSWORD,
+        "HOST": DB_HOST,
+        "PORT": DB_PORT,
     }
 }
 
@@ -109,20 +137,17 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
-
-TIME_ZONE = 'UTC'
-
+LANGUAGE_CODE = 'es-cl'
+TIME_ZONE = 'America/Santiago'
+USE_TZ = True                    
 USE_I18N = True
-
-USE_TZ = True
 
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
-
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
