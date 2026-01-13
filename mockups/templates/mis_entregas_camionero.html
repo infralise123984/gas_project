@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Mis Entregas - GasFácil{% endblock %}
+
+{% block content %}
+
+<div class="container-fluid px-3 py-4" style="max-width: 540px; margin: 0 auto;">
+
+    <!-- Título grande y claro -->
+    <h2 class="text-center fw-bold text-primary mb-4" style="font-size: 1.8rem;">
+        <i class="bi bi-truck me-2"></i> Mis Entregas
+    </h2>
+
+    <!-- Mensaje explicativo grande y simple -->
+    <div class="alert alert-info text-center mb-5 py-3" style="font-size: 1.1rem; line-height: 1.5;">
+        <i class="bi bi-info-circle-fill me-2 fs-4"></i>
+        <strong>Estás viendo tus entregas de hoy</strong><br>
+        <small class="d-block mt-2 text-muted">
+            El historial completo solo lo puede ver el jefe.
+        </small>
+    </div>
+
+    <!-- Contador grande -->
+    <div class="text-center mb-4">
+        <div class="badge bg-success fs-4 px-4 py-3 shadow">
+            {{ pedidos_hoy.count }} entrega{{ pedidos_hoy.count|pluralize:"s" }} hoy
+        </div>
+    </div>
+
+    <!-- Lista de entregas (formato cards, muy legible en celular) -->
+    {% if pedidos_hoy %}
+        {% for p in pedidos_hoy %}
+        <div class="card shadow mb-4 border-{% if p.estado == 'entregado' %}success{% else %}warning{% endif %}" style="border-width: 3px;">
+            <div class="card-body text-center p-4">
+
+                <!-- Número de pedido grande -->
+                <h4 class="fw-bold mb-3 text-dark">Pedido #{{ p.id }}</h4>
+
+                <!-- Información principal en líneas claras y grandes -->
+                <div class="mb-3" style="font-size: 1.25rem;">
+                    <strong>{{ p.cantidad_balon }} × {{ p.balon.nombre }}</strong>
+                </div>
+
+                <div class="mb-4" style="font-size: 1.1rem; line-height: 1.4;">
+                    {% if p.direccion_entrega %}
+                        {{ p.direccion_entrega|truncatechars:80 }}
+                    {% else %}
+                        <span class="text-muted">Sin dirección específica</span>
+                    {% endif %}
+                </div>
+
+                <!-- Estado con badge grande -->
+                <div class="mb-3">
+                    <span class="badge fs-5 px-4 py-2 bg-{% if p.estado == 'entregado' %}success{% else %}warning{% endif %}">
+                        {{ p.get_estado_display }}
+                    </span>
+                </div>
+
+                <!-- Monto grande -->
+                <div class="fw-bold text-success mb-2" style="font-size: 1.4rem;">
+                    $ {{ p.monto|floatformat:0|intcomma }}
+                </div>
+
+                <!-- Hora pequeña abajo -->
+                <small class="text-muted d-block">
+                    {{ p.fecha|date:"d/m/Y" }} - {{ p.fecha|time:"H:i" }}
+                </small>
+
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <!-- Mensaje cuando no hay entregas -->
+        <div class="alert alert-light text-center py-5 shadow-sm">
+            <i class="bi bi-check-circle-fill fs-1 text-success d-block mb-3"></i>
+            <h5 class="mb-2">Todo listo por hoy</h5>
+            <p class="text-muted mb-0">
+                No tienes entregas registradas para este día.
+            </p>
+        </div>
+    {% endif %}
+
+</div>
+
+<style>
+    /* Solo estilos mínimos inline para no depender de css externo */
+    .card {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    .badge {
+        font-weight: 600;
+    }
+    @media (max-width: 576px) {
+        h2 { font-size: 1.6rem !important; }
+        .card-body { padding: 1.5rem !important; }
+    }
+</style>
+
+{% endblock %}

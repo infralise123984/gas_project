@@ -143,11 +143,11 @@ def login_view(request):
 
             # Redirección según rol
             if user.rol == "camionero":
-                return redirect("camionero_entregas")
+                return redirect("/")
             elif user.rol in ["jefe", "admin"]:
-                return redirect("reporte_ventas")
+                return redirect("/")
             else:  # Para telefonista y bodeguero
-                return redirect("transaccional_pedido")
+                return redirect("/")
         else:
             messages.error(request, "Usuario o contraseña incorrectos")
 
@@ -162,69 +162,53 @@ def logout_view(request):
 
 
 
+# ────────────────────────────────────────────────────────────────
+# 1. Vista completa: Consultas avanzadas (solo Jefe y Administrador)
+# ────────────────────────────────────────────────────────────────
 @login_required
 def consultas_pedidos(request):
-    # ── Captura de parámetros GET ───────────────────────────────────────────────
+    if request.user.rol not in ["jefe", "admin"]:
+        messages.error(request, "No tienes permiso para acceder a esta sección.")
+        return redirect("index")
+
+    # Captura de parámetros GET
     busqueda    = request.GET.get("busqueda", "").strip()
     fechas_str  = request.GET.get("fechas", "").strip()
     estado      = request.GET.get("estado", "todos")
 
-    # Variables para mantener valores en el formulario
+    # Variables para devolver al template (mantener valores en formulario)
     fechas_display = ""
     fecha_desde_str = ""
     fecha_hasta_str = ""
 
-    # ── Determinar qué puede ver el usuario ─────────────────────────────────────
-    es_jefe_o_admin = request.user.rol in ["jefe", "admin"]
-    es_camionero    = request.user.rol == "camionero"
+    # Base queryset: TODO el historial
+    queryset = Pedido.objects.select_related(
+        "balon", "registrador", "entregador"
+    ).order_by("-fecha")
 
-    if es_jefe_o_admin:
-        # Jefe y admin: todo el historial
-        queryset = Pedido.objects.select_related("balon", "registrador", "entregador").order_by("-fecha")
-
-    elif es_camionero:
-        # Camionero: solo los pedidos donde él es el entregador (historial completo)
-        queryset = Pedido.objects.filter(
-            entregador=request.user
-        ).select_related("balon", "registrador", "entregador").order_by("-fecha")
-
-    else:
-        # Telefonista, bodeguero u otros roles operativos: solo sus pedidos registrados hoy
-        chile_tz = ZoneInfo('America/Santiago')
-        inicio_hoy = timezone.now().astimezone(chile_tz).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-        fin_hoy = inicio_hoy + timedelta(days=1) - timedelta(microseconds=1)
-
-        queryset = Pedido.objects.filter(
-            registrador=request.user,
-            fecha__range=(inicio_hoy, fin_hoy)
-        ).select_related("balon", "registrador", "entregador").order_by("-fecha")
-
-    # ── Procesar rango de fechas (solo aplica si es jefe/admin o camionero y se envió) ──────
-    if (es_jefe_o_admin or es_camionero) and fechas_str:
+    # Filtro por rango de fechas
+    if fechas_str:
         fechas_str_clean = fechas_str.replace("+", " ").strip()
         if " a " in fechas_str_clean or " al " in fechas_str_clean:
             try:
                 sep = " a " if " a " in fechas_str_clean else " al "
                 desde_str, hasta_str = [x.strip() for x in fechas_str_clean.split(sep, 1)]
-                
+
                 desde = datetime.strptime(desde_str, "%Y-%m-%d")
                 hasta = datetime.strptime(hasta_str, "%Y-%m-%d")
-                
+
                 desde_aware = timezone.make_aware(desde.replace(hour=0, minute=0, second=0, microsecond=0))
                 hasta_fin = timezone.make_aware(hasta.replace(hour=23, minute=59, second=59, microsecond=999999))
-                
+
                 queryset = queryset.filter(fecha__range=(desde_aware, hasta_fin))
-                
+
                 fecha_desde_str = desde.strftime("%Y-%m-%d")
                 fecha_hasta_str = hasta.strftime("%Y-%m-%d")
                 fechas_display = f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
             except ValueError:
                 messages.warning(request, "Formato de fechas inválido. Usa el selector de fechas.")
-                fechas_str = ""
 
-    # ── Filtro por texto (sector, dirección, registrador o entregador) ───────────
+    # Filtro por texto (búsqueda)
     if busqueda:
         queryset = queryset.filter(
             Q(sector__icontains=busqueda) |
@@ -232,27 +216,25 @@ def consultas_pedidos(request):
             Q(registrador__first_name__icontains=busqueda) |
             Q(registrador__last_name__icontains=busqueda) |
             Q(registrador__username__icontains=busqueda) |
-            Q(entregador__first_name__icontains=busqueda) |          # ← nuevo: buscar por nombre del camionero
+            Q(entregador__first_name__icontains=busqueda) |
             Q(entregador__last_name__icontains=busqueda) |
-            Q(entregador__username__icontains=busqueda)
+            Q(entregador__username__icontains=busqueda) |
+            Q(balon__nombre__icontains=busqueda)
         )
 
-    # ── Filtro por estado (solo jefe/admin y camionero) ─────────────────────────────────────
-    if (es_jefe_o_admin or es_camionero) and estado != "todos":
+    # Filtro por estado
+    if estado != "todos":
         queryset = queryset.filter(estado=estado)
 
-    # ── Paginación ──────────────────────────────────────────────────────────────
+    # Paginación
     paginator = Paginator(queryset, 20)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    # ── Contexto para la plantilla ──────────────────────────────────────────────
     context = {
         "page_obj": page_obj,
         "estados_choices": Pedido.ESTADOS,
-        "es_jefe_o_admin": es_jefe_o_admin,
-        "es_camionero": es_camionero,                     # ← nuevo flag para la plantilla
-        "hoy": timezone.now().astimezone(ZoneInfo('America/Santiago')).date(),
+        "es_jefe_o_admin": True,
         "filtros": {
             "busqueda": busqueda,
             "fechas": fechas_display,
@@ -261,9 +243,60 @@ def consultas_pedidos(request):
             "fecha_hasta": fecha_hasta_str,
         },
     }
-
     return render(request, "consultas_pedidos.html", context)
 
+
+# ────────────────────────────────────────────────────────────────
+# 2. Vista camionero: Mis Entregas Realizadas
+# ────────────────────────────────────────────────────────────────
+@login_required
+def mis_entregas(request):
+    if request.user.rol != "camionero":
+        messages.error(request, "Acceso restringido.")
+        return redirect("index")
+
+    tz = ZoneInfo('America/Santiago')
+    hoy_inicio = timezone.now().astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    hoy_fin = hoy_inicio + timedelta(days=1) - timedelta(microseconds=1)
+
+    pedidos_hoy = Pedido.objects.filter(
+        entregador=request.user,
+        estado="entregado",
+        fecha__range=(hoy_inicio, hoy_fin)
+    ).select_related("balon", "registrador").order_by("-fecha")
+
+    return render(request, "mis_entregas_camionero.html", {
+        "pedidos_hoy": pedidos_hoy,
+    })
+
+
+# ────────────────────────────────────────────────────────────────
+# 3. Vista telefonista / bodeguero: Mis pedidos / ventas de hoy
+# ────────────────────────────────────────────────────────────────
+@login_required
+def mis_pedidos_hoy(request):
+    if request.user.rol not in ["telefonista", "bodeguero"]:
+        messages.error(request, "Acceso no permitido en esta sección.")
+        return redirect("index")
+
+    tz = ZoneInfo('America/Santiago')
+    hoy_inicio = timezone.now().astimezone(tz).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    hoy_fin = hoy_inicio + timedelta(days=1) - timedelta(microseconds=1)
+
+    pedidos = Pedido.objects.filter(
+        registrador=request.user,
+        fecha__range=(hoy_inicio, hoy_fin)
+    ).select_related("balon").order_by("-fecha")
+
+    context = {
+        "pedidos": pedidos,           # sin paginación (normalmente pocos)
+        "total_hoy": pedidos.count(),
+        "es_telefonista": request.user.rol == "telefonista",
+        "es_bodeguero":   request.user.rol == "bodeguero",
+    }
+    return render(request, "mis_pedidos_hoy.html", context)
 @login_required
 def transaccional_pedido(request):
     user = request.user

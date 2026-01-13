@@ -1,67 +1,112 @@
-<!-- mockups/templates/index.html -->
 {% extends "base.html" %}
-
 {% block title %}Kim Gas - Inicio{% endblock %}
 
 {% block content %}
-<div class="min-vh-100 d-flex align-items-center bg-white">
+
+<div class="min-vh-100 d-flex flex-column justify-content-center">
+
     <div class="container py-5">
-        <div class="row justify-content-center text-center">
-            <div class="col-12 col-lg-10 col-xl-8">
 
-                <!-- Logo grande -->
-                <div class="mb-5">
-                    <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center shadow-lg"
-                        style="width: 140px; height: 140px;">
-                        <h1 class="mb-0 fw-bold fs-1">KM</h1>
-                    </div>
-                </div>
+        <!-- Logo + título -->
+        <div class="text-center mb-5">
+            <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center shadow mb-4 mx-auto"
+                 style="width: 120px; height: 120px;">
+                <i class="bi bi-fire fs-1"></i>
+            </div>
+            <h1 class="display-5 fw-bold text-primary mb-2">Kim Gas</h1>
+            <p class="lead text-muted fs-5 mb-4">
+                Pedidos rápidos y entregas sin complicaciones
+            </p>
+        </div>
 
-                <h1 class="display-3 fw-bold text-primary mb-3">Kim Gas</h1>
-                <p class="lead text-secondary mb-5 fs-4">
-                    Sistema completo para distribuidores de gas licuado<br>
-                    <strong>Pedidos • Entregas • Reportes</strong> en un solo lugar
-                </p>
+        {% if user.is_authenticated %}
 
-                <!-- Botones principales -->
-                <div class="d-grid d-md-flex gap-4 justify-content-center mb-5">
-                    {% if user.is_authenticated %}
-                    <a href="{% url 'transaccional_pedido' %}" class="btn btn-primary btn-lg px-5 shadow">
-                        <i class="bi bi-box-arrow-in-right"></i> Ir al sistema
+            <div class="text-center mb-5 text-muted">
+                Bienvenido(a), <strong>{{ user.get_full_name|default:user.username }}</strong><br>
+                <small>({{ user.get_rol_display }})</small>
+            </div>
+
+            <div class="row g-4 justify-content-center">
+
+                <!-- Camionero: Entregas pendientes + Historial entregas -->
+                {% if user.rol == "camionero" %}
+                <div class="col-12 col-md-8">
+                    <a href="{% url 'camionero_entregas' %}" 
+                       class="btn btn-primary btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
+                        <i class="bi bi-truck fs-1"></i>
+                        <span class="fs-4 fw-semibold">Entregas Pendientes</span>
                     </a>
-                    {% else %}
-                    <a href="{% url 'login' %}" class="btn btn-primary btn-lg px-5 shadow">
-                        Iniciar Sesión
-                    </a>
-                    {% endif %}
                 </div>
+                <div class="col-12 col-md-8">
+                    <a href="{% url 'mis_entregas' %}" 
+                       class="btn btn-outline-secondary btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
+                        <i class="bi bi-check-circle fs-1"></i>
+                        <span class="fs-4 fw-semibold">Mis Entregas</span>
+                    </a>
+                </div>
+                {% endif %}
 
-                <!-- Características -->
-                <div class="row g-4 mt-4">
-                    <div class="col-md-4">
-                        <div class="text-center p-4 border rounded-3 shadow-sm bg-light">
-                            <div class="text-primary fs-2 mb-3">☎</div>
-                            <h5 class="fw-bold">Telefonistas</h5>
-                            <small class="text-muted">Registro rápido de pedidos</small>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-center p-4 border rounded-3 shadow-sm bg-light">
-                            <div class="text-success fs-2 mb-3">🚛</div>
-                            <h5 class="fw-bold">Camioneros</h5>
-                            <small class="text-muted">Entregas en tiempo real</small>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-center p-4 border rounded-3 shadow-sm bg-light">
-                            <div class="text-warning fs-2 mb-3">📊</div>
-                            <h5 class="fw-bold">Jefes</h5>
-                            <small class="text-muted">Reportes y control total</small>
-                        </div>
-                    </div>
+                <!-- Telefonista / Bodeguero: Nuevo Pedido + Pedidos Hoy -->
+                {% if user.rol in "telefonista,bodeguero" %}
+                <div class="col-12 col-md-8">
+                    <a href="{% url 'transaccional_pedido' %}" 
+                       class="btn btn-success btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
+                        <i class="bi bi-plus-circle-fill fs-1"></i>
+                        <span class="fs-4 fw-semibold">Tomar Nuevo Pedido</span>
+                    </a>
+                </div>
+                <div class="col-12 col-md-8">
+                    <a href="{% url 'mis_pedidos_hoy' %}" 
+                       class="btn btn-outline-secondary btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
+                        <i class="bi bi-clock-history fs-1"></i>
+                        <span class="fs-4 fw-semibold">Mis Pedidos Hoy</span>
+                    </a>
+                </div>
+                {% endif %}
+
+                <!-- Jefe / Admin: Reportes, Precios, Historial Pedidos -->
+                {% if user.rol in "jefe,admin" %}
+                <div class="col-12 col-md-8">
+                    <a href="{% url 'reporte_ventas' %}" 
+                       class="btn btn-info btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
+                        <i class="bi bi-graph-up fs-1"></i>
+                        <span class="fs-4 fw-semibold">Ver Reportes y Ventas</span>
+                    </a>
+                </div>
+                <div class="col-12 col-md-8">
+                    <a href="{% url 'precios_balones' %}" 
+                       class="btn btn-warning btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
+                        <i class="bi bi-currency-dollar fs-1"></i>
+                        <span class="fs-4 fw-semibold">Gestionar Precios</span>
+                    </a>
+                </div>
+                <div class="col-12 col-md-8">
+                    <a href="{% url 'consultas_pedidos' %}" 
+                       class="btn btn-outline-secondary btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
+                        <i class="bi bi-search fs-1"></i>
+                        <span class="fs-4 fw-semibold">Consultar Pedidos</span>
+                    </a>
+                </div>
+                {% endif %}
+
+            </div>
+
+        {% else %}
+
+            <div class="row justify-content-center">
+                <div class="col-12 col-sm-10 col-md-8">
+                    <a href="{% url 'login' %}" 
+                       class="btn btn-primary btn-lg w-100 py-5 shadow rounded-4 d-flex flex-column align-items-center gap-3">
+                        <i class="bi bi-box-arrow-in-right fs-1"></i>
+                        <span class="fs-4 fw-bold">Iniciar sesión</span>
+                    </a>
                 </div>
             </div>
-        </div>
+
+        {% endif %}
+
     </div>
+
 </div>
+
 {% endblock %}

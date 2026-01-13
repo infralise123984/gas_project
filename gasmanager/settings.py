@@ -35,6 +35,16 @@ _allowed = os.getenv("ALLOWED_HOSTS")
 if not _allowed:
     raise ValueError("¡ALLOWED_HOSTS no está definida! Agréguela en .env o en Render")
 ALLOWED_HOSTS = [host.strip() for host in _allowed.split(",") if host.strip()]
+# --------------------------------------------------------------------
+# CSRF_TRUSTED_ORIGINS  ← esta parte es crítica para ngrok y HTTPS
+# --------------------------------------------------------------------
+_csrf_origins = os.getenv("CSRF_TRUSTED_ORIGINS")
+if not _csrf_origins:
+    raise ValueError("¡CSRF_TRUSTED_ORIGINS no está definida! Agréguela en .env")
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in _csrf_origins.split(",") if origin.strip()
+]
 
 USE_THOUSAND_SEPARATOR = True  # Esto es clave para activar los separadores de miles
 
