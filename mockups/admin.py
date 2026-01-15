@@ -1,102 +1,105 @@
-# mockups/admin.py → Versión limpia y 100% funcional (sin formateo de precios)
-
+# mockups/admin.py
 from django.contrib import admin
-from django.utils.html import format_html
-from .models import Usuario, TipoBalon, HistorialPrecioBalon, Pedido
+from .models import Usuario, TipoBalon, HistorialPrecioBalon, Pedido, DetallePedido
 
 
 @admin.register(Usuario)
 class UsuarioAdmin(admin.ModelAdmin):
-    list_display = (
-        "username",
-        "get_full_name",
-        "rol",
-        "email",
-        "telefono",
-        "is_active",
-    )
-    list_filter = ("rol", "is_active")
-    search_fields = ("username", "first_name", "last_name", "email", "telefono")
-    ordering = ("-date_joined",)
-
-    def get_full_name(self, obj):
-        return obj.get_full_name() or "—"
-
-    get_full_name.short_description = "Nombre"
+    list_display = ('username', 'get_full_name', 'rol', 'telefono', 'date_joined', 'is_active')
+    list_filter = ('rol', 'is_active', 'date_joined')
+    search_fields = ('username', 'first_name', 'last_name', 'telefono')
+    readonly_fields = ('date_joined',)
+    ordering = ('-date_joined',)
 
 
 @admin.register(TipoBalon)
 class TipoBalonAdmin(admin.ModelAdmin):
     list_display = (
-        "nombre",
-        "peso_neto_gas",
-        "precio",
-        "activo",
-        "actualizado_el",
-        "actualizado_por",
+        'nombre',
+        'peso_neto_gas',
+        'precio_compra',
+        'precio_local',
+        'precio_domicilio',
+        'activo',
+        'actualizado_el',
+        'actualizado_por'
     )
-    list_editable = ("precio", "activo")  # ← sigue funcionando perfecto
-    list_filter = ("activo", "peso_neto_gas")
-    search_fields = ("nombre", "peso_neto_gas")
-    ordering = ("peso_neto_gas",)
-    readonly_fields = ("actualizado_el",)
-
-    def nombre(self, obj):
-        return obj.nombre or "Sin nombre"
-
-    nombre.short_description = "Nombre comercial"
+    list_filter = ('activo',)
+    search_fields = ('nombre', 'peso_neto_gas')
+    list_editable = ('precio_compra', 'precio_local', 'precio_domicilio', 'activo')
+    readonly_fields = ('actualizado_el', 'actualizado_por')
+    ordering = ('peso_neto_gas',)
 
 
 @admin.register(HistorialPrecioBalon)
 class HistorialPrecioBalonAdmin(admin.ModelAdmin):
     list_display = (
-        "tipo_balón",
-        "peso_kg",
-        "precio_anterior",
-        "precio_nuevo",
-        "fecha_cambio",
-        "cambiado_por",
+        'tipo_balón',
+        'precio_compra_anterior',
+        'precio_local_anterior',
+        'precio_domicilio_anterior',
+        'activo_anterior',
+        'fecha_cambio',
+        'actualizado_por'
     )
-    list_filter = ("tipo_balón__peso_neto_gas", "fecha_cambio")
-    search_fields = ("tipo_balón__nombre",)
-    ordering = ("-fecha_cambio",)
+    list_filter = ('tipo_balón', 'fecha_cambio')
+    search_fields = ('tipo_balón__nombre',)
+    readonly_fields = ('fecha_cambio',)
+    ordering = ('-fecha_cambio',)
 
-    def peso_kg(self, obj):
-        if obj.tipo_balón and obj.tipo_balón.peso_neto_gas:
-            return f"{obj.tipo_balón.peso_neto_gas} kg"
-        return "—"
 
-    peso_kg.short_description = "Peso neto gas"
+class DetallePedidoInline(admin.TabularInline):
+    model = DetallePedido
+    extra = 1
+    fields = ('balon', 'cantidad', 'precio_venta_unitario', 'precio_compra_unitario', 'subtotal', 'ganancia')
+    readonly_fields = ('subtotal', 'ganancia')
+    ordering = ('balon__peso_neto_gas',)
+
 
 
 @admin.register(Pedido)
 class PedidoAdmin(admin.ModelAdmin):
     list_display = (
-        "id",
-        "fecha",
-        "balon_nombre",
-        "peso_kg",
-        "cantidad_balon",
-        "monto",
-        "estado",
-        "registrador",
-        "entregador",
+        'id',
+        'fecha',
+        'estado',
+        'origen',
+        'registrador',
+        'entregador',
+        'metodo_pago',
+        'monto_total',
+        'ganancia_total',
+        'sector',
+        'resumen_productos'
     )
-    list_filter = ("estado", "balon__peso_neto_gas", "fecha")
-    search_fields = ("balon__nombre", "registrador__username")
-    ordering = ("-fecha",)
+    list_filter = ('estado', 'origen', 'registrador__rol', 'entregador', 'metodo_pago')  # ← quitamos 'fecha'
+    search_fields = ('id', 'sector', 'direccion_entrega', 'registrador__username', 'entregador__username')
+    readonly_fields = ('fecha', 'monto_total', 'ganancia_total', 'resumen_productos')
+    inlines = [DetallePedidoInline]
+    # date_hierarchy = 'fecha'  # ya comentado, perfecto
+    actions = ['marcar_entregado', 'marcar_cancelado']
 
-    def fecha(self, obj):
-        return obj.fecha.strftime("%d/%m/%Y %H:%M")
+    def marcar_entregado(self, request, queryset):
+        queryset.update(estado='entregado')
+    marcar_entregado.short_description = "Marcar seleccionados como entregados"
 
-    fecha.short_description = "Fecha"
-
-    def balon_nombre(self, obj):
-        return obj.balon.nombre
-
-    balon_nombre.short_description = "Balón"
-
-    def peso_kg(self, obj):
-        return f"{obj.balon.peso_neto_gas} kg"
-
-    peso_kg.short_description = "Peso gas"
+    def marcar_cancelado(self, request, queryset):
+        queryset.update(estado='cancelado')
+    marcar_cancelado.short_description = "Marcar seleccionados como cancelados"
+@admin.register(DetallePedido)
+class DetallePedidoAdmin(admin.ModelAdmin):
+    list_display = (
+        'pedido',
+        'balon',
+        'cantidad',
+        'precio_venta_unitario',
+        'precio_compra_unitario',
+        'subtotal',
+        'ganancia'
+    )
+    list_filter = ('pedido__estado', 'balon__peso_neto_gas', 'pedido__origen')
+    search_fields = ('pedido__id', 'balon__nombre')
+    readonly_fields = ('subtotal', 'ganancia')
+    ordering = ('pedido__fecha', 'balon__peso_neto_gas')
+    
+    

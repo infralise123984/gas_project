@@ -1,76 +1,115 @@
-<!-- templates/precios_balones.html → Versión corregida: solo guarda los campos modificados -->
 {% extends "base.html" %}
 {% load static %}
-{% load l10n %}
+{% load l10n humanize %}  <!-- para formateo de números y localización -->
 
 {% block title %}Gestión de Precios - GasFácil{% endblock %}
 
 {% block content %}
 <div class="container mt-5 mb-5">
     <div class="row justify-content-center">
-        <div class="col-lg-10 col-xl-8">
+        <div class="col-lg-11 col-xl-10">
 
-            <div class="d-flex align-items-center justify-content-between mb-4">
+            <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
                 <h2 class="text-primary fw-bold mb-0">
-                    Gestión de Precios y Disponibilidad
+                    <i class="bi bi-tags me-2"></i>Gestión de Precios y Disponibilidad
                 </h2>
-                <span class="badge bg-primary fs-6 px-3 py-2">
-                    {% if user.rol == "jefe" %}Jefe{% else %}Administrador{% endif %}
-                </span>
+                <div class="d-flex gap-2">
+                    <span class="badge bg-primary fs-6 px-3 py-2">
+                        {% if user.rol == "jefe" %}Jefe{% else %}Administrador{% endif %}
+                    </span>
+                    <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Volver a Reportes
+                    </a>
+                </div>
             </div>
-
 
             <div class="card shadow-lg border-0">
                 <div class="card-header bg-primary text-white text-center py-4">
-                    <h4 class="mb-0 fw-bold">Tipos de Balones</h4>
-                    <small>Edita precio o disponibilidad • Solo se guardan los cambios realizados</small>
+                    <h4 class="mb-0 fw-bold">Tipos de Balones Comerciales</h4>
+                    <small>Actualiza precios de compra, venta local y domicilio • Los cambios se guardan solo en filas modificadas</small>
                 </div>
 
-                <div class="card-body p-4">
+                <div class="card-body p-3 p-md-4">
                     <form method="post" id="formPrecios">
                         {% csrf_token %}
 
                         <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
+                            <table class="table table-hover table-bordered align-middle mb-0">
                                 <thead class="table-primary text-white">
                                     <tr>
-                                        <th class="ps-4">Nombre comercial</th>
-                                        <!-- <th class="text-center">Peso neto gas (kg)</th> -->
-                                        <th class="text-center">Precio (CLP)</th>
+                                        <th class="ps-3">Nombre comercial</th>
+                                        <th class="text-center">Peso neto (kg)</th>
+                                        <th class="text-center">Precio Compra</th>
+                                        <th class="text-center">Precio Local</th>
+                                        <th class="text-center">Precio Domicilio</th>
                                         <th class="text-center">Disponible</th>
-                                        <th class="text-center">Última actualización</th>
+                                        <th class="text-center">Últ. actualización</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for balon in balones %}
-                                    <tr {% if not balon.activo %}class="table-light" style="opacity: 0.75;" {% endif %}>
-                                        <td class="ps-4 fw-bold fs-5">{{ balon.nombre }}</td>
-                                        <!-- <td class="text-center">{{ balon.peso_neto_gas }} kg</td> -->
+                                    <tr {% if not balon.activo %}class="table-secondary opacity-75"{% endif %}>
+                                        <td class="ps-3 fw-semibold">{{ balon.nombre }}</td>
+                                        <td class="text-center">{{ balon.peso_neto_gas }} kg</td>
+
+                                        <!-- Precio Compra -->
                                         <td class="text-center">
-                                            <input type="number" name="precio_{{ balon.id }}"
-                                                value="{{ balon.precio|unlocalize }}"
-                                                class="form-control form-control-lg text-end mx-auto"
-                                                style="width: 160px;" min="0" step="1">
+                                            <div class="input-group input-group-sm justify-content-center" style="max-width: 140px; margin: 0 auto;">
+                                                <span class="input-group-text">$</span>
+                                                <input type="number" name="precio_compra_{{ balon.id }}"
+                                                       value="{{ balon.precio_compra|unlocalize }}"
+                                                       class="form-control text-end"
+                                                       min="0" step="1">
+                                            </div>
                                         </td>
+
+                                        <!-- Precio Local -->
+                                        <td class="text-center">
+                                            <div class="input-group input-group-sm justify-content-center" style="max-width: 140px; margin: 0 auto;">
+                                                <span class="input-group-text">$</span>
+                                                <input type="number" name="precio_local_{{ balon.id }}"
+                                                       value="{{ balon.precio_local|unlocalize }}"
+                                                       class="form-control text-end"
+                                                       min="0" step="1">
+                                            </div>
+                                        </td>
+
+                                        <!-- Precio Domicilio -->
+                                        <td class="text-center">
+                                            <div class="input-group input-group-sm justify-content-center" style="max-width: 140px; margin: 0 auto;">
+                                                <span class="input-group-text">$</span>
+                                                <input type="number" name="precio_domicilio_{{ balon.id }}"
+                                                       value="{{ balon.precio_domicilio|unlocalize }}"
+                                                       class="form-control text-end"
+                                                       min="0" step="1">
+                                            </div>
+                                        </td>
+
+                                        <!-- Activo -->
                                         <td class="text-center">
                                             <div class="form-check form-switch d-flex justify-content-center">
                                                 <input class="form-check-input" type="checkbox"
-                                                    name="activo_{{ balon.id }}" {% if balon.activo %}checked{% endif %}
-                                                    style="width: 60px; height: 30px;">
+                                                       name="activo_{{ balon.id }}" id="activo_{{ balon.id }}"
+                                                       {% if balon.activo %}checked{% endif %}
+                                                       style="width: 3rem; height: 1.5rem;">
                                             </div>
                                         </td>
+
+                                        <!-- Última actualización -->
                                         <td class="text-center small">
                                             {% if balon.actualizado_el %}
-                                            {{ balon.actualizado_el|date:"d/m/Y H:i" }}
-                                            <br><small class="text-muted">{{ balon.actualizado_por|default:"—"}}</small>
+                                                {{ balon.actualizado_el|date:"d/m/Y H:i" }}
+                                                <br>
+                                            {% else %}
+                                                —
                                             {% endif %}
                                         </td>
                                     </tr>
                                     {% empty %}
                                     <tr>
-                                        <td colspan="5" class="text-center py-5 text-muted">
+                                        <td colspan="7" class="text-center py-5 text-muted">
                                             <i class="bi bi-inbox fs-1 d-block mb-3"></i>
-                                            <strong>No hay tipos de balones registrados</strong>
+                                            <strong>No hay tipos de balones registrados aún</strong>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -80,10 +119,10 @@
 
                         <div class="text-center mt-5">
                             <button type="submit" class="btn btn-success btn-lg px-5 shadow">
-                                Guardar Todos los Cambios
+                                <i class="bi bi-save me-2"></i>Guardar Cambios
                             </button>
                             <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-secondary btn-lg px-5 ms-3">
-                                Volver al Reporte
+                                Cancelar
                             </a>
                         </div>
                     </form>
@@ -91,7 +130,7 @@
             </div>
 
             <div class="text-center mt-4 text-muted small">
-                El historial completo de cambios está disponible en el Admin de Django
+                Los cambios generan un registro automático en el historial (visible en Admin Django)
             </div>
         </div>
     </div>

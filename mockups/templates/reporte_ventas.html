@@ -1,30 +1,30 @@
-<!-- templates/reporte_ventas.html -->
 {% extends 'base.html' %}
-{% load static %}
-{% load humanize %}
+{% load humanize static %}
 
 {% block title %}Reporte de Ventas - GasFácil{% endblock %}
 
 {% block extra_head %}
-<!-- Locale español para Flatpickr -->
-
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 
 {% block content %}
-<div class="container mt-5">
+<div class="container mt-4 mb-5 px-3">
 
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
-        <h2 class="text-primary fw-bold mb-0">
-            <i class="bi bi-bar-chart-line-fill me-2"></i>Reporte de Ventas
-        </h2>
-        {% if user.rol == "jefe" %}
-        <span class="badge bg-primary fs-5 px-4 py-2 shadow-sm">Vista Jefe</span>
-        {% else %}
-        <span class="badge bg-secondary fs-5 px-4 py-2 shadow-sm">Vista Administrador</span>
-        {% endif %}
+    <!-- Título principal -->
+    <h2 class="text-primary fw-bold text-center mb-4">
+        <i class="bi bi-graph-up me-2"></i>Reporte de Ventas
+    </h2>
+
+    <!-- Rango actual -->
+    <div class="text-center mb-4">
+        <h5 class="text-muted">
+            Mostrando: <strong>{{ rango_actual|default:"Mes actual" }}</strong>
+        </h5>
     </div>
 
-    <!-- Filtro de fechas con Flatpickr -->
+    <!-- Filtro simple de fechas -->
     <div class="card shadow-sm border-0 mb-5">
         <div class="card-body p-4">
             <form method="get" class="row g-3 align-items-end">
@@ -34,7 +34,7 @@
                     </label>
                     <input type="text" name="fechas" id="rangoFechas" class="form-control form-control-lg"
                            placeholder="Selecciona rango (ej: 01/01/2026 al 31/01/2026)"
-                           value="{{ filtros.fechas|default:'' }}">
+                           value="{{ fechas|default:'' }}">
                 </div>
 
                 <div class="col-lg-3 col-md-4 d-flex gap-2">
@@ -45,209 +45,106 @@
                         <i class="bi bi-arrow-counterclockwise"></i> Limpiar
                     </a>
                 </div>
-
-                <div class="col-lg-4 col-md-12 text-end text-muted small align-self-end">
-                    {% if filtros.fecha_inicio and filtros.fecha_fin %}
-                        Mostrando datos del {{ filtros.fecha_inicio|date:"d/m/Y" }} al {{ filtros.fecha_fin|date:"d/m/Y" }}
-                    {% else %}
-                        Mostrando todos los registros disponibles
-                    {% endif %}
-                </div>
             </form>
         </div>
     </div>
 
-    <!-- Resumen rápido -->
-    <div class="row mb-5 g-4">
-        <div class="col-md-6 col-lg-3">
+    <!-- Tarjetas principales (solo ventas y ganancias) -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-6">
             <div class="card text-center border-primary shadow h-100">
-                <div class="card-body py-4">
-                    <h5 class="card-title text-primary fw-bold">Total Pedidos</h5>
-                    <h1 class="display-5 fw-bold text-primary">{{ total_pedidos|default:0 }}</h1>
+                <div class="card-body py-5">
+                    <h5 class="text-primary fw-bold mb-3">Ventas Totales</h5>
+                    <h2 class="display-4 fw-bold text-primary">
+                        ${{ total_ventas|floatformat:0|intcomma|default:"0" }}
+                    </h2>
                 </div>
             </div>
         </div>
-        <div class="col-md-6 col-lg-3">
+
+        <div class="col-md-6">
             <div class="card text-center border-success shadow h-100">
-                <div class="card-body py-4">
-                    <h5 class="card-title text-success fw-bold">Ventas Totales</h5>
-                    <h1 class="display-5 fw-bold text-success">$ {{ total_ventas|floatformat:0|intcomma|default:"0" }}</h1>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-lg-3">
-            <div class="card text-center border-info shadow h-100">
-                <div class="card-body py-4">
-                    <h5 class="card-title text-info fw-bold">Balones Vendidos</h5>
-                    <h1 class="display-5 fw-bold text-info">{{ total_balones|default:0 }}</h1>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-lg-3">
-            <div class="card text-center border-warning shadow h-100">
-                <div class="card-body py-4">
-                    <h5 class="card-title text-warning fw-bold">Kilos de Gas</h5>
-                    <h1 class="display-5 fw-bold text-warning">{{ total_kilos|default:0 }}</h1>
+                <div class="card-body py-5">
+                    <h5 class="text-success fw-bold mb-3">Ganancias Totales</h5>
+                    <h2 class="display-4 fw-bold text-success">
+                        ${{ total_ganancias|floatformat:0|intcomma|default:"0" }}
+                    </h2>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row mb-5">
-        <!-- Gráfico de torta: Balones más vendidos (en kilos) -->
-        <div class="col-lg-6 mb-4">
-            <div class="card shadow h-100">
-                <div class="card-header bg-primary text-white text-center">
-                    <h5 class="mb-0 fw-bold">Balones Más Vendidos (kilos de gas)</h5>
-                </div>
+    <!-- Gráficos -->
+    <div class="row g-4">
+        <!-- Tipos de gas más vendidos -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light text-center fw-bold">Tipos de Gas Más Vendidos</div>
                 <div class="card-body">
-                    <canvas id="pieChartBalones" height="350"></canvas>
+                    <canvas id="pieGas" height="200"></canvas>
                 </div>
             </div>
         </div>
 
-        <!-- Tabla detalle por tipo de balón -->
-        <div class="col-lg-6 mb-4">
-            <div class="card shadow h-100">
-                <div class="card-header bg-primary text-white text-center">
-                    <h5 class="mb-0 fw-bold">Detalle por Tipo de Balón</h5>
+        <!-- Sectores con más ventas -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light text-center fw-bold">Sectores con Más Ventas</div>
+                <div class="card-body">
+                    <canvas id="barSectores" height="200"></canvas>
                 </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Balón</th>
-                                    <th class="text-center">Cantidad</th>
-                                    <th class="text-center">Kilos gas</th>
-                                    <th class="text-end">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in por_balon %}
-                                <tr>
-                                    <td class="fw-bold">{{ item.balon__nombre|default:"Sin nombre" }}</td>
-                                    <td class="text-center">{{ item.cantidad_vendida|default:0 }}</td>
-                                    <td class="text-center">{{ item.kilos_vendidos|default:0 }}</td>
-                                    <td class="text-end">$ {{ item.total_monto|floatformat:0|intcomma|default:"0" }}</td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="4" class="text-center py-4 text-muted">
-                                        No hay ventas en este período
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Últimos pedidos entregados -->
-    <div class="card shadow border-0 mb-5">
-        <div class="card-header bg-primary text-white text-center">
-            <h5 class="mb-0 fw-bold">Últimos Pedidos Entregados</h5>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                    <thead class="table-dark">
-                        <tr>
-                            <th>Fecha</th>
-                            <th>Balón</th>
-                            <th>Cant.</th>
-                            <th>Monto</th>
-                            <th>Registrador</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for p in ultimos_pedidos %}
-                        <tr>
-                            <td>{{ p.fecha|date:"d/m H:i" }}</td>
-                            <td>{{ p.balon.nombre|default:"—" }}</td>
-                            <td>{{ p.cantidad_balon }}</td>
-                            <td>$ {{ p.monto|floatformat:0|intcomma }}</td>
-                            <td>{{ p.registrador.get_full_name|default:p.registrador.username|default:"—" }}</td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="6" class="text-center py-4 text-muted">
-                                No hay pedidos entregados en este período
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
             </div>
         </div>
     </div>
 
 </div>
 
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<!-- Inicialización de Flatpickr -->
+<!-- Scripts -->
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-    flatpickr("#rangoFechas", {
-        mode: "range",
-        dateFormat: "Y-m-d",          // formato que se envía al backend
-        altInput: true,
-        altFormat: "d/m/Y",           // formato visible para el usuario
-        locale: flatpickr.l10ns.es,
-        showMonths: 2,
-        weekNumbers: false,
-        allowInput: true,
-    });
-});
-</script>
-
-<!-- Gráfico de torta -->
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const ctx = document.getElementById('pieChartBalones').getContext('2d');
-    new Chart(ctx, {
-        type: 'pie',
-        data: {
-            labels: [
-                {% for item in por_balon %}
-                    "{{ item.balon__nombre|default:'Sin nombre' }}",
-                {% endfor %}
-            ],
-            datasets: [{
-                data: [
-                    {% for item in por_balon %}
-                        {{ item.kilos_vendidos|default:0 }},
-                    {% endfor %}
-                ],
-                backgroundColor: [
-                    '#0d6efd', '#198754', '#ffc107', '#dc3545',
-                    '#6f42c1', '#fd7e14', '#20c997', '#e83e8c'
-                ],
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { position: 'bottom' },
-                tooltip: {
-                    callbacks: {
-                        label: function (context) {
-                            const label = context.label || '';
-                            const value = context.parsed;
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
-                            return `${label}: ${value} kg (${percentage}%)`;
-                        }
-                    }
-                }
-            }
+// Gráfico de tipos de gas (pie)
+const ctxGas = document.getElementById('pieGas').getContext('2d');
+new Chart(ctxGas, {
+    type: 'pie',
+    data: {
+        labels: {{ tipos_gas_labels|safe }},
+        datasets: [{
+            data: {{ tipos_gas_data|safe }},
+            backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6f42c1', '#fd7e14'],
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { position: 'bottom' }
         }
-    });
+    }
+});
+
+// Gráfico de sectores (bar)
+const ctxSectores = document.getElementById('barSectores').getContext('2d');
+new Chart(ctxSectores, {
+    type: 'bar',
+    data: {
+        labels: {{ sectores_labels|safe }},
+        datasets: [{
+            label: 'Ventas ($)',
+            data: {{ sectores_data|safe }},
+            backgroundColor: '#0d6efd',
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: { y: { beginAtZero: true } }
+    }
+});
+
+// Flatpickr
+flatpickr("#rangoFechas", {
+    mode: "range",
+    dateFormat: "Y-m-d",
+    altInput: true,
+    altFormat: "d/m/Y",
+    locale: { firstDayOfWeek: 1 }
 });
 </script>
 {% endblock %}

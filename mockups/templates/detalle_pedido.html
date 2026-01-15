@@ -1,0 +1,261 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Pedido #{{ pedido.id }} - GasFácil{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5" style="max-width: 900px;">
+
+    <!-- Encabezado con botón volver y estado actual -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <a href="{% if request.user.rol in 'jefe,admin' %}{% url 'consultas_pedidos' %}{% else %}{% url 'mis_pedidos_hoy' %}{% endif %}" 
+           class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>Volver
+        </a>
+        
+        <span class="badge fs-5 px-4 py-2 bg-{% if pedido.estado == 'entregado' %}success{% elif pedido.estado == 'en_ruta' %}warning{% elif pedido.estado == 'pendiente' %}info{% else %}danger{% endif %}">
+            {{ pedido.get_estado_display }}
+        </span>
+    </div>
+
+    <!-- Título principal -->
+    <div class="text-center mb-5">
+        <h1 class="display-5 fw-bold text-primary mb-2">
+            Pedido #{{ pedido.id }}
+        </h1>
+        <p class="text-muted fs-5">
+            <i class="bi bi-calendar-event me-2"></i>{{ pedido.fecha|date}} 
+            <span class="mx-2">•</span>
+            <i class="bi bi-clock me-2"></i>{{ pedido.fecha|date:"H:i" }} hrs
+        </p>
+    </div>
+
+    <!-- Tarjetas de información general -->
+    <div class="row g-4 mb-5">
+        <!-- Info básica -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-primary h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Información del Pedido</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0 gy-2">
+                        <dt class="col-5 fw-semibold">Origen:</dt>
+                        <dd class="col-7">{{ pedido.get_origen_display }}</dd>
+
+                        <dt class="col-5 fw-semibold">Método de pago:</dt>
+                        <dd class="col-7">
+                            <i class="bi bi-{% if pedido.metodo_pago == 'efectivo' %}cash{% elif pedido.metodo_pago == 'tarjeta' %}credit-card{% else %}bank{% endif %} me-1"></i>
+                            {{ pedido.get_metodo_pago_display }}
+                        </dd>
+
+                        <dt class="col-5 fw-semibold">Registrado por:</dt>
+                        <dd class="col-7">
+                            {{ pedido.registrador.get_full_name|default:pedido.registrador.username }}
+                            <small class="d-block text-muted">({{ pedido.registrador.get_rol_display }})</small>
+                        </dd>
+
+                        {% if pedido.entregador %}
+                        <dt class="col-5 fw-semibold">Entregado por:</dt>
+                        <dd class="col-7">
+                            {{ pedido.entregador.get_full_name|default:pedido.entregador.username }}
+                            <small class="d-block text-muted">(Camionero)</small>
+                        </dd>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dirección -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-info h-100">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-geo-alt-fill me-2"></i>Dirección de Entrega</h5>
+                </div>
+                <div class="card-body">
+                    {% if pedido.direccion_entrega %}
+                    <p class="lead mb-3">{{ pedido.direccion_entrega|linebreaksbr }}</p>
+                    {% if pedido.sector %}
+                    <div class="alert alert-light py-2 mb-0">
+                        <strong>Sector:</strong> {{ pedido.sector }}
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-shop-window fs-1 d-block mb-3"></i>
+                        Venta en local / sin entrega a domicilio
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Productos -->
+    <div class="card shadow-sm mb-5">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-box-seam me-2"></i>Productos</h5>
+            <span class="badge bg-light text-success fs-5 px-3 py-2">
+                ${{ pedido.monto_total|floatformat:0|intcomma }}
+            </span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Balón</th>
+                            <th class="text-center">Cantidad</th>
+                            <th class="text-end">Precio unitario</th>
+                            <th class="text-end">Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for detalle in pedido.detalles.all %}
+                        <tr>
+                            <td class="fw-semibold">{{ detalle.balon.nombre }}</td>
+                            <td class="text-center">{{ detalle.cantidad }}</td>
+                            <td class="text-end">${{ detalle.precio_venta_unitario|floatformat:0|intcomma }}</td>
+                            <td class="text-end fw-bold text-success">
+                                ${{ detalle.subtotal|floatformat:0|intcomma }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center py-5 text-muted">
+                                <i class="bi bi-boxes fs-1 d-block mb-3"></i>
+                                No hay productos registrados
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resumen financiero -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-4">
+            <div class="card text-center border-primary shadow-sm h-100">
+                <div class="card-body py-4">
+                    <h5 class="text-primary fw-bold mb-2">Venta Total</h5>
+                    <h3 class="display-6 fw-bold text-primary mb-0">
+                        ${{ pedido.monto_total|floatformat:0|intcomma }}
+                    </h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-center border-warning shadow-sm h-100">
+                <div class="card-body py-4">
+                    <h5 class="text-warning fw-bold mb-2">Costo Total</h5>
+                    <h3 class="display-6 fw-bold text-warning mb-0">
+                        ${{ costo_total|floatformat:0|intcomma }}
+                    </h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-center border-success shadow-sm h-100">
+                <div class="card-body py-4">
+                    <h5 class="text-success fw-bold mb-2">Ganancia</h5>
+                    <h3 class="display-6 fw-bold text-success mb-0">
+                        ${{ pedido.ganancia_total|floatformat:0|intcomma }}
+                    </h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Historial de estados (timeline real) -->
+    <div class="card shadow-sm mb-5">
+        <div class="card-header bg-secondary text-white">
+            <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Historial de Estados</h5>
+        </div>
+        <div class="card-body">
+            <div class="timeline px-3">
+                {% for cambio in pedido.historial_estados.all %}
+                <div class="timeline-item mb-4">
+                    <div class="timeline-marker bg-{% if cambio.estado_nuevo == 'entregado' %}success{% elif cambio.estado_nuevo == 'en_ruta' %}warning{% elif cambio.estado_nuevo == 'pendiente' %}info{% else %}danger{% endif %}"></div>
+                    <div class="timeline-content p-3 bg-light rounded">
+                        <h6 class="mb-1 fw-bold">{{ cambio.get_estado_nuevo_display }}</h6>
+                        <small class="text-muted d-block">
+                            {{ cambio.fecha_cambio|date:"d/m/Y H:i" }}
+                            • por {{ cambio.cambiado_por.get_full_name|default:cambio.cambiado_por.username }}
+                        </small>
+                        {% if cambio.estado_anterior %}
+                        <small class="text-muted d-block">
+                            Desde: {{ cambio.get_estado_anterior_display }}
+                        </small>
+                        {% endif %}
+                        {% if cambio.comentario %}
+                        <small class="d-block mt-2 text-secondary">
+                            <em>{{ cambio.comentario }}</em>
+                        </small>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-info-circle fs-1 d-block mb-3"></i>
+                    Aún no hay cambios de estado registrados
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Botón volver (centrado abajo) -->
+    <div class="text-center mt-5">
+        <a href="{% if request.user.rol in 'jefe,admin' %}{% url 'consultas_pedidos' %}{% else %}{% url 'mis_pedidos_hoy' %}{% endif %}" 
+           class="btn btn-primary btn-lg px-5 py-3">
+            <i class="bi bi-arrow-left-circle me-2"></i>Volver a la lista
+        </a>
+    </div>
+
+</div>
+
+<!-- Estilos del timeline -->
+<style>
+.timeline {
+    position: relative;
+    padding: 20px 0;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 20px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #dee2e6;
+}
+
+.timeline-item {
+    position: relative;
+    padding-left: 60px;
+    margin-bottom: 20px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: 11px;
+    top: 8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 0 0 2px #dee2e6;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+</style>
+
+{% endblock %}
