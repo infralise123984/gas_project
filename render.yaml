@@ -1,0 +1,24 @@
+# render.yaml - configuración mínima para desplegar en Render
+# - Web service para la app Django
+# - Base de datos PostgreSQL gestionada (starter)
+
+services:
+  - type: web
+    name: gas_project-web
+    env: python
+    branch: develop
+    plan: free
+    buildCommand: >
+      pip install -r requirements-render.txt && \
+      python manage.py migrate && \
+      python manage.py collectstatic --noinput
+    startCommand: gunicorn gasmanager.wsgi --log-file -
+    healthCheckPath: /
+
+databases:
+  - name: gas_project-db
+    plan: starter
+
+# Nota: no incluyas secretos aquí. Render añadirá la variable `DATABASE_URL`
+# automáticamente cuando crees la base de datos; usa la sección Environment
+# en el dashboard para `SECRET_KEY`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, etc.
