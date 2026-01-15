@@ -4,104 +4,178 @@
 {% block title %}Consultar Pedidos - GasFácil{% endblock %}
 
 {% block extra_head %}
-<!-- Flatpickr para jefe/admin -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4 mb-5 px-3">
+<div class="container-fluid mt-4 mb-5 px-3" style="max-width: 1400px;">
 
-    <!-- Título -->
-    <h2 class="text-primary fw-bold mb-4 text-center">
-        <i class="bi bi-search me-2"></i> Consultar Pedidos
-    </h2>
-
-    <!-- Badge de total -->
-    <div class="text-center mb-4">
-        <span class="badge bg-primary fs-5 px-4 py-2 shadow-sm">
-            {{ page_obj.paginator.count }} pedido{{ page_obj.paginator.count|pluralize:"s" }} encontrado{{ page_obj.paginator.count|pluralize:"s" }}
-        </span>
+    <!-- Título y botón a reportes -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
+        <h2 class="text-primary fw-bold mb-0">
+            <i class="bi bi-clipboard-data me-2"></i>Consultar Pedidos
+        </h2>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-primary">
+                <i class="bi bi-graph-up me-2"></i>Reportes y Gráficos
+            </a>
+            <a href="{% url 'precios_balones' %}" class="btn btn-outline-warning">
+                <i class="bi bi-tags me-2"></i>Precios
+            </a>
+        </div>
     </div>
 
-    <!-- FILTROS completos -->
-    <div class="card shadow-sm border-0 mb-5">
-        <div class="card-body p-4">
-            <form method="get" class="row g-3 align-items-end">
-                <div class="col-12 col-md-8">
-                    <label class="form-label fw-bold">
-                        <i class="bi bi-search me-1"></i>Buscar (dirección, sector, etc.)
-                    </label>
-                    <input type="text" name="busqueda" class="form-control form-control-lg"
-                           placeholder="Ej: Los Álamos, Dintrans, 11kg"
-                           value="{{ filtros.busqueda|default:'' }}">
+    <!-- Tarjetas de estadísticas rápidas -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4 col-sm-6">
+            <div class="card border-primary shadow-sm text-center">
+                <div class="card-body">
+                    <i class="bi bi-box-seam fs-1 text-primary mb-2 d-block"></i>
+                    <h3 class="fw-bold mb-1">{{ estadisticas.total_pedidos }}</h3>
+                    <small class="text-muted">Pedidos encontrados</small>
                 </div>
-                <div class="col-12 col-md-4 d-flex gap-2">
+            </div>
+        </div>
+        <div class="col-md-4 col-sm-6">
+            <div class="card border-success shadow-sm text-center">
+                <div class="card-body">
+                    <i class="bi bi-cash-stack fs-1 text-success mb-2 d-block"></i>
+                    <h3 class="fw-bold mb-1">${{ estadisticas.total_ventas|floatformat:0|intcomma }}</h3>
+                    <small class="text-muted">Monto total ventas</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 col-sm-6">
+            <div class="card border-info shadow-sm text-center">
+                <div class="card-body">
+                    <i class="bi bi-graph-up-arrow fs-1 text-info mb-2 d-block"></i>
+                    <h3 class="fw-bold mb-1">${{ estadisticas.total_ganancias|floatformat:0|intcomma }}</h3>
+                    <small class="text-muted">Ganancia estimada</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-funnel me-2"></i>Filtros de búsqueda</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" id="filtrosForm" class="row g-3">
+                <!-- Búsqueda general -->
+                <div class="col-lg-5 col-md-6">
+                    <label class="form-label fw-bold">Búsqueda rápida</label>
+                    <input type="text" name="busqueda" class="form-control form-control-lg"
+                           placeholder="Dirección, sector, teléfono, nombre usuario, comentario..."
+                           value="{{ request.GET.busqueda|default:'' }}">
+                </div>
+
+                <!-- Rango de fechas -->
+                <div class="col-lg-4 col-md-6">
+                    <label class="form-label fw-bold">Rango de fechas</label>
+                    <input type="text" name="fechas" id="rangoFechas" class="form-control form-control-lg"
+                           placeholder="dd/mm/yyyy al dd/mm/yyyy"
+                           value="{{ request.GET.fechas|default:'' }}">
+                </div>
+
+                <!-- Botones -->
+                <div class="col-lg-3 d-flex align-items-end gap-2">
                     <button type="submit" class="btn btn-primary btn-lg flex-fill">
-                        <i class="bi bi-search"></i> Buscar
+                        <i class="bi bi-search"></i> Filtrar
                     </button>
                     <a href="{% url 'consultas_pedidos' %}" class="btn btn-outline-secondary btn-lg">
-                        <i class="bi bi-arrow-counterclockwise"></i>
+                        Limpiar
                     </a>
                 </div>
-                <div class="col-lg-5 col-md-6">
-                    <label class="form-label fw-bold">
-                        <i class="bi bi-calendar-range me-1"></i>Rango de Fechas
-                    </label>
-                    <input type="text" name="fechas" id="rangoFechas" class="form-control form-control-lg"
-                           placeholder="Selecciona rango (ej: 01/01/2026 al 31/01/2026)" value="{{ filtros.fechas|default:'' }}">
+
+                <!-- Filtros adicionales (estado y origen) -->
+                <div class="col-12 col-md-6 col-lg-4">
+                    <label class="form-label fw-bold">Estado</label>
+                    <select name="estado" class="form-select form-select-lg">
+                        <option value="todos" {% if request.GET.estado == 'todos' or not request.GET.estado %}selected{% endif %}>Todos</option>
+                        {% for value, label in estados_choices %}
+                            <option value="{{ value }}" {% if request.GET.estado == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-12 col-md-6 col-lg-4">
+                    <label class="form-label fw-bold">Origen</label>
+                    <select name="origen" class="form-select form-select-lg">
+                        <option value="todos" {% if request.GET.origen == 'todos' or not request.GET.origen %}selected{% endif %}>Todos</option>
+                        {% for value, label in origenes_choices %}
+                            <option value="{{ value }}" {% if request.GET.origen == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Tabla completa con columna entregador -->
-    <div class="card shadow-sm border-0">
+    <!-- Tabla de resultados -->
+    {% if page_obj %}
+    <div class="card shadow-sm">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Resultados ({{ page_obj.paginator.count }} pedidos)</h5>
+            <button class="btn btn-sm btn-outline-success" onclick="exportarExcel()">
+                <i class="bi bi-filetype-xlsx me-1"></i> Exportar Excel
+            </button>
+        </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-primary text-white">
+                <table class="table table-hover table-striped mb-0">
+                    <thead class="table-dark">
                         <tr>
+                            <th>#</th>
                             <th>Fecha</th>
-                            <th>Balón</th>
-                            <th>Cant.</th>
-                            <th>Monto</th>
+                            <th>Origen</th>
                             <th>Estado</th>
+                            <th>Productos</th>
+                            <th>Monto</th>
                             <th>Registrado por</th>
                             <th>Entregado por</th>
-                            <th>Sector / Dirección</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for p in page_obj %}
+                        {% for pedido in page_obj %}
                         <tr>
-                            <td>{{ p.fecha|date:"d/m/Y H:i" }}</td>
-                            <td>{{ p.balon.nombre }}</td>
-                            <td>{{ p.cantidad_balon }}</td>
-                            <td>$ {{ p.monto|floatformat:0|intcomma }}</td>
+                            <td>{{ pedido.id }}</td>
+                            <td>{{ pedido.fecha|date:"d/m/Y H:i" }}</td>
+                            <td>{{ pedido.get_origen_display }}</td>
                             <td>
-                                <span class="badge bg-{% if p.estado == 'entregado' %}success{% elif p.estado == 'en_ruta' %}warning{% elif p.estado == 'pendiente' %}info{% else %}danger{% endif %}">
-                                    {{ p.get_estado_display }}
+                                <span class="badge bg-{% if pedido.estado == 'entregado' %}success{% elif pedido.estado == 'en_ruta' %}warning{% elif pedido.estado == 'pendiente' %}info{% else %}danger{% endif %}">
+                                    {{ pedido.get_estado_display }}
                                 </span>
                             </td>
-                            <td>{{ p.registrador.get_full_name|default:p.registrador.username|default:"—" }}</td>
                             <td>
-                                {% if p.entregador %}
-                                    {{ p.entregador.get_full_name|default:p.entregador.username }}
+                                <small>{{ pedido.resumen_productos }}</small>
+                            </td>
+                            <td class="fw-bold text-success">
+                                ${{ pedido.monto_total|floatformat:0|intcomma }}
+                            </td>
+                            <td>{{ pedido.registrador.get_full_name|default:pedido.registrador.username }}</td>
+                            <td>
+                                {% if pedido.entregador %}
+                                    {{ pedido.entregador.get_full_name|default:pedido.entregador.username }}
                                 {% else %}
                                     —
                                 {% endif %}
                             </td>
-                            <td>
-                                <strong>{{ p.sector|default:"—" }}</strong><br>
-                                {{ p.direccion_entrega|truncatechars:50|default:"—" }}
+                            <td class="text-end">
+                                <a href="{% url 'detalle_pedido' pedido.id %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye"></i> Ver
+                                </a>
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="8" class="text-center py-5 text-muted">
+                            <td colspan="9" class="text-center py-5 text-muted">
                                 <i class="bi bi-search fs-1 d-block mb-3"></i>
-                                No se encontraron pedidos
+                                No se encontraron pedidos con los filtros actuales
                             </td>
                         </tr>
                         {% endfor %}
@@ -111,36 +185,80 @@
         </div>
     </div>
 
-    <!-- Paginación completa -->
-    {% if page_obj.paginator.num_pages > 1 %}
-    <!-- ... tu paginación completa con flechas dobles, números, etc. ... -->
+    <!-- Paginación -->
+    {% if page_obj.has_other_pages %}
+    <nav aria-label="Paginación" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-item" href="?page={{ page_obj.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}">
+                    Anterior
+                </a>
+            </li>
+            {% endif %}
+
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+                <li class="page-item"><a class="page-link" href="?page={{ num }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}">{{ num }}</a></li>
+                {% endif %}
+            {% endfor %}
+
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}">
+                    Siguiente
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="alert alert-info text-center py-5">
+        <i class="bi bi-info-circle fs-1 d-block mb-3"></i>
+        Usa los filtros superiores para buscar pedidos
+    </div>
     {% endif %}
 
 </div>
 
-<!-- Inicialización de Flatpickr -->
+<!-- Scripts -->
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // Inicializar Flatpickr en rango
     flatpickr("#rangoFechas", {
         mode: "range",
-        dateFormat: "Y-m-d",          // formato que se envía al backend
+        dateFormat: "Y-m-d",
         altInput: true,
-        altFormat: "d/m/Y",           // formato visible para el usuario
-        locale: flatpickr.l10ns.es,
+        altFormat: "d/m/Y",
+        locale: "es",
         showMonths: 2,
-        weekNumbers: false,
-        allowInput: true,
     });
 });
+
+// Exportar a Excel (agrega parámetro a la URL actual)
+function exportarExcel() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('exportar', 'excel');
+    window.location.href = url.toString();
+}
 </script>
 
-<!-- Tooltips -->
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-});
-</script>
+<style>
+    .table th, .table td {
+        vertical-align: middle;
+    }
+    .badge {
+        font-size: 0.9rem;
+    }
+    @media (max-width: 768px) {
+        .table-responsive {
+            font-size: 0.9rem;
+        }
+    }
+</style>
+
 {% endblock %}

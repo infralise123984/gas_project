@@ -29,13 +29,14 @@ urlpatterns = [
     # Tus rutas originales (sin cambios, solo les agregué nombres)
     # path('mantenedor_clientes/', views.mantenedor_clientes, name='mantenedor_clientes'),
     path('consultas_pedidos/', views.consultas_pedidos, name='consultas_pedidos'),
+    path('pedido/<int:pedido_id>/', views.detalle_pedido, name='detalle_pedido'),  # Nueva ruta
     path('transaccional_pedido/', views.transaccional_pedido, name='transaccional_pedido'),
     path('reporte_ventas/', views.reporte_ventas, name='reporte_ventas'),
     path('cliente_pedido/', views.cliente_pedido, name='cliente_pedido'),
     # path('camionero_entregas/', views.camionero_entregas, name='camionero_entregas'),
     path('precios/', views.precios_balones, name='precios_balones'),
     path('consultas-pedidos/', views.consultas_pedidos, name='consultas_pedidos'),
-    path('mis-entregas-camionero/', views.mis_entregas, name='mis_entregas'),
+    path('mis-entregas-camionero/', views.mis_entregas_camionero, name='mis_entregas'),
     path('mis-pedidos-hoy/',   views.mis_pedidos_hoy,        name='mis_pedidos_hoy'),
     path("camionero/", views.camionero_entregas, name="camionero_entregas"),
     path("camionero/tomar/<int:pedido_id>/", views.camionero_tomar_pedido, name="camionero_tomar_pedido"),

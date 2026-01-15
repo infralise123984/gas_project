@@ -1,19 +1,18 @@
 {% extends 'base.html' %}
 {% load humanize %}
 
-{% block title %}Mis Entregas - GasFácil{% endblock %}
+{% block title %}Mis Entregas Hoy - GasFácil{% endblock %}
 
 {% block content %}
-
 <div class="container-fluid px-3 py-4" style="max-width: 540px; margin: 0 auto;">
 
     <!-- Título grande y claro -->
-    <h2 class="text-center fw-bold text-primary mb-4" style="font-size: 1.8rem;">
-        <i class="bi bi-truck me-2"></i> Mis Entregas
+    <h2 class="text-center fw-bold text-primary mb-4 fs-4">
+        <i class="bi bi-check-circle-fill me-2"></i>Mis Entregas Hoy
     </h2>
 
-    <!-- Mensaje explicativo grande y simple -->
-    <div class="alert alert-info text-center mb-5 py-3" style="font-size: 1.1rem; line-height: 1.5;">
+    <!-- Mensaje explicativo -->
+    <div class="alert alert-info text-center mb-4 py-3">
         <i class="bi bi-info-circle-fill me-2 fs-4"></i>
         <strong>Estás viendo tus entregas de hoy</strong><br>
         <small class="d-block mt-2 text-muted">
@@ -28,43 +27,49 @@
         </div>
     </div>
 
-    <!-- Lista de entregas (formato cards, muy legible en celular) -->
+    <!-- Lista de entregas -->
     {% if pedidos_hoy %}
-        {% for p in pedidos_hoy %}
-        <div class="card shadow mb-4 border-{% if p.estado == 'entregado' %}success{% else %}warning{% endif %}" style="border-width: 3px;">
-            <div class="card-body text-center p-4">
+        {% for pedido in pedidos_hoy %}
+        <div class="card shadow mb-4 border-success border-3">
+            <div class="card-body p-4 text-center">
 
                 <!-- Número de pedido grande -->
-                <h4 class="fw-bold mb-3 text-dark">Pedido #{{ p.id }}</h4>
+                <h4 class="fw-bold mb-3 text-dark">Pedido #{{ pedido.id }}</h4>
 
-                <!-- Información principal en líneas claras y grandes -->
-                <div class="mb-3" style="font-size: 1.25rem;">
-                    <strong>{{ p.cantidad_balon }} × {{ p.balon.nombre }}</strong>
+                <!-- Productos (lista clara) -->
+                <div class="mb-4">
+                    <h5 class="fw-bold mb-2">Productos entregados:</h5>
+                    <ul class="list-group list-group-flush">
+                        {% for detalle in pedido.detalles.all %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center fs-5">
+                            {{ detalle.cantidad }} × {{ detalle.balon.nombre }}
+                            <span class="badge bg-success fs-5">${{ detalle.subtotal|floatformat:0|intcomma }}</span>
+                        </li>
+                        {% empty %}
+                        <li class="list-group-item text-muted">Sin productos</li>
+                        {% endfor %}
+                    </ul>
+                    <div class="mt-3 fw-bold fs-4 text-success">
+                        Total: ${{ pedido.monto_total|floatformat:0|intcomma }}
+                    </div>
                 </div>
 
-                <div class="mb-4" style="font-size: 1.1rem; line-height: 1.4;">
-                    {% if p.direccion_entrega %}
-                        {{ p.direccion_entrega|truncatechars:80 }}
-                    {% else %}
-                        <span class="text-muted">Sin dirección específica</span>
+                <!-- Dirección -->
+                {% if pedido.direccion_entrega %}
+                <div class="mb-4">
+                    <h5 class="fw-bold mb-2">Dirección:</h5>
+                    <p class="fs-5 fw-semibold text-primary">{{ pedido.direccion_entrega|linebreaksbr }}</p>
+                    {% if pedido.sector %}
+                    <small class="text-muted">Sector: {{ pedido.sector }}</small>
                     {% endif %}
                 </div>
+                {% else %}
+                <p class="text-muted mb-4">Sin dirección específica (venta local o tarreo)</p>
+                {% endif %}
 
-                <!-- Estado con badge grande -->
-                <div class="mb-3">
-                    <span class="badge fs-5 px-4 py-2 bg-{% if p.estado == 'entregado' %}success{% else %}warning{% endif %}">
-                        {{ p.get_estado_display }}
-                    </span>
-                </div>
-
-                <!-- Monto grande -->
-                <div class="fw-bold text-success mb-2" style="font-size: 1.4rem;">
-                    $ {{ p.monto|floatformat:0|intcomma }}
-                </div>
-
-                <!-- Hora pequeña abajo -->
+                <!-- Fecha y hora -->
                 <small class="text-muted d-block">
-                    {{ p.fecha|date:"d/m/Y" }} - {{ p.fecha|time:"H:i" }}
+                    Entregado: {{ pedido.fecha|date:"d/m/Y H:i" }}
                 </small>
 
             </div>
@@ -84,18 +89,16 @@
 </div>
 
 <style>
-    /* Solo estilos mínimos inline para no depender de css externo */
-    .card {
-        border-radius: 12px;
-        overflow: hidden;
+    /* Ajustes mínimos inline para móvil */
+    .card-body {
+        padding: 1.25rem !important;
     }
-    .badge {
-        font-weight: 600;
+    .list-group-item {
+        font-size: 1.1rem;
+        padding: 0.75rem 1rem;
     }
-    @media (max-width: 576px) {
-        h2 { font-size: 1.6rem !important; }
-        .card-body { padding: 1.5rem !important; }
+    .fs-5 {
+        font-size: 1.25rem !important;
     }
 </style>
-
 {% endblock %}
