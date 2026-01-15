@@ -1,16 +1,12 @@
 {% extends 'base.html' %}
 {% load humanize %}
-
 {% block title %}Mis Entregas - GasFácil{% endblock %}
-
 {% block content %}
 <div class="container-fluid px-3 py-4" style="max-width: 540px; margin: 0 auto;">
-
     <!-- Título centrado y con más aire -->
     <h2 class="text-center fw-bold text-primary mb-5 fs-3">
         <i class="bi bi-truck me-2"></i>Mis Entregas
     </h2>
-
     <!-- Contador centrado y destacado -->
     <div class="text-center mb-5">
         <span class="badge bg-primary fs-5 px-5 py-3 shadow-lg rounded-pill">
@@ -18,17 +14,14 @@
             {{ pedidos_en_ruta.count }} en ruta
         </span>
     </div>
-
     <!-- Sección: En Ruta -->
     {% if pedidos_en_ruta %}
     <h5 class="text-success fw-bold mb-4 text-center fs-5">En Ruta ({{ pedidos_en_ruta.count }})</h5>
     {% for pedido in pedidos_en_ruta %}
     <div class="card shadow-lg mb-5 border-warning border-3 rounded-4">
         <div class="card-body p-4 text-center">
-
             <!-- Número de pedido -->
             <h4 class="fw-bold mb-4 text-dark">Pedido #{{ pedido.id }}</h4>
-
             <!-- Productos -->
             <div class="mb-4">
                 <ul class="list-group list-group-flush mb-3">
@@ -58,7 +51,6 @@
             {% else %}
             <p class="text-muted mb-4 fs-5">Sin dirección específica</p>
             {% endif %}
-
             <!-- Botones horizontales -->
             <div class="row g-3">
                 <div class="col-6">
@@ -84,16 +76,13 @@
     </div>
     {% endfor %}
     {% endif %}
-
     <!-- Sección: Pendientes -->
     {% if pendientes %}
     <h5 class="text-info fw-bold mb-4 text-center fs-5">Pendientes ({{ pendientes.count }})</h5>
     {% for pedido in pendientes %}
     <div class="card shadow-lg mb-5 border-info border-3 rounded-4">
         <div class="card-body p-4 text-center">
-
             <h4 class="fw-bold mb-4 text-dark">Pedido #{{ pedido.id }}</h4>
-
             <!-- Productos -->
             <div class="mb-4">
                 <h5 class="fw-bold mb-3">Productos:</h5>
@@ -124,7 +113,6 @@
             {% else %}
             <p class="text-muted mb-4 fs-5">Sin dirección específica</p>
             {% endif %}
-
             <!-- Botón tomar (solo uno) -->
             <div class="d-grid gap-2">
                 <form method="post" action="{% url 'camionero_tomar_pedido' pedido.id %}"
@@ -139,7 +127,6 @@
     </div>
     {% endfor %}
     {% endif %}
-
     <!-- Mensaje sin pedidos -->
     {% if not pedidos_en_ruta and not pendientes %}
     <div class="alert alert-light text-center py-5 shadow-sm rounded-4">
@@ -148,9 +135,7 @@
         <p class="text-muted fs-5">No hay entregas pendientes ni en ruta por ahora.</p>
     </div>
     {% endif %}
-
 </div>
-
 <!-- Recarga automática -->
 <script>
 setTimeout(() => location.reload(true), 30000);
