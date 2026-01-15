@@ -8,10 +8,7 @@ services:
     env: python
     branch: develop
     plan: free
-    buildCommand: >
-      pip install -r requirements-render.txt && \
-      python manage.py migrate && \
-      python manage.py collectstatic --noinput
+    buildCommand: bash build.sh
     startCommand: gunicorn gasmanager.wsgi --log-file -
     healthCheckPath: /
 
