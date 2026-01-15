@@ -16,6 +16,13 @@ from django.db.models import Count, F, Q, Sum
 from django.core.paginator import Paginator
 from django.shortcuts import redirect, render
 
+from django.http import HttpResponse
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+
+
+
 # App local
 from .forms import DetallePedidoForm, PedidoCabeceraForm ,DetalleFormSet
 from .models import Pedido, TipoBalon, Usuario, DetallePedido,HistorialEstadoPedido
@@ -179,10 +186,6 @@ def logout_view(request):
 # 1. Vista completa: Consultas avanzadas (solo Jefe y Administrador)
 # ────────────────────────────────────────────────────────────────
 # Agregar estos imports al inicio del archivo views.py
-from django.http import HttpResponse
-import openpyxl
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-from openpyxl.utils import get_column_letter
 
 # ... (mantener los demás imports)
 
