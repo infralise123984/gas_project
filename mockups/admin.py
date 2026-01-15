@@ -1,6 +1,6 @@
 # mockups/admin.py
 from django.contrib import admin
-from .models import Usuario, TipoBalon, HistorialPrecioBalon, Pedido, DetallePedido
+from .models import Usuario, TipoBalon, HistorialPrecioBalon, Pedido, DetallePedido, HistorialEstadoPedido
 
 
 @admin.register(Usuario)
@@ -56,6 +56,14 @@ class DetallePedidoInline(admin.TabularInline):
     ordering = ('balon__peso_neto_gas',)
 
 
+class HistorialEstadoPedidoInline(admin.TabularInline):
+    model = HistorialEstadoPedido
+    extra = 0
+    fields = ('estado_anterior', 'estado_nuevo', 'cambiado_por', 'fecha_cambio', 'comentario')
+    readonly_fields = ('estado_anterior', 'estado_nuevo', 'cambiado_por', 'fecha_cambio')
+    ordering = ('-fecha_cambio',)
+
+
 
 @admin.register(Pedido)
 class PedidoAdmin(admin.ModelAdmin):
@@ -75,7 +83,7 @@ class PedidoAdmin(admin.ModelAdmin):
     list_filter = ('estado', 'origen', 'registrador__rol', 'entregador', 'metodo_pago')  # ← quitamos 'fecha'
     search_fields = ('id', 'sector', 'direccion_entrega', 'registrador__username', 'entregador__username')
     readonly_fields = ('fecha', 'monto_total', 'ganancia_total', 'resumen_productos')
-    inlines = [DetallePedidoInline]
+    inlines = [DetallePedidoInline, HistorialEstadoPedidoInline]
     # date_hierarchy = 'fecha'  # ya comentado, perfecto
     actions = ['marcar_entregado', 'marcar_cancelado']
 
@@ -86,6 +94,24 @@ class PedidoAdmin(admin.ModelAdmin):
     def marcar_cancelado(self, request, queryset):
         queryset.update(estado='cancelado')
     marcar_cancelado.short_description = "Marcar seleccionados como cancelados"
+
+
+@admin.register(HistorialEstadoPedido)
+class HistorialEstadoPedidoAdmin(admin.ModelAdmin):
+    list_display = (
+        'pedido',
+        'estado_anterior',
+        'estado_nuevo',
+        'cambiado_por',
+        'fecha_cambio',
+        'comentario'
+    )
+    list_filter = ('estado_nuevo', 'fecha_cambio', 'cambiado_por')
+    search_fields = ('pedido__id', 'comentario')
+    readonly_fields = ('fecha_cambio',)
+    ordering = ('-fecha_cambio',)
+
+
 @admin.register(DetallePedido)
 class DetallePedidoAdmin(admin.ModelAdmin):
     list_display = (
