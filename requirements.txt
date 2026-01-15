@@ -2,9 +2,9 @@
 # Dependencias mínimas basadas en imports reales del proyecto (views.py, forms, models, templates)
 
 Django==5.1.3                  # LTS estable, base para todo (auth, models, views, forms, db, etc.)
-django-bootstrap5==24.4        # Bootstrap 5 en forms y templates (diseño responsivo, vistas como camionero_entregas)
+# django-bootstrap5==24.4        # Bootstrap 5 en forms y templates (diseño responsivo, vistas como camionero_entregas)
 mysqlclient==2.2.6             # MySQL para desarrollo local (cámbialo si usas PostgreSQL)
-# psycopg2-binary==2.9.10      # Descomenta si usas PostgreSQL en producción (Render, etc.)
+psycopg2-binary==2.9.10        # Descomenta si usas PostgreSQL en producción (Render, etc.)
 gunicorn==23.0.0               # Servidor WSGI para producción
 whitenoise==6.7.0              # Estáticos en producción (CSS, JS para Bootstrap, etc.)
 python-dotenv==1.0.1           # .env para SECRET_KEY, DB_PASSWORD, etc. (seguridad)
