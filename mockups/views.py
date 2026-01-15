@@ -18,7 +18,7 @@ from django.shortcuts import redirect, render
 
 # App local
 from .forms import DetallePedidoForm, PedidoCabeceraForm ,DetalleFormSet
-from .models import Pedido, TipoBalon, Usuario, DetallePedido
+from .models import Pedido, TipoBalon, Usuario, DetallePedido,HistorialEstadoPedido
 def index(request):
     return render(request, "index.html")
 
@@ -573,7 +573,15 @@ def transaccional_pedido(request):
                     "es_telefonista": es_telefonista,
                     "es_bodeguero": es_bodeguero,
                 })
-
+            HistorialEstadoPedido.objects.create(
+                pedido=pedido,
+                estado_anterior=pedido.estado,          # "en_ruta"
+                estado_nuevo="pendiente",
+                cambiado_por=request.user,
+                fecha_cambio=timezone.now(),
+                # comentario opcional: podrías agregar un campo en el futuro para notas
+                # comentario="Entrega confirmada por el cliente"  # ejemplo
+            )
             pedido.calcular_totales()
             messages.success(request, f"¡Pedido #{pedido.id} registrado correctamente con {detalles_guardados} producto(s)!")
             return redirect("index")
@@ -744,7 +752,16 @@ def camionero_tomar_pedido(request, pedido_id):
             origen="telefono"                  # solo permite tomar pedidos telefónicos
         )
         pedido.estado = "en_ruta"
-        pedido.entregador = request.user       # ← asignamos al camionero que lo toma
+        pedido.entregador = request.user   
+        HistorialEstadoPedido.objects.create(
+            pedido=pedido,
+            estado_anterior=pedido.estado,          
+            estado_nuevo="en_ruta",
+            cambiado_por=request.user,
+            fecha_cambio=timezone.now(),
+            # comentario opcional: podrías agregar un campo en el futuro para notas
+            # comentario="Entrega confirmada por el cliente"  # ejemplo
+        )# ← asignamos al camionero que lo toma
         pedido.save()
 
         messages.success(
@@ -824,6 +841,15 @@ def camionero_cancelar_entrega(request, pedido_id):
         )
         pedido.estado = "cancelado"
         pedido.entregador = None  # lo libera para que otro camionero lo tome
+        HistorialEstadoPedido.objects.create(
+            pedido=pedido,
+            estado_anterior=pedido.estado,          # "en_ruta"
+            estado_nuevo="cancelado",
+            cambiado_por=request.user,
+            fecha_cambio=timezone.now(),
+            # comentario opcional: podrías agregar un campo en el futuro para notas
+            # comentario="Entrega confirmada por el cliente"  # ejemplo
+        )
         pedido.save()
         messages.warning(request, f"Pedido #{pedido.id} ha sido cancelado.")
     except Pedido.DoesNotExist:
