@@ -5,7 +5,6 @@ from datetime import date, datetime
 from calendar import monthrange
 from django.utils import timezone
 from zoneinfo import ZoneInfo
-from datetime import timedelta
 # Django contrib
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -19,13 +18,65 @@ from django.shortcuts import redirect, render
 from django.http import HttpResponse
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-from openpyxl.utils import get_column_letter
 
 
 
 # App local
 from .forms import DetallePedidoForm, PedidoCabeceraForm ,DetalleFormSet
 from .models import Pedido, TipoBalon, Usuario, DetallePedido,HistorialEstadoPedido
+
+
+# ──────────────────────────────────────────────────────────────
+# Funciones auxiliares reutilizables
+# ──────────────────────────────────────────────────────────────
+def parse_fecha_rango(fechas_str):
+    """
+    Parsea un rango de fechas en formato 'YYYY-MM-DD to YYYY-MM-DD'.
+    Retorna tupla: (fecha_inicio, fecha_fin, display_str, desde_str, hasta_str)
+    Si el formato es inválido, retorna (None, None, "", "", "")
+    """
+    if not fechas_str:
+        return None, None, "", "", ""
+    
+    fechas_clean = fechas_str.replace("+", " ").strip()
+    if " to " not in fechas_clean:
+        return None, None, "", "", ""
+    
+    try:
+        desde_str, hasta_str = fechas_clean.split(" to ", 1)
+        desde_str = desde_str.strip()
+        hasta_str = hasta_str.strip()
+        desde = datetime.strptime(desde_str, "%Y-%m-%d")
+        hasta = datetime.strptime(hasta_str, "%Y-%m-%d")
+        
+        fecha_inicio = timezone.make_aware(desde.replace(hour=0, minute=0, second=0, microsecond=0))
+        fecha_fin = timezone.make_aware(hasta.replace(hour=23, minute=59, second=59, microsecond=999999))
+        
+        fecha_display = f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
+        return fecha_inicio, fecha_fin, fecha_display, desde_str, hasta_str
+    except ValueError:
+        return None, None, "", "", ""
+
+
+# Utilidades comunes
+def require_roles(request, roles, redirect_to="index", message="No tienes permiso para acceder a esta sección."):
+    """Comprueba el rol del usuario y retorna una HttpResponse de redirección si no tiene permiso.
+    Retorna None cuando el usuario tiene permiso.
+    """
+    if request.user.rol not in roles:
+        messages.error(request, message)
+        return redirect(redirect_to)
+    return None
+
+
+def get_display_name(user):
+    """Devuelve el nombre legible de un usuario o '—' si es None."""
+    if not user:
+        return "—"
+    nombre = (user.get_full_name() or "").strip()
+    return nombre if nombre else user.username
+
+
 def index(request):
     return render(request, "index.html")
 
@@ -34,9 +85,9 @@ def index(request):
 
 @login_required
 def precios_balones(request):
-    if request.user.rol not in ["jefe", "admin"]:
-        messages.error(request, "No tienes permiso para gestionar precios.")
-        return redirect("index")
+    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para gestionar precios.")
+    if resp:
+        return resp
 
     balones = TipoBalon.objects.all().order_by("peso_neto_gas")
 
@@ -94,9 +145,9 @@ def precios_balones(request):
 
 @login_required
 def crear_usuario(request):
-    if request.user.rol not in ["admin"]:
-        messages.error(request, "No tienes permiso para crear usuarios.")
-        return redirect("index")
+    resp = require_roles(request, ["admin"], "index", "No tienes permiso para crear usuarios.")
+    if resp:
+        return resp
 
     # Obtenemos las choices del modelo para el select
     roles_choices = Usuario.ROLES
@@ -160,14 +211,7 @@ def login_view(request):
             messages.success(
                 request, f"¡Bienvenido, {user.get_full_name() or user.username}!"
             )
-
-            # Redirección según rol
-            if user.rol == "camionero":
-                return redirect("/")
-            elif user.rol in ["jefe", "admin"]:
-                return redirect("/")
-            else:  # Para telefonista y bodeguero
-                return redirect("/")
+            return redirect("index")
         else:
             messages.error(request, "Usuario o contraseña incorrectos")
 
@@ -193,9 +237,9 @@ def logout_view(request):
 @login_required
 def consultas_pedidos(request):
     """Vista mejorada con más detalles y opción de exportar a Excel"""
-    if request.user.rol not in ["jefe", "admin"]:
-        messages.error(request, "No tienes permiso para acceder a esta sección.")
-        return redirect("index")
+    resp = require_roles(request, ["jefe", "admin"], "index")
+    if resp:
+        return resp
 
     # Captura de parámetros GET
     busqueda = request.GET.get("busqueda", "").strip()
@@ -204,12 +248,10 @@ def consultas_pedidos(request):
     origen = request.GET.get("origen", "todos")
     exportar = request.GET.get("exportar", "")
 
-    # Variables para el template
-    fechas_display = ""
-    fecha_desde_str = ""
-    fecha_hasta_str = ""
-    fecha_inicio = None
-    fecha_fin = None
+    # Parsear fechas
+    fecha_inicio, fecha_fin, fechas_display, _, _ = parse_fecha_rango(fechas_str)
+    if fechas_str and not fecha_inicio:
+        messages.warning(request, "Formato de fechas inválido. Usa el selector de fechas.")
 
     # Base queryset con todos los detalles
     queryset = Pedido.objects.select_related(
@@ -219,24 +261,8 @@ def consultas_pedidos(request):
     ).order_by("-fecha")
 
     # Filtro por rango de fechas
-    if fechas_str:
-        fechas_clean = fechas_str.replace("+", " ").strip()
-        if " to " in fechas_clean:
-            try:
-                desde_str, hasta_str = fechas_clean.split(" to ", 1)
-                desde_str = desde_str.strip()
-                hasta_str = hasta_str.strip()
-                desde = datetime.strptime(desde_str, "%Y-%m-%d")
-                hasta = datetime.strptime(hasta_str, "%Y-%m-%d")
-                fecha_inicio = timezone.make_aware(desde.replace(hour=0, minute=0, second=0, microsecond=0))
-                hasta_fin = hasta.replace(hour=23, minute=59, second=59, microsecond=999999)
-                fecha_fin = timezone.make_aware(hasta_fin)
-                queryset = queryset.filter(fecha__range=(fecha_inicio, fecha_fin))
-                fecha_desde_str = desde.strftime("%Y-%m-%d")
-                fecha_hasta_str = hasta.strftime("%Y-%m-%d")
-                fechas_display = f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
-            except ValueError:
-                messages.warning(request, "Formato de fechas inválido. Usa el selector de fechas.")
+    if fecha_inicio and fecha_fin:
+        queryset = queryset.filter(fecha__range=(fecha_inicio, fecha_fin))
 
     # Filtro por texto (búsqueda)
     if busqueda:
@@ -346,10 +372,8 @@ def exportar_pedidos_excel(queryset, rango_fechas):
         productos_str = " + ".join(productos_list) if productos_list else "—"
 
         # Registrador
-        registrador = pedido.registrador.get_full_name() or pedido.registrador.username if pedido.registrador else "—"
-        
-        # Entregador
-        entregador = pedido.entregador.get_full_name() or pedido.entregador.username if pedido.entregador else "—"
+        registrador = get_display_name(pedido.registrador)
+        entregador = get_display_name(pedido.entregador)
         
         # Sector/Dirección
         ubicacion = f"{pedido.sector or '—'} / {pedido.direccion_entrega or '—'}"
@@ -425,9 +449,9 @@ def exportar_pedidos_excel(queryset, rango_fechas):
 @login_required
 def detalle_pedido(request, pedido_id):
     """Vista detallada de un pedido específico"""
-    if request.user.rol not in ["jefe", "admin", "telefonista", "bodeguero", "camionero"]:
-        messages.error(request, "No tienes permiso para ver este pedido.")
-        return redirect("index")
+    resp = require_roles(request, ["jefe", "admin", "telefonista", "bodeguero", "camionero"], "index", "No tienes permiso para ver este pedido.")
+    if resp:
+        return resp
 
     try:
         pedido = Pedido.objects.select_related(
@@ -458,9 +482,9 @@ def detalle_pedido(request, pedido_id):
 # ────────────────────────────────────────────────────────────────
 @login_required
 def mis_entregas_camionero(request):
-    if request.user.rol != "camionero":
-        messages.error(request, "Solo camioneros pueden ver sus entregas.")
-        return redirect("index")
+    resp = require_roles(request, ["camionero"], "index", "Solo camioneros pueden ver sus entregas.")
+    if resp:
+        return resp
 
     # Quitamos el filtro de fecha para probar
     pedidos_hoy = Pedido.objects.filter(
@@ -531,11 +555,10 @@ def mis_pedidos_hoy(request):
 
 @login_required
 def transaccional_pedido(request):
-    if request.user.rol not in ["telefonista", "bodeguero"]:
-        messages.error(request, "Solo telefonista y/o bodeguero pueden generar pedidos.")
-        return redirect("index")
+    resp = require_roles(request, ["telefonista", "bodeguero"], "index", "Solo telefonista y/o bodeguero pueden generar pedidos.")
+    if resp:
+        return resp
 
-    es_telefonista = request.user.rol == "telefonista"
     es_bodeguero = request.user.rol == "bodeguero"
 
     if request.method == "POST":
@@ -550,6 +573,8 @@ def transaccional_pedido(request):
             pedido = form_cabecera.save(commit=False)
             pedido.registrador = request.user
             pedido.origen = "local" if es_bodeguero else "telefono"
+            # Bodeguero: venta entregada al instante. Telefonista: pendiente de entrega
+            pedido.estado = "entregado" if es_bodeguero else "pendiente"
             pedido.save()
 
             # Guardar los detalles válidos
@@ -559,7 +584,7 @@ def transaccional_pedido(request):
                     balon = detalle_form.cleaned_data.get('balon')
                     cantidad = detalle_form.cleaned_data.get('cantidad')
                     
-                    if balon and cantidad:  # Solo guardar si tiene datos válidos
+                    if balon and cantidad:
                         detalle = detalle_form.save(commit=False)
                         detalle.pedido = pedido
                         detalle.precio_venta_unitario = balon.precio_local if es_bodeguero else balon.precio_domicilio
@@ -573,17 +598,16 @@ def transaccional_pedido(request):
                 return render(request, "transaccional_pedido.html", {
                     "form_cabecera": form_cabecera,
                     "formset": formset,
-                    "es_telefonista": es_telefonista,
                     "es_bodeguero": es_bodeguero,
                 })
+
+            # Registrar cambio de estado
             HistorialEstadoPedido.objects.create(
                 pedido=pedido,
-                estado_anterior=pedido.estado,          # "en_ruta"
-                estado_nuevo="pendiente",
+                estado_anterior="pendiente",
+                estado_nuevo=pedido.estado,
                 cambiado_por=request.user,
                 fecha_cambio=timezone.now(),
-                # comentario opcional: podrías agregar un campo en el futuro para notas
-                # comentario="Entrega confirmada por el cliente"  # ejemplo
             )
             pedido.calcular_totales()
             messages.success(request, f"¡Pedido #{pedido.id} registrado correctamente con {detalles_guardados} producto(s)!")
@@ -601,41 +625,24 @@ def transaccional_pedido(request):
     return render(request, "transaccional_pedido.html", {
         "form_cabecera": form_cabecera,
         "formset": formset,
-        "es_telefonista": es_telefonista,
         "es_bodeguero": es_bodeguero,
     })
 
 
 @login_required
 def reporte_ventas(request):
-    if request.user.rol not in ["jefe", "admin"]:
-        messages.error(request, "Solo jefes y administradores pueden acceder a los reportes.")
-        return redirect("index")
+    resp = require_roles(request, ["jefe", "admin"], "index", "Solo jefes y administradores pueden acceder a los reportes.")
+    if resp:
+        return resp
 
     fechas_str = request.GET.get("fechas", "").strip()
-    fecha_inicio = None
-    fecha_fin = None
-    fechas_display = ""
-
-    # Caso 1: Filtro explícito
-    if fechas_str:
-        fechas_clean = fechas_str.replace("+", " ").strip()
-        if " to " in fechas_clean:
-            try:
-                desde_str, hasta_str = fechas_clean.split(" to ", 1)
-                desde_str = desde_str.strip()
-                hasta_str = hasta_str.strip()
-                desde = datetime.strptime(desde_str, "%Y-%m-%d")
-                hasta = datetime.strptime(hasta_str, "%Y-%m-%d")
-                fecha_inicio = timezone.make_aware(desde.replace(hour=0, minute=0, second=0, microsecond=0))
-                hasta_fin = hasta.replace(hour=23, minute=59, second=59, microsecond=999999)
-                fecha_fin = timezone.make_aware(hasta_fin)
-                fechas_display = f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
-            except ValueError:
-                messages.warning(request, "Rango de fechas inválido. Se muestra el mes actual.")
-                fechas_str = ""
-
-    # Caso 2: Mes actual por defecto
+    
+    # Intentar parsear fechas explícitas
+    fecha_inicio, fecha_fin, fechas_display, _, _ = parse_fecha_rango(fechas_str)
+    if fechas_str and not fecha_inicio:
+        messages.warning(request, "Rango de fechas inválido. Se muestra el mes actual.")
+    
+    # Si no hay fechas válidas, usar mes actual por defecto
     if not fecha_inicio or not fecha_fin:
         hoy = timezone.now().date()
         primer_dia = date(hoy.year, hoy.month, 1)
@@ -657,7 +664,7 @@ def reporte_ventas(request):
     total_pedidos = pedidos.count()
     promedio_pedido = total_ventas / total_pedidos if total_pedidos > 0 else 0
 
-    # Top tipos de gas (sin usar propiedad subtotal)
+    # Top tipos de gas
     por_balon = DetallePedido.objects.filter(
         pedido__in=pedidos
     ).values(
@@ -702,9 +709,9 @@ def cliente_pedido(request):
 
 @login_required
 def camionero_entregas(request):
-    if request.user.rol not in ["camionero", "admin"]:
-        messages.error(request, "Acceso restringido, únicamente camioneros pueden acceder.")
-        return redirect("index")
+    resp = require_roles(request, ["camionero", "admin"], "index", "Acceso restringido, únicamente camioneros pueden acceder.")
+    if resp:
+        return resp
 
     user = request.user
 
@@ -743,34 +750,31 @@ def camionero_entregas(request):
 
 @login_required
 def camionero_tomar_pedido(request, pedido_id):
-    if request.user.rol != "camionero":
-        messages.error(request, "Solo camioneros pueden tomar pedidos.")
-        return redirect("index")
+    resp = require_roles(request, ["camionero"], "index", "Solo camioneros pueden tomar pedidos.")
+    if resp:
+        return resp
 
     try:
         pedido = Pedido.objects.get(
             id=pedido_id,
             estado="pendiente",
-            entregador__isnull=True,           # ← seguridad extra
-            origen="telefono"                  # solo permite tomar pedidos telefónicos
+            entregador__isnull=True,
+            origen="telefono"
         )
+        estado_anterior = pedido.estado
         pedido.estado = "en_ruta"
-        pedido.entregador = request.user   
+        pedido.entregador = request.user
+        pedido.save()
+
         HistorialEstadoPedido.objects.create(
             pedido=pedido,
-            estado_anterior=pedido.estado,          
+            estado_anterior=estado_anterior,
             estado_nuevo="en_ruta",
             cambiado_por=request.user,
             fecha_cambio=timezone.now(),
-            # comentario opcional: podrías agregar un campo en el futuro para notas
-            # comentario="Entrega confirmada por el cliente"  # ejemplo
-        )# ← asignamos al camionero que lo toma
-        pedido.save()
-
-        messages.success(
-            request,
-            f"Pedido #{pedido.id} tomado. Dirígete al domicilio"
         )
+
+        messages.success(request, f"Pedido #{pedido.id} tomado. Dirígete al domicilio")
     except Pedido.DoesNotExist:
         messages.error(request, "El pedido ya no está disponible o ya fue tomado.")
 
@@ -784,57 +788,42 @@ def camionero_marcar_entregado(request, pedido_id):
     - Solo el camionero que lo tomó puede marcarlo.
     - Registra el cambio en el historial de estados.
     """
-    if request.user.rol != "camionero":
-        messages.error(request, "Solo los camioneros pueden marcar entregas como completadas.")
-        return redirect("index")
+    resp = require_roles(request, ["camionero"], "index", "Solo los camioneros pueden marcar entregas como completadas.")
+    if resp:
+        return resp
 
     try:
-        # Buscamos el pedido con condiciones de seguridad estrictas
         pedido = Pedido.objects.get(
             id=pedido_id,
-            estado="en_ruta",                     # Solo se puede marcar entregado si está en ruta
-            entregador=request.user,              # Solo el que lo tomó puede marcarlo
-            origen="telefono"                     # Solo pedidos telefónicos (no locales)
+            estado="en_ruta",
+            entregador=request.user,
+            origen="telefono"
         )
     except Pedido.DoesNotExist:
-        messages.error(
-            request,
-            "El pedido no existe, ya no está en ruta, no te pertenece o ya fue procesado."
-        )
+        messages.error(request, "El pedido no existe, ya no está en ruta, no te pertenece o ya fue procesado.")
         return redirect("camionero_entregas")
 
-    # Registrar el cambio de estado ANTES de modificarlo
+    estado_anterior = pedido.estado
+    pedido.estado = "entregado"
+    pedido.save()
+
     HistorialEstadoPedido.objects.create(
         pedido=pedido,
-        estado_anterior=pedido.estado,          # "en_ruta"
+        estado_anterior=estado_anterior,
         estado_nuevo="entregado",
         cambiado_por=request.user,
         fecha_cambio=timezone.now(),
-        # comentario opcional: podrías agregar un campo en el futuro para notas
-        # comentario="Entrega confirmada por el cliente"  # ejemplo
     )
 
-    # Actualizar el pedido
-    pedido.estado = "entregado"
-    # No es necesario volver a guardar entregador, ya está asignado
-    pedido.save()
-
-    # Mensaje de éxito
-    messages.success(
-        request,
-        f"¡Pedido #{pedido.id} marcado como ENTREGADO exitosamente!"
-    )
-
-    # Opcional: podrías redirigir a una vista de "mis entregas de hoy" o detalle
+    messages.success(request, f"¡Pedido #{pedido.id} marcado como ENTREGADO exitosamente!")
     return redirect("camionero_entregas")
-    # Alternativa: return redirect("detalle_pedido", pedido_id=pedido.id)
     
     
 @login_required
 def camionero_cancelar_entrega(request, pedido_id):
-    if request.user.rol != "camionero":
-        messages.error(request, "Solo camioneros pueden cancelar entregas.")
-        return redirect("camionero_entregas")
+    resp = require_roles(request, ["camionero"], "camionero_entregas", "Solo camioneros pueden cancelar entregas.")
+    if resp:
+        return resp
 
     try:
         pedido = Pedido.objects.get(
@@ -842,18 +831,18 @@ def camionero_cancelar_entrega(request, pedido_id):
             estado="en_ruta",
             entregador=request.user
         )
+        estado_anterior = pedido.estado
         pedido.estado = "cancelado"
-        pedido.entregador = None  # lo libera para que otro camionero lo tome
+        pedido.entregador = None
+        pedido.save()
+
         HistorialEstadoPedido.objects.create(
             pedido=pedido,
-            estado_anterior=pedido.estado,          # "en_ruta"
+            estado_anterior=estado_anterior,
             estado_nuevo="cancelado",
             cambiado_por=request.user,
             fecha_cambio=timezone.now(),
-            # comentario opcional: podrías agregar un campo en el futuro para notas
-            # comentario="Entrega confirmada por el cliente"  # ejemplo
         )
-        pedido.save()
         messages.warning(request, f"Pedido #{pedido.id} ha sido cancelado.")
     except Pedido.DoesNotExist:
         messages.error(request, "El pedido no está en ruta o no te pertenece.")
