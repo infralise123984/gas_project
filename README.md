@@ -3,7 +3,7 @@
 Sistema web para la gestión eficiente de pedidos, entregas, precios y reportes de un distribuidor de **gas licuado (GLP)**.  
 Reemplaza planillas de Excel y grupos de WhatsApp por una solución simple, segura y móvil-friendly. actualmente el nombre *GasFáci* es solamente un placeholder
 
-## Estado actual (rama testing)
+## Estado actual (rama de feat/models.py cambio)
 - Autenticación con roles: Telefonista, Bodeguero, Camionero, Jefe y Administrador  
 - Registro de pedidos a domicilio (telefonista) y ventas en local (bodeguero)  
 - Cálculo automático de monto según tipo de balón y cantidad  
