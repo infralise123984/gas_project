@@ -202,6 +202,10 @@ def login_view(request):
         return redirect("index")  # mejor ir al index bonito
 
     if request.method == "POST":
+        # Verificación adicional: si ya está autenticado al momento del POST, redirigir
+        if request.user.is_authenticated:
+            return redirect("index")
+        
         username = request.POST["username"]
         password = request.POST["password"]
         user = authenticate(request, username=username, password=password)
