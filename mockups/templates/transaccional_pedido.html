@@ -38,7 +38,7 @@
             {% endif %}
         </div>
 
-        {% if es_telefonista %}
+        {% if not es_bodeguero %}
         <div class="mb-4">
             <label class="form-label fw-bold fs-5">Sector <span class="text-danger">*</span></label>
             {{ form_cabecera.sector }}
