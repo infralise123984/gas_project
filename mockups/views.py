@@ -145,9 +145,10 @@ def precios_balones(request):
 
 @login_required
 def crear_usuario(request):
-    resp = require_roles(request, ["admin"], "index", "No tienes permiso para crear usuarios.")
-    if resp:
-        return resp
+    # Permitir solo admin o superuser
+    if not (request.user.rol == "admin" or request.user.is_superuser):
+        messages.error(request, "No tienes permiso para crear usuarios.")
+        return redirect("index")
 
     # Obtenemos las choices del modelo para el select
     roles_choices = Usuario.ROLES
