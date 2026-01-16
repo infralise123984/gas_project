@@ -148,6 +148,11 @@
                     <!-- Admin Django -->
                     {% if user.is_superuser %}
                     <li class="nav-item">
+                        <a class="nav-link" href="{% url 'crear_usuario' %}">
+                            <i class="bi bi-person-plus"></i>Crear Usuario
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="{% url 'admin:index' %}">
                             <i class="bi bi-gear me-1"></i>Admin
                         </a>
@@ -189,8 +194,21 @@
     {% if messages %}
     <div class="container mt-4">
         {% for message in messages %}
-        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-            {{ message }}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show border-start border-5 shadow-sm" role="alert">
+            <div class="d-flex align-items-start gap-3">
+                {% if message.tags == 'success' %}
+                    <i class="bi bi-check-circle-fill fs-5 flex-shrink-0"></i>
+                {% elif message.tags == 'error' %}
+                    <i class="bi bi-exclamation-circle-fill fs-5 flex-shrink-0"></i>
+                {% elif message.tags == 'warning' %}
+                    <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+                {% else %}
+                    <i class="bi bi-info-circle-fill fs-5 flex-shrink-0"></i>
+                {% endif %}
+                <div class="flex-grow-1">
+                    {{ message }}
+                </div>
+            </div>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
         {% endfor %}
