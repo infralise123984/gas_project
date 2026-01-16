@@ -13,7 +13,7 @@ from django.contrib.auth.decorators import login_required
 # Modelos, consultas y paginación
 from django.db.models import Count, F, Q, Sum
 from django.core.paginator import Paginator
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 
 from django.http import HttpResponse
 import openpyxl
@@ -22,8 +22,8 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
 
 # App local
-from .forms import DetallePedidoForm, PedidoCabeceraForm ,DetalleFormSet
-from .models import Pedido, TipoBalon, Usuario, DetallePedido,HistorialEstadoPedido
+from .forms import DetallePedidoForm, PedidoCabeceraForm ,DetalleFormSet,LineaSobreFormSet
+from .models import Pedido, TipoBalon, Usuario, DetallePedido,HistorialEstadoPedido,LineaSobre, SobreDiario
 
 
 # ──────────────────────────────────────────────────────────────
@@ -557,7 +557,6 @@ def mis_pedidos_hoy(request):
 
 
 
-
 @login_required
 def transaccional_pedido(request):
     resp = require_roles(request, ["telefonista", "bodeguero"], "index", "Solo telefonista y/o bodeguero pueden generar pedidos.")
@@ -578,18 +577,18 @@ def transaccional_pedido(request):
             pedido = form_cabecera.save(commit=False)
             pedido.registrador = request.user
             pedido.origen = "local" if es_bodeguero else "telefono"
-            # Bodeguero: venta entregada al instante. Telefonista: pendiente de entrega
             pedido.estado = "entregado" if es_bodeguero else "pendiente"
+            pedido.fecha = timezone.now()  # Asegura fecha actual
             pedido.save()
 
-            # Guardar los detalles válidos
+            # Guardar detalles
             detalles_guardados = 0
             for detalle_form in formset:
                 if detalle_form.cleaned_data and not detalle_form.cleaned_data.get('DELETE', False):
                     balon = detalle_form.cleaned_data.get('balon')
                     cantidad = detalle_form.cleaned_data.get('cantidad')
                     
-                    if balon and cantidad:
+                    if balon and cantidad and cantidad > 0:
                         detalle = detalle_form.save(commit=False)
                         detalle.pedido = pedido
                         detalle.precio_venta_unitario = balon.precio_local if es_bodeguero else balon.precio_domicilio
@@ -606,7 +605,7 @@ def transaccional_pedido(request):
                     "es_bodeguero": es_bodeguero,
                 })
 
-            # Registrar cambio de estado
+            # Historial y totales
             HistorialEstadoPedido.objects.create(
                 pedido=pedido,
                 estado_anterior="pendiente",
@@ -853,3 +852,108 @@ def camionero_cancelar_entrega(request, pedido_id):
         messages.error(request, "El pedido no está en ruta o no te pertenece.")
 
     return redirect("camionero_entregas")
+
+@login_required
+def lista_sobres_diarios(request):
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
+        messages.error(request, "Acceso no permitido.")
+        return redirect('index')
+
+    hoy = timezone.now().date()
+    camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+
+    return render(request, 'lista_sobres.html', {  # ← sin subcarpeta
+        'hoy': hoy,
+        'camioneros': camioneros,
+    })
+    
+@login_required
+def editar_sobre_diario(request, sobre_id=None):
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
+        messages.error(request, "Acceso no permitido.")
+        return redirect('lista_sobres_diarios')
+
+    # ──────────────────────────────────────────────────────────────
+    # FECHA CORRECTA: mismo método que funciona en mis_pedidos_hoy
+    # ──────────────────────────────────────────────────────────────
+    tz_chile = ZoneInfo('America/Santiago')
+    ahora = timezone.now().astimezone(tz_chile)
+    hoy = ahora.date()
+
+    inicio_dia = timezone.make_aware(datetime.combine(hoy, datetime.min.time()), timezone=tz_chile)
+    fin_dia = timezone.make_aware(datetime.combine(hoy, datetime.max.time()), timezone=tz_chile)
+
+    if sobre_id:
+        sobre = get_object_or_404(SobreDiario, id=sobre_id)
+    else:
+        trabajador_id = request.GET.get('camionero')
+        es_bodega = request.GET.get('bodega') == '1'
+        trabajador = None
+        tipo_sobre = 'bodega' if es_bodega else 'camion'
+        if not es_bodega and trabajador_id:
+            trabajador = get_object_or_404(Usuario, id=trabajador_id, rol='camionero')
+        sobre, creado = SobreDiario.objects.get_or_create(
+            fecha=hoy,
+            trabajador=trabajador,
+            tipo=tipo_sobre,
+            defaults={'creado_por': request.user}
+        )
+
+    # Poblamiento robusto: siempre recalcula y crea/actualiza líneas para TODOS los balones activos
+    balones_activos = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
+
+    if sobre.tipo == 'bodega':
+        qs_pedidos = Pedido.objects.filter(
+            fecha__gte=inicio_dia,
+            fecha__lte=fin_dia,
+            origen='local',
+            estado='entregado'
+        )
+    else:
+        qs_pedidos = Pedido.objects.filter(
+            fecha__gte=inicio_dia,
+            fecha__lte=fin_dia,
+            entregador=sobre.trabajador,
+            estado='entregado'
+        )
+
+    # Diccionario de cantidades calculadas por ID de balón
+    resumen_dict = dict(
+        qs_pedidos.values('detalles__balon')
+          .annotate(total=Sum('detalles__cantidad'))
+          .values_list('detalles__balon', 'total')
+    )
+
+    for balon in balones_activos:
+        qty_calc = resumen_dict.get(balon.id, 0) or 0
+
+        LineaSobre.objects.update_or_create(
+            sobre=sobre,
+            balon=balon,
+            defaults={
+                'cantidad_calculada': qty_calc,
+                'cantidad_declarada': qty_calc,  # Inicial = calculada (se mantiene si ya existía)
+                'precio_venta_unitario': balon.precio_local if sobre.tipo == 'bodega' else balon.precio_domicilio
+            }
+        )
+
+    formset = LineaSobreFormSet(request.POST or None, instance=sobre)
+
+    if request.method == 'POST':
+        if formset.is_valid():
+            formset.save()
+            sobre.creado_por = request.user
+            sobre.save()
+            messages.success(request, f"Sobre guardado correctamente ({sobre}).")
+            return redirect('lista_sobres_diarios')
+        else:
+            messages.error(request, "Revisa los datos ingresados.")
+
+    return render(request, 'sobres.html', {
+        'sobre': sobre,
+        'formset': formset,
+        'hoy': hoy,
+    })
+    
+    
+    
