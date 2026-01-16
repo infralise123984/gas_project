@@ -4,6 +4,7 @@
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.db.models import Sum
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 import re
@@ -251,10 +252,12 @@ class SobreDiario(models.Model):
         verbose_name="Creado por (bodeguero/jefe)"
     )
     trabajador = models.ForeignKey(
-        Usuario, 
-        on_delete=models.PROTECT, 
+        Usuario,
+        on_delete=models.PROTECT,
         related_name="sobres",
         limit_choices_to={'rol__in': ['camionero', 'bodeguero']},
+        null=True,          # ← AGREGAR ESTO
+        blank=True,         # ← AGREGAR ESTO
         verbose_name="Trabajador (camionero o bodeguero)"
     )
     tipo = models.CharField(
@@ -271,17 +274,19 @@ class SobreDiario(models.Model):
     monto_declarado = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Monto declarado/ajustado")
     diferencia = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Diferencia (ajuste)")
 
-    notas = models.TextField(blank=True, verbose_name="Notas / motivo del ajuste")
+    nota = models.TextField(blank=True, verbose_name="Motivo del ajuste en esta línea")
 
     class Meta:
         verbose_name = "Sobre diario"
         verbose_name_plural = "Sobres diarios"
         unique_together = ['fecha', 'trabajador', 'tipo']
         ordering = ['-fecha', 'trabajador__username']
-
     def __str__(self):
-        return f"Sobre {self.fecha} - {self.trabajador.get_full_name()} ({self.get_tipo_display()})"
-
+        if self.tipo == 'bodega':
+            return f"Sobre Bodega - {self.fecha.strftime('%d/%m/%Y')}"
+        else:
+            trabajador_nombre = self.trabajador.get_full_name() if self.trabajador else "Sin trabajador"
+            return f"Sobre {self.fecha.strftime('%d/%m/%Y')} - {trabajador_nombre} ({self.get_tipo_display()})"
     def calcular_desde_pedidos(self):
         """Suma cantidades y montos desde pedidos del día para este trabajador"""
         if self.tipo == 'camion':
@@ -315,6 +320,40 @@ class SobreDiario(models.Model):
 
 
 class LineaSobre(models.Model):
+    """
+    Línea de detalle por tipo de balón en el sobre (editable manualmente)
+    """
+    sobre = models.ForeignKey(SobreDiario, on_delete=models.CASCADE, related_name='lineas')
+    balon = models.ForeignKey(TipoBalon, on_delete=models.PROTECT, verbose_name="Tipo de balón")
+    
+    # Cantidades
+    cantidad_calculada = models.PositiveIntegerField(default=0, verbose_name="Cantidad según app")
+    cantidad_declarada = models.PositiveIntegerField(default=0, verbose_name="Cantidad declarada")
+    
+    # Precios snapshot (para consistencia histórica)
+    precio_venta_unitario = models.DecimalField(max_digits=10, decimal_places=0, default=0)
+    
+    # ← AGREGAR ESTA LÍNEA
+    nota = models.TextField(blank=True, verbose_name="Motivo del ajuste en esta línea")
+    
+    @property
+    def diferencia_cantidad(self):
+        return self.cantidad_declarada - self.cantidad_calculada
+
+    @property
+    def subtotal_calculado(self):
+        return self.cantidad_calculada * self.precio_venta_unitario
+
+    @property
+    def subtotal_declarado(self):
+        return self.cantidad_declarada * self.precio_venta_unitario
+
+    class Meta:
+        unique_together = ['sobre', 'balon']
+        ordering = ['balon__peso_neto_gas']
+
+    def __str__(self):
+        return f"{self.balon.nombre} → {self.cantidad_declarada} (calc: {self.cantidad_calculada})"
     """
     Línea de detalle por tipo de balón en el sobre (editable manualmente)
     """

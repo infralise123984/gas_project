@@ -120,20 +120,23 @@ class PedidoCabeceraForm(forms.ModelForm):
 
 # forms.py (agregar al final)
 
+# forms.py
+
+# forms.py (reemplaza el bloque final)
+
 class LineaSobreForm(forms.ModelForm):
     class Meta:
-        model = LineaSobre
-        fields = ['cantidad_ajustada', 'nota']
+        model = LineaSobre  # ← Corrige: usa LineaSobre, NO SobreDiario
+        fields = ['cantidad_declarada', 'nota']  # ← Usa nombres exactos del modelo
         widgets = {
-            'cantidad_ajustada': forms.NumberInput(attrs={
-                'class': 'form-control text-center fw-bold',
+            'cantidad_declarada': forms.NumberInput(attrs={
+                'class': 'form-control fs-4 text-center fw-bold',
                 'min': 0,
-                'style': 'width: 100px;'
             }),
             'nota': forms.Textarea(attrs={
                 'class': 'form-control',
-                'rows': 2,
-                'placeholder': 'Ej: Olvidó registrar 1 balón en la app'
+                'rows': 3,
+                'placeholder': 'Ej: Faltó registrar 2 balones de 15 kg en la app'
             }),
         }
 
@@ -143,5 +146,5 @@ LineaSobreFormSet = inlineformset_factory(
     form=LineaSobreForm,
     extra=0,                # no agregar líneas nuevas manualmente
     can_delete=False,       # no permitir borrar líneas (solo ajustar)
-    fields=('cantidad_ajustada', 'nota'),
+    fields=('cantidad_declarada', 'nota'),  # ← Corrige: usa 'cantidad_declarada' en vez de 'ajustada'
 )
