@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Sobre {{ sobre }} - GasFácil{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5 px-3" style="max-width: 1100px;">
+
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
+        <h2 class="text-primary fw-bold mb-0">
+            <i class="bi bi-journal-check me-2"></i>Sobre Diario
+        </h2>
+        <a href="{% url 'lista_sobres_diarios' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>Volver a selección
+        </a>
+    </div>
+
+    <div class="card shadow-lg border-0 mb-4">
+        <div class="card-header bg-primary text-white text-center py-3">
+            <h4 class="mb-0">
+                {% if sobre.es_bodega %}
+                    Bodega - {{ hoy|date:"d/m/Y" }}
+                {% else %}
+                    {{ sobre.camionero.get_full_name|default:sobre.camionero.username }} 
+                    - {{ hoy|date:"d/m/Y" }}
+                {% endif %}
+            </h4>
+            <small>Responsable: {{ sobre.responsable.get_full_name|default:sobre.responsable.username }}</small>
+        </div>
+
+        <div class="card-body p-4">
+
+            {% if messages %}
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            <form method="post">
+                {% csrf_token %}
+                {{ formset.management_form }}
+
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle text-center">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>Tipo de Balón</th>
+                                <th>Cantidad Calculada<br><small>(según pedidos)</small></th>
+                                <th>Cantidad Ajustada<br><small>(conteo real)</small></th>
+                                <th>Diferencia</th>
+                                <th>Motivo del ajuste / Nota</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for form in formset %}
+                            <tr>
+                                <td class="fw-bold">
+                                    {{ form.instance.balon.nombre }} ({{ form.instance.balon.peso_neto_gas }} kg)
+                                    {{ form.id }}
+                                </td>
+                                <td class="fs-5 fw-bold text-muted">
+                                    {{ form.instance.cantidad_calculada|default:0 }}
+                                </td>
+                                <td>
+                                    {{ form.cantidad_ajustada }}
+                                </td>
+                                <td class="fs-5 fw-bold {% if form.instance.diferencia > 0 %}text-success{% elif form.instance.diferencia < 0 %}text-danger{% else %}text-muted{% endif %}">
+                                    {{ form.instance.diferencia|default:0 }}
+                                </td>
+                                <td>
+                                    {{ form.nota }}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center py-5 text-muted">
+                                    <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                                    No hay líneas en este sobre aún
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <th colspan="2" class="text-end fs-5">Totales:</th>
+                                <th class="fs-5 text-success">
+                                    {{ sobre.total_ajustado|default:0 }}
+                                </th>
+                                <th colspan="2"></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div class="text-center mt-5">
+                    <button type="submit" class="btn btn-success btn-lg px-5 py-3 shadow">
+                        <i class="bi bi-save me-2"></i>Guardar Sobre
+                    </button>
+                    <a href="{% url 'lista_sobres_diarios' %}" class="btn btn-outline-secondary btn-lg px-5 py-3 ms-3">
+                        Cancelar
+                    </a>
+                </div>
+            </form>
+
+            <div class="alert alert-info mt-5 small text-center">
+                <i class="bi bi-info-circle me-2"></i>
+                Puedes ajustar las cantidades si hubo ventas no registradas en la app o errores de conteo.
+                Las diferencias se guardan para auditoría.
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<style>
+    .table th, .table td { vertical-align: middle; }
+    input[type="number"] { max-width: 120px; margin: 0 auto; display: block; }
+    textarea { min-height: 60px; }
+</style>
+{% endblock %}

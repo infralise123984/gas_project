@@ -13,7 +13,7 @@ from django.contrib.auth.decorators import login_required
 # Modelos, consultas y paginación
 from django.db.models import Count, F, Q, Sum
 from django.core.paginator import Paginator
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 
 from django.http import HttpResponse
 import openpyxl
@@ -22,8 +22,8 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
 
 # App local
-from .forms import DetallePedidoForm, PedidoCabeceraForm ,DetalleFormSet
-from .models import Pedido, TipoBalon, Usuario, DetallePedido,HistorialEstadoPedido
+from .forms import DetallePedidoForm, PedidoCabeceraForm ,DetalleFormSet,LineaSobreFormSet
+from .models import Pedido, TipoBalon, Usuario, DetallePedido,HistorialEstadoPedido,LineaSobre, SobreDiario
 
 
 # ──────────────────────────────────────────────────────────────
@@ -853,3 +853,93 @@ def camionero_cancelar_entrega(request, pedido_id):
         messages.error(request, "El pedido no está en ruta o no te pertenece.")
 
     return redirect("camionero_entregas")
+
+
+
+@login_required
+def lista_sobres_diarios(request):
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
+        messages.error(request, "Acceso no permitido.")
+        return redirect('index')
+
+    hoy = timezone.now().date()
+    camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+
+    return render(request, 'sobres/lista_sobres.html', {
+        'hoy': hoy,
+        'camioneros': camioneros,
+    })
+
+@login_required
+def editar_sobre_diario(request, sobre_id=None):
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
+        messages.error(request, "Acceso no permitido.")
+        return redirect('lista_sobres_diarios')
+
+    hoy = timezone.now().date()
+
+    if sobre_id:
+        sobre = get_object_or_404(SobreDiario, id=sobre_id)
+    else:
+        # Crear o recuperar según GET params
+        camionero_id = request.GET.get('camionero')
+        es_bodega = request.GET.get('bodega') == '1'
+
+        if es_bodega:
+            camionero = None
+        else:
+            camionero = get_object_or_404(Usuario, id=camionero_id, rol='camionero')
+
+        sobre, creado = SobreDiario.objects.get_or_create(
+            fecha=hoy,
+            camionero=camionero,
+            es_bodega=es_bodega,
+            defaults={'responsable': request.user}
+        )
+
+    # Si es nuevo → poblar líneas automáticamente
+    if creado or sobre.lineas.count() == 0:
+        if es_bodega:
+            qs_pedidos = Pedido.objects.filter(
+                fecha__date=hoy,
+                origen='local',
+                estado='entregado'
+            )
+        else:
+            qs_pedidos = Pedido.objects.filter(
+                fecha__date=hoy,
+                entregador=camionero,
+                estado='entregado'  # o 'en_ruta' si quieres incluir parciales
+            )
+
+        resumen = qs_pedidos.values('detalles__balon').annotate(
+            total=Sum('detalles__cantidad')
+        ).order_by('detalles__balon')
+
+        for item in resumen:
+            if item['detalles__balon']:
+                balon = TipoBalon.objects.get(id=item['detalles__balon'])
+                LineaSobre.objects.create(
+                    sobre=sobre,
+                    balon=balon,
+                    cantidad_calculada=item['total'] or 0,
+                    cantidad_ajustada=item['total'] or 0
+                )
+
+    formset = LineaSobreFormSet(request.POST or None, instance=sobre)
+
+    if request.method == 'POST':
+        if formset.is_valid():
+            formset.save()
+            sobre.responsable = request.user  # actualizar responsable
+            sobre.save()
+            messages.success(request, f"Sobre guardado correctamente ({sobre}).")
+            return redirect('lista_sobres_diarios')
+        else:
+            messages.error(request, "Revisa los datos ingresados.")
+
+    return render(request, 'sobres/editar_sobre.html', {
+        'sobre': sobre,
+        'formset': formset,
+        'hoy': hoy,
+    })

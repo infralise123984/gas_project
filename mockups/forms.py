@@ -1,7 +1,7 @@
 # mockups/forms.py
 from django import forms
 from django.forms import inlineformset_factory, BaseInlineFormSet
-from .models import Pedido, DetallePedido, TipoBalon
+from .models import Pedido, DetallePedido, TipoBalon, SobreDiario, LineaSobre
 
 SECTORES = [
     ("", "— Seleccionar sector —"),
@@ -116,3 +116,32 @@ class PedidoCabeceraForm(forms.ModelForm):
                 'placeholder': 'Calle, número, casa esquina, depto, referencia clara...'
             }),
         }
+        
+
+# forms.py (agregar al final)
+
+class LineaSobreForm(forms.ModelForm):
+    class Meta:
+        model = LineaSobre
+        fields = ['cantidad_ajustada', 'nota']
+        widgets = {
+            'cantidad_ajustada': forms.NumberInput(attrs={
+                'class': 'form-control text-center fw-bold',
+                'min': 0,
+                'style': 'width: 100px;'
+            }),
+            'nota': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 2,
+                'placeholder': 'Ej: Olvidó registrar 1 balón en la app'
+            }),
+        }
+
+LineaSobreFormSet = inlineformset_factory(
+    SobreDiario,
+    LineaSobre,
+    form=LineaSobreForm,
+    extra=0,                # no agregar líneas nuevas manualmente
+    can_delete=False,       # no permitir borrar líneas (solo ajustar)
+    fields=('cantidad_ajustada', 'nota'),
+)
