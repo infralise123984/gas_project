@@ -1,15 +1,15 @@
 {% extends 'base.html' %}
 {% load humanize %}
 
-{% block title %}Sobre del día {{ hoy|date:"d/m/Y" }} - GasFácil{% endblock %}
+{% block title %}Sobre Diario - {{ hoy|date:"d/m/Y" }} - GasFácil{% endblock %}
 
 {% block content %}
-<div class="container mt-4 mb-5 px-3">
+<div class="container mt-4 mb-5 px-3" style="max-width: 1100px;">
     <h2 class="text-primary fw-bold text-center mb-4">
         Sobre Diario - {{ hoy|date:"d/m/Y" }}
     </h2>
 
-    <div class="card shadow-lg border-0 mb-4">
+    <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-primary text-white text-center py-3">
             <h4 class="mb-0">
                 {% if sobre.tipo == 'bodega' %}
@@ -23,12 +23,21 @@
         </div>
 
         <div class="card-body p-4">
-            <form method="post">
+            {% if messages %}
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            <form method="post" id="sobreForm">
                 {% csrf_token %}
                 {{ formset.management_form }}
 
                 <div class="table-responsive">
-                    <table class="table table-bordered table-hover text-center">
+                    <table class="table table-bordered table-hover excel-table" id="sobreTable">
                         <thead class="table-primary">
                             <tr>
                                 <th>Balón</th>
@@ -40,29 +49,111 @@
                         </thead>
                         <tbody>
                             {% for form in formset %}
-                            <tr>
-                                <td class="fw-bold">{{ form.instance.balon.nombre }} ({{ form.instance.balon.peso_neto_gas }} kg)</td>
-                                <td class="fw-bold text-muted">{{ form.instance.cantidad_calculada }}</td>
-                                <td>{{ form.cantidad_declarada }}</td>
-                                <td class="{% if form.instance.diferencia_cantidad > 0 %}text-success{% elif form.instance.diferencia_cantidad < 0 %}text-danger{% endif %}">
-                                    {{ form.instance.diferencia_cantidad }}
+                            <tr data-index="{{ forloop.counter0 }}">
+                                <td class="fw-bold align-middle">{{ form.instance.balon.nombre }} ({{ form.instance.balon.peso_neto_gas }} kg)</td>
+                                <td class="text-center fw-bold text-muted align-middle">
+                                    {{ form.instance.cantidad_calculada }}
                                 </td>
-                                <td>{{ form.nota }}</td>
+                                <td class="text-center align-middle">
+                                    {{ form.cantidad_declarada }}
+                                </td>
+                                <td class="text-center fw-bold align-middle diferencia-celda" data-diferencia="0">
+                                    0
+                                </td>
+                                <td>
+                                    {{ form.nota }}
+                                </td>
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="5" class="text-center py-5 text-muted">No hay balones aún</td>
+                                <td colspan="5" class="text-center py-5 text-muted">
+                                    No hay balones activos registrados.
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <th colspan="2" class="text-end">Totales:</th>
+                                <th class="text-center" id="totalDeclarada">0</th>
+                                <th class="text-center" id="totalDiferencia">0</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
 
                 <div class="text-center mt-4">
-                    <button type="submit" class="btn btn-success btn-lg px-5">Guardar Sobre</button>
+                    <button type="submit" class="btn btn-success btn-lg px-5">
+                        <i class="bi bi-save me-2"></i>Guardar Borrador
+                    </button>
+                    <a href="{% url 'lista_sobres_diarios' %}" class="btn btn-outline-secondary btn-lg px-5 ms-3">
+                        Volver sin guardar
+                    </a>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<!-- JavaScript para diferencia en tiempo real -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const rows = document.querySelectorAll('#sobreTable tbody tr[data-index]');
+    
+    rows.forEach(row => {
+        const calcCell = row.querySelector('td:nth-child(2)'); // Calculada
+        const declInput = row.querySelector('input[name$="-cantidad_declarada"]'); // Input declarada
+        const diffCell = row.querySelector('.diferencia-celda');
+
+        if (!declInput) return;
+
+        const updateDiff = () => {
+            const calc = parseInt(calcCell.textContent.trim()) || 0;
+            const decl = parseInt(declInput.value.trim()) || 0;
+            const diff = decl - calc;
+            diffCell.textContent = diff;
+            diffCell.style.color = diff > 0 ? 'green' : diff < 0 ? 'red' : 'black';
+            diffCell.dataset.diferencia = diff;
+
+            // Actualizar totales
+            let totalDecl = 0;
+            let totalDiff = 0;
+            rows.forEach(r => {
+                const dInput = r.querySelector('input[name$="-cantidad_declarada"]');
+                if (dInput) totalDecl += parseInt(dInput.value) || 0;
+                const dCell = r.querySelector('.diferencia-celda');
+                totalDiff += parseInt(dCell.dataset.diferencia) || 0;
+            });
+            document.getElementById('totalDeclarada').textContent = totalDecl;
+            document.getElementById('totalDiferencia').textContent = totalDiff;
+        };
+
+        declInput.addEventListener('input', updateDiff);
+        updateDiff(); // Inicial
+    });
+});
+</script>
+
+<style>
+.excel-table td, .excel-table th {
+    padding: 8px !important;
+    vertical-align: middle;
+    border: 1px solid #dee2e6;
+}
+.excel-table input[type="number"] {
+    width: 100%;
+    border: none;
+    text-align: center;
+    background: transparent;
+    font-weight: bold;
+}
+.excel-table input[type="number"]:focus {
+    outline: none;
+    background: #fff;
+}
+.excel-table .diferencia-celda {
+    font-weight: bold;
+}
+</style>
 {% endblock %}
