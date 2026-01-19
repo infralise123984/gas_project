@@ -4,6 +4,7 @@
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.db.models import Sum
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 import re
@@ -231,3 +232,156 @@ class DetallePedido(models.Model):
         verbose_name = "Detalle de pedido"
         verbose_name_plural = "Detalles de pedidos"
         ordering = ["balon__peso_neto_gas"]
+        
+# mockups/models.py (agregar al final)
+
+class SobreDiario(models.Model):
+    """
+    Declaración diaria ("sobre") de ventas/entregas por trabajador.
+    Se genera típicamente al final del día para camioneros o bodeguero.
+    Permite ajuste manual respecto a lo calculado por pedidos.
+    """
+    FECHA_CHOICES = "diaria"  # por ahora solo diaria, luego se puede extender
+
+    fecha = models.DateField(default=timezone.now, verbose_name="Fecha del sobre")
+    creado_por = models.ForeignKey(
+        Usuario, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        related_name="sobres_creados",
+        verbose_name="Creado por (bodeguero/jefe)"
+    )
+    trabajador = models.ForeignKey(
+        Usuario,
+        on_delete=models.PROTECT,
+        related_name="sobres",
+        limit_choices_to={'rol__in': ['camionero', 'bodeguero']},
+        null=True,          # ← AGREGAR ESTO
+        blank=True,         # ← AGREGAR ESTO
+        verbose_name="Trabajador (camionero o bodeguero)"
+    )
+    tipo = models.CharField(
+        max_length=20,
+        choices=[('camion', 'Camión'), ('bodega', 'Bodega/local')],
+        default='camion',
+        verbose_name="Tipo de sobre"
+    )
+    creado_el = models.DateTimeField(auto_now_add=True)
+    actualizado_el = models.DateTimeField(auto_now=True)
+
+    # Campos calculados (cache) - se actualizan al guardar
+    monto_calculado_app = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Monto según pedidos en app")
+    monto_declarado = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Monto declarado/ajustado")
+    diferencia = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Diferencia (ajuste)")
+
+    nota = models.TextField(blank=True, verbose_name="Motivo del ajuste en esta línea")
+
+    class Meta:
+        verbose_name = "Sobre diario"
+        verbose_name_plural = "Sobres diarios"
+        unique_together = ['fecha', 'trabajador', 'tipo']
+        ordering = ['-fecha', 'trabajador__username']
+    def __str__(self):
+        if self.tipo == 'bodega':
+            return f"Sobre Bodega - {self.fecha.strftime('%d/%m/%Y')}"
+        else:
+            trabajador_nombre = self.trabajador.get_full_name() if self.trabajador else "Sin trabajador"
+            return f"Sobre {self.fecha.strftime('%d/%m/%Y')} - {trabajador_nombre} ({self.get_tipo_display()})"
+    def calcular_desde_pedidos(self):
+        """Suma cantidades y montos desde pedidos del día para este trabajador"""
+        if self.tipo == 'camion':
+            # Para camioneros: pedidos entregados por él ese día
+            pedidos = Pedido.objects.filter(
+                fecha__date=self.fecha,
+                entregador=self.trabajador,
+                estado='entregado'
+            )
+        else:
+            # Para bodeguero: ventas locales registradas por él
+            pedidos = Pedido.objects.filter(
+                fecha__date=self.fecha,
+                registrador=self.trabajador,
+                origen='local',
+                estado='entregado'
+            )
+
+        total_monto = pedidos.aggregate(total=Sum('monto_total'))['total'] or 0
+        self.monto_calculado_app = total_monto
+
+        # Para las líneas de detalle (más abajo), también se pueden calcular cantidades por balón
+        return total_monto
+
+    def save(self, *args, **kwargs):
+        if not self.pk:  # nuevo
+            self.calcular_desde_pedidos()
+            self.monto_declarado = self.monto_calculado_app  # valor inicial = calculado
+        self.diferencia = self.monto_declarado - self.monto_calculado_app
+        super().save(*args, **kwargs)
+
+
+class LineaSobre(models.Model):
+    """
+    Línea de detalle por tipo de balón en el sobre (editable manualmente)
+    """
+    sobre = models.ForeignKey(SobreDiario, on_delete=models.CASCADE, related_name='lineas')
+    balon = models.ForeignKey(TipoBalon, on_delete=models.PROTECT, verbose_name="Tipo de balón")
+    
+    # Cantidades
+    cantidad_calculada = models.PositiveIntegerField(default=0, verbose_name="Cantidad según app")
+    cantidad_declarada = models.PositiveIntegerField(default=0, verbose_name="Cantidad declarada")
+    
+    # Precios snapshot (para consistencia histórica)
+    precio_venta_unitario = models.DecimalField(max_digits=10, decimal_places=0, default=0)
+    
+    # ← AGREGAR ESTA LÍNEA
+    nota = models.TextField(blank=True, verbose_name="Motivo del ajuste en esta línea")
+    
+    @property
+    def diferencia_cantidad(self):
+        return self.cantidad_declarada - self.cantidad_calculada
+
+    @property
+    def subtotal_calculado(self):
+        return self.cantidad_calculada * self.precio_venta_unitario
+
+    @property
+    def subtotal_declarado(self):
+        return self.cantidad_declarada * self.precio_venta_unitario
+
+    class Meta:
+        unique_together = ['sobre', 'balon']
+        ordering = ['balon__peso_neto_gas']
+
+    def __str__(self):
+        return f"{self.balon.nombre} → {self.cantidad_declarada} (calc: {self.cantidad_calculada})"
+    """
+    Línea de detalle por tipo de balón en el sobre (editable manualmente)
+    """
+    sobre = models.ForeignKey(SobreDiario, on_delete=models.CASCADE, related_name='lineas')
+    balon = models.ForeignKey(TipoBalon, on_delete=models.PROTECT, verbose_name="Tipo de balón")
+    
+    # Cantidades
+    cantidad_calculada = models.PositiveIntegerField(default=0, verbose_name="Cantidad según app")
+    cantidad_declarada = models.PositiveIntegerField(default=0, verbose_name="Cantidad declarada")
+    
+    # Precios snapshot (para consistencia histórica)
+    precio_venta_unitario = models.DecimalField(max_digits=10, decimal_places=0, default=0)
+    
+    @property
+    def diferencia_cantidad(self):
+        return self.cantidad_declarada - self.cantidad_calculada
+
+    @property
+    def subtotal_calculado(self):
+        return self.cantidad_calculada * self.precio_venta_unitario
+
+    @property
+    def subtotal_declarado(self):
+        return self.cantidad_declarada * self.precio_venta_unitario
+
+    class Meta:
+        unique_together = ['sobre', 'balon']
+        ordering = ['balon__peso_neto_gas']
+
+    def __str__(self):
+        return f"{self.balon.nombre} → {self.cantidad_declarada} (calc: {self.cantidad_calculada})"
