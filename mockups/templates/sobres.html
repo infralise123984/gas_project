@@ -1,93 +1,123 @@
 {% extends 'base.html' %}
-{% load humanize %}
+{% load l10n %}
 
 {% block title %}Sobre Diario - {{ hoy|date:"d/m/Y" }} - GasFácil{% endblock %}
 
 {% block content %}
 <div class="container mt-4 mb-5 px-3" style="max-width: 1100px;">
     <h2 class="text-primary fw-bold text-center mb-4">
+        <i class="bi bi-journal-text me-2"></i>
         Sobre Diario - {{ hoy|date:"d/m/Y" }}
     </h2>
 
-    <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header bg-primary text-white text-center py-3">
-            <h4 class="mb-0">
+    <div class="card shadow-sm border-0 mb-5">
+        <div class="card-header bg-primary text-white text-center py-4">
+            <h4 class="mb-2">
                 {% if sobre.tipo == 'bodega' %}
-                    Bodega
+                    <i class="bi bi-shop-window me-2"></i>Bodega
                 {% else %}
+                    <i class="bi bi-truck me-2"></i>
                     {{ sobre.trabajador.get_full_name|default:sobre.trabajador.username|default:"Camionero" }}
                 {% endif %}
-                - {{ hoy|date:"d/m/Y" }}
             </h4>
             <small>Responsable: {{ sobre.creado_por.get_full_name|default:sobre.creado_por.username }}</small>
         </div>
 
-        <div class="card-body p-4">
-            {% if messages %}
-            {% for message in messages %}
-            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-            {% endfor %}
-            {% endif %}
-
+        <div class="card-body p-4 p-md-5">
             <form method="post" id="sobreForm">
                 {% csrf_token %}
                 {{ formset.management_form }}
+
+                <!-- Bloque de errores (útil para debug, puedes quitarlo después) -->
+                {% if formset.errors or formset.non_form_errors %}
+                <div class="alert alert-danger mb-4">
+                    <strong>Errores detectados:</strong>
+                    <ul class="mb-0">
+                        {% for form in formset %}
+                            {% for field, errors in form.errors.items %}
+                                {% for error in errors %}
+                                    <li>{{ form.instance.balon.nombre }} → {{ field }}: {{ error }}</li>
+                                {% endfor %}
+                            {% endfor %}
+                        {% endfor %}
+                        {% if formset.non_form_errors %}
+                            {% for error in formset.non_form_errors %}
+                                <li>{{ error }}</li>
+                            {% endfor %}
+                        {% endif %}
+                    </ul>
+                </div>
+                {% endif %}
 
                 <div class="table-responsive">
                     <table class="table table-bordered table-hover excel-table" id="sobreTable">
                         <thead class="table-primary">
                             <tr>
                                 <th>Balón</th>
+                                <th>Peso neto (kg)</th>
                                 <th>Calculada (app)</th>
                                 <th>Declarada (real)</th>
                                 <th>Diferencia</th>
-                                <th>Nota</th>
+                                <th>Nota / Motivo</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for form in formset %}
-                            <tr data-index="{{ forloop.counter0 }}">
-                                <td class="fw-bold align-middle">{{ form.instance.balon.nombre }} ({{ form.instance.balon.peso_neto_gas }} kg)</td>
+                            <tr data-index="{{ forloop.counter0 }}"
+                                data-precio="{{ form.instance.precio_venta_unitario|stringformat:"d" }}"
+                                data-peso="{{ form.instance.balon.peso_neto_gas|stringformat:"d" }}">
+                                <td class="fw-bold align-middle">{{ form.instance.balon.nombre }}</td>
+                                <td class="text-center fw-semibold text-muted align-middle">
+                                    {{ form.instance.balon.peso_neto_gas }}
+                                </td>
                                 <td class="text-center fw-bold text-muted align-middle">
-                                    {{ form.instance.cantidad_calculada }}
+                                    {{ form.instance.cantidad_calculada|default:0 }}
                                 </td>
                                 <td class="text-center align-middle">
+                                    {{ form.id }}
                                     {{ form.cantidad_declarada }}
                                 </td>
                                 <td class="text-center fw-bold align-middle diferencia-celda" data-diferencia="0">
                                     0
                                 </td>
-                                <td>
+                                <td class="align-middle">
                                     {{ form.nota }}
                                 </td>
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="5" class="text-center py-5 text-muted">
-                                    No hay balones activos registrados.
+                                <td colspan="6" class="text-center py-5 text-muted">
+                                    <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                                    No hay balones activos registrados para este sobre.
                                 </td>
                             </tr>
                             {% endfor %}
                         </tbody>
                         <tfoot class="table-light">
-                            <tr>
-                                <th colspan="2" class="text-end">Totales:</th>
-                                <th class="text-center" id="totalDeclarada">0</th>
-                                <th class="text-center" id="totalDiferencia">0</th>
-                                <th></th>
+                            <tr class="fw-bold">
+                                <td colspan="2" class="text-end">Totales:</td>
+                                <td class="text-center" id="totalDeclarada">0</td>
+                                <td class="text-center" id="totalDiferencia">0</td>
+                                <td colspan="2"></td>
+                            </tr>
+                            <tr class="fw-bold">
+                                <td colspan="2" class="text-end">Total Kilos:</td>
+                                <td class="text-center" id="totalKilos">0</td>
+                                <td colspan="3"></td>
+                            </tr>
+                            <tr class="fw-bold fs-5">
+                                <td colspan="2" class="text-end">Total Dinero:</td>
+                                <td colspan="4" class="text-center text-success" id="totalDinero">$0</td>
                             </tr>
                         </tfoot>
                     </table>
                 </div>
 
-                <div class="text-center mt-4">
-                    <button type="submit" class="btn btn-success btn-lg px-5">
-                        <i class="bi bi-save me-2"></i>Guardar Borrador
+                <div class="text-center mt-5">
+                    <button type="submit" class="btn btn-success btn-lg px-5 py-3 shadow">
+                        <i class="bi bi-save me-2"></i> Guardar Borrador
                     </button>
-                    <a href="{% url 'lista_sobres_diarios' %}" class="btn btn-outline-secondary btn-lg px-5 ms-3">
+                    <a href="{% url 'lista_sobres_diarios' %}" class="btn btn-outline-secondary btn-lg px-5 py-3 ms-3 shadow">
                         Volver sin guardar
                     </a>
                 </div>
@@ -96,64 +126,73 @@
     </div>
 </div>
 
-<!-- JavaScript para diferencia en tiempo real -->
+<!-- JavaScript para cálculos en tiempo real -->
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const rows = document.querySelectorAll('#sobreTable tbody tr[data-index]');
-    
-    rows.forEach(row => {
-        const calcCell = row.querySelector('td:nth-child(2)'); // Calculada
-        const declInput = row.querySelector('input[name$="-cantidad_declarada"]'); // Input declarada
-        const diffCell = row.querySelector('.diferencia-celda');
 
-        if (!declInput) return;
+    const updateTotals = () => {
+        let totalDecl = 0;
+        let totalDiff = 0;
+        let totalKilos = 0;
+        let totalDinero = 0;
 
-        const updateDiff = () => {
-            const calc = parseInt(calcCell.textContent.trim()) || 0;
-            const decl = parseInt(declInput.value.trim()) || 0;
+        rows.forEach(row => {
+            const declInput = row.querySelector('input[name$="-cantidad_declarada"]');
+            if (!declInput) return;
+
+            const decl = parseInt(declInput.value) || 0;
+            const calc = parseInt(row.querySelector('td:nth-child(3)').textContent.trim()) || 0;
             const diff = decl - calc;
+
+            // Actualizar diferencia visual
+            const diffCell = row.querySelector('.diferencia-celda');
             diffCell.textContent = diff;
             diffCell.style.color = diff > 0 ? 'green' : diff < 0 ? 'red' : 'black';
             diffCell.dataset.diferencia = diff;
 
-            // Actualizar totales
-            let totalDecl = 0;
-            let totalDiff = 0;
-            rows.forEach(r => {
-                const dInput = r.querySelector('input[name$="-cantidad_declarada"]');
-                if (dInput) totalDecl += parseInt(dInput.value) || 0;
-                const dCell = r.querySelector('.diferencia-celda');
-                totalDiff += parseInt(dCell.dataset.diferencia) || 0;
-            });
-            document.getElementById('totalDeclarada').textContent = totalDecl;
-            document.getElementById('totalDiferencia').textContent = totalDiff;
-        };
+            // Acumular totales
+            totalDecl += decl;
+            totalDiff += diff;
+            totalKilos += decl * (parseInt(row.dataset.peso) || 0);
+            totalDinero += decl * (parseFloat(row.dataset.precio) || 0);
+        });
 
-        declInput.addEventListener('input', updateDiff);
-        updateDiff(); // Inicial
+        document.getElementById('totalDeclarada').textContent = totalDecl;
+        document.getElementById('totalDiferencia').textContent = totalDiff;
+        document.getElementById('totalKilos').textContent = totalKilos;
+        document.getElementById('totalDinero').textContent = '$' + totalDinero.toLocaleString('es-CL');
+    };
+
+    // Escuchar cambios
+    rows.forEach(row => {
+        const input = row.querySelector('input[name$="-cantidad_declarada"]');
+        if (input) input.addEventListener('input', updateTotals);
     });
+
+    updateTotals(); // Inicial
 });
 </script>
 
 <style>
-.excel-table td, .excel-table th {
-    padding: 8px !important;
+.excel-table th, .excel-table td {
     vertical-align: middle;
-    border: 1px solid #dee2e6;
+    text-align: center;
 }
 .excel-table input[type="number"] {
     width: 100%;
     border: none;
-    text-align: center;
     background: transparent;
     font-weight: bold;
+    text-align: center;
 }
 .excel-table input[type="number"]:focus {
     outline: none;
     background: #fff;
+    box-shadow: 0 0 0 2px #0d6efd;
 }
-.excel-table .diferencia-celda {
+.excel-table tfoot td {
     font-weight: bold;
 }
 </style>
-{% endblock %}  
+{% endblock %}

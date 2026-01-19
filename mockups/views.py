@@ -931,15 +931,22 @@ def editar_sobre_diario(request, sobre_id=None):
     for balon in balones_activos:
         qty_calc = resumen_dict.get(balon.id, 0) or 0
 
-        LineaSobre.objects.update_or_create(
+        # ✅ CORRECCIÓN: Solo establecer cantidad_declarada en CREACIÓN
+        linea, creada = LineaSobre.objects.get_or_create(
             sobre=sobre,
             balon=balon,
             defaults={
                 'cantidad_calculada': qty_calc,
-                'cantidad_declarada': qty_calc, # Se mantiene si ya existe
+                'cantidad_declarada': qty_calc,  # Solo al crear
                 'precio_venta_unitario': balon.precio_local if sobre.tipo == 'bodega' else balon.precio_domicilio
             }
         )
+        
+        # Si la línea ya existía, solo actualizar cantidad_calculada y precio
+        if not creada:
+            linea.cantidad_calculada = qty_calc
+            linea.precio_venta_unitario = balon.precio_local if sobre.tipo == 'bodega' else balon.precio_domicilio
+            linea.save(update_fields=['cantidad_calculada', 'precio_venta_unitario'])
 
     # 4. Manejo del Formset
     formset = LineaSobreFormSet(request.POST or None, instance=sobre)
