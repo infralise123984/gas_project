@@ -1,0 +1,214 @@
+{% extends 'base.html' %}
+{% block title %}Editar Pedido #{{ pedido.id }} - GasFácil{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-3 py-4" style="max-width: 540px; margin: 0 auto;">
+
+    <h2 class="text-primary fw-bold text-center mb-4 fs-4">
+        Editar Pedido #{{ pedido.id }}
+    </h2>
+
+    <form method="post" id="pedidoForm">
+        {% csrf_token %}
+
+        <!-- Errores globales -->
+        {% if formset.non_form_errors %}
+        <div class="alert alert-danger mb-4">
+            <strong>⚠️ Errores:</strong>
+            <ul class="mb-0">
+                {% for error in formset.non_form_errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <!-- Cabecera: siempre mostrar sector y dirección en edición -->
+        <div class="mb-4">
+            <label class="form-label fw-bold fs-5">Método de pago <span class="text-danger">*</span></label>
+            <div class="d-grid gap-2">
+                {{ form_cabecera.metodo_pago }}
+            </div>
+            {% if form_cabecera.metodo_pago.errors %}
+            <div class="text-danger mt-1">{{ form_cabecera.metodo_pago.errors }}</div>
+            {% endif %}
+        </div>
+
+        <div class="mb-4">
+            <label class="form-label fw-bold fs-5">Sector</label>
+            {{ form_cabecera.sector }}
+            {% if form_cabecera.sector.errors %}
+            <div class="text-danger mt-1">{{ form_cabecera.sector.errors }}</div>
+            {% endif %}
+        </div>
+
+        <div class="mb-4">
+            <label class="form-label fw-bold fs-5">Dirección / Referencia</label>
+            {{ form_cabecera.direccion_entrega }}
+            {% if form_cabecera.direccion_entrega.errors %}
+            <div class="text-danger mt-1">{{ form_cabecera.direccion_entrega.errors }}</div>
+            {% endif %}
+            <small class="form-text text-muted d-block mt-1">
+                Ej: Los Álamos 123, casa esquina roja, frente al colegio
+            </small>
+        </div>
+
+        <!-- Productos -->
+        <h5 class="fw-bold mb-3 text-center fs-5">Productos</h5>
+
+        {{ formset.management_form }}
+
+        <div id="formset-container">
+            {% for form in formset %}
+            <div class="detalle-row card mb-3 shadow-sm border-0" data-form-index="{{ forloop.counter0 }}">
+                <div class="card-body p-3">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12">
+                            <label class="form-label fw-bold">Tipo de balón <span class="text-danger">*</span></label>
+                            {{ form.balon }}
+                            {% if form.balon.errors %}
+                            <div class="text-danger small mt-1">{{ form.balon.errors|join:" " }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold">Cantidad <span class="text-danger">*</span></label>
+                            {{ form.cantidad }}
+                            {% if form.cantidad.errors %}
+                            <div class="text-danger small mt-1">{{ form.cantidad.errors|join:" " }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-6 text-end">
+                            <button type="button" class="btn btn-outline-danger btn-sm remove-row">
+                                <i class="bi bi-trash"></i> Quitar
+                            </button>
+                        </div>
+                    </div>
+                    <!-- ⚠️ CRÍTICO: Campos hidden necesarios para el formset -->
+                    {{ form.id }}
+                    <div style="display: none;">{{ form.DELETE }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Botón agregar -->
+        <div class="text-center mb-4">
+            <button type="button" id="add-row" class="btn btn-primary btn-lg w-100 py-3 fs-5">
+                <i class="bi bi-plus-circle me-2"></i> Agregar Producto
+            </button>
+        </div>
+
+        <!-- Acciones -->
+        <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-success btn-lg py-3 fs-5 shadow">
+                <i class="bi bi-save me-2"></i> Guardar Cambios
+            </button>
+            <a href="{% url 'detalle_pedido' pedido.id %}" class="btn btn-outline-secondary btn-lg py-3 fs-5">
+                Cancelar
+            </a>
+        </div>
+
+        <!-- Template vacío para clonar -->
+        <div id="empty-form" style="display:none;">
+            <div class="detalle-row card mb-3 shadow-sm border-0">
+                <div class="card-body p-3">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12">
+                            <label class="form-label fw-bold">Tipo de balón <span class="text-danger">*</span></label>
+                            {{ formset.empty_form.balon }}
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold">Cantidad <span class="text-danger">*</span></label>
+                            {{ formset.empty_form.cantidad }}
+                        </div>
+                        <div class="col-6 text-end">
+                            <button type="button" class="btn btn-outline-danger btn-sm remove-row">
+                                <i class="bi bi-trash"></i> Quitar
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Campos hidden para nuevas filas -->
+                    <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
+                </div>
+            </div>
+        </div>
+
+    </form>
+
+</div>
+
+<!-- JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const container = document.getElementById('formset-container');
+    const addButton = document.getElementById('add-row');
+    const emptyFormDiv = document.getElementById('empty-form');
+    const totalFormsInput = document.getElementById('id_detalles-TOTAL_FORMS');
+
+    if (!container || !addButton || !emptyFormDiv || !totalFormsInput) {
+        console.error("Elementos del formset no encontrados");
+        return;
+    }
+
+    const emptyFormTemplate = emptyFormDiv.querySelector('.detalle-row');
+    if (!emptyFormTemplate) {
+        console.error("Template vacío no encontrado");
+        return;
+    }
+
+    let formIndex = parseInt(totalFormsInput.value) || 1;
+
+    // Agregar nueva fila
+    addButton.addEventListener('click', function() {
+        const newRow = emptyFormTemplate.cloneNode(true);
+        
+        newRow.innerHTML = newRow.innerHTML.replace(/__prefix__/g, formIndex);
+        newRow.dataset.formIndex = formIndex;
+        
+        const select = newRow.querySelector('select');
+        const numberInput = newRow.querySelector('input[type="number"]');
+        const deleteCheckbox = newRow.querySelector('input[name$="-DELETE"]');
+        
+        if (select) select.selectedIndex = 0;
+        if (numberInput) numberInput.value = '1';
+        if (deleteCheckbox) deleteCheckbox.checked = false;
+        
+        container.appendChild(newRow);
+        formIndex++;
+        totalFormsInput.value = formIndex;
+        
+        console.log(`Fila agregada. Total forms: ${formIndex}`);
+    });
+
+    // Eliminar fila
+    container.addEventListener('click', function(e) {
+        const removeBtn = e.target.closest('.remove-row');
+        if (!removeBtn) return;
+        
+        const row = removeBtn.closest('.detalle-row');
+        const rowIndex = row.dataset.formIndex;
+        
+        if (confirm('¿Eliminar este producto?')) {
+            const deleteCheckbox = row.querySelector('input[name$="-DELETE"]');
+            if (deleteCheckbox) {
+                deleteCheckbox.checked = true;
+            }
+            row.style.display = 'none';
+            console.log(`Fila ${rowIndex} marcada para eliminación`);
+        }
+    });
+
+    console.log(`Formset inicializado con ${formIndex} formularios`);
+});
+</script>
+
+<style>
+    .detalle-row { transition: all 0.2s ease; }
+    .detalle-row:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important; }
+    .form-select:focus, .form-control:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25);
+    }
+</style>
+
+{% endblock %}
