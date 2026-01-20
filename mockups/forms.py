@@ -117,6 +117,13 @@ class PedidoCabeceraForm(forms.ModelForm):
             }),
         }
         
+
+# forms.py (agregar al final)
+
+# forms.py
+
+# forms.py (reemplaza el bloque final)
+
 class LineaSobreForm(forms.ModelForm):
     class Meta:
         model = LineaSobre  # ← Corrige: usa LineaSobre, NO SobreDiario
@@ -140,16 +147,4 @@ LineaSobreFormSet = inlineformset_factory(
     extra=0,                # no agregar líneas nuevas manualmente
     can_delete=False,       # no permitir borrar líneas (solo ajustar)
     fields=('cantidad_declarada', 'nota'),  # ← Corrige: usa 'cantidad_declarada' en vez de 'ajustada'
-)
-
-
-DetalleFormSetEdit = inlineformset_factory(
-    Pedido,
-    DetallePedido,
-    form=DetallePedidoForm,
-    formset=BaseDetalleFormSet,
-    extra=0,  # ← AQUÍ está la clave: 0 formularios extras
-    can_delete=True,
-    min_num=0,
-    validate_min=False,
 )

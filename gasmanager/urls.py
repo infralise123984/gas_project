@@ -19,53 +19,30 @@ from django.urls import path
 from mockups import views
 
 urlpatterns = [
-    # ────────────────────────────────────────────────
-    # Admin y acceso general
-    # ────────────────────────────────────────────────
     path('admin/', admin.site.urls),
 
-    # ────────────────────────────────────────────────
-    # Autenticación y página principal
-    # ────────────────────────────────────────────────
-    path("", views.index, name="index"),
-    path('login/', views.login_view, name='login'),
-    path('logout/', views.logout_view, name='logout'),
+    path("", views.index, name="index"),                                   # ← le puse nombre (opcional pero recomendado)
+
+    path('login/', views.login_view, name='login'),      # ← NUEVA RUTA (cambia de login_view/ → login/)
+    path('logout/', views.logout_view, name='logout'),  # ← NUEVA RUTA (para cerrar sesión)
     path('crear_usuario/', views.crear_usuario, name='crear_usuario'),
-
-    # ────────────────────────────────────────────────
-    # Registro y edición de pedidos (transaccional)
-    # ────────────────────────────────────────────────
+    # Tus rutas originales (sin cambios, solo les agregué nombres)
+    # path('mantenedor_clientes/', views.mantenedor_clientes, name='mantenedor_clientes'),
+    path('consultas_pedidos/', views.consultas_pedidos, name='consultas_pedidos'),
+    path('pedido/<int:pedido_id>/', views.detalle_pedido, name='detalle_pedido'),  # Nueva ruta
     path('transaccional_pedido/', views.transaccional_pedido, name='transaccional_pedido'),
-    path('pedido/<int:pedido_id>/', views.detalle_pedido, name='detalle_pedido'),
-    # ← Nueva ruta añadida para edición de pedidos (manteniendo consistencia de nombres)
-    path('editar_pedido/<int:pedido_id>/', views.editar_pedido, name='editar_pedido'),
-
-    # ────────────────────────────────────────────────
-    # Vistas específicas por rol
-    # ────────────────────────────────────────────────
-    # Telefonista / Bodeguero
-    path('mis-pedidos-hoy/', views.mis_pedidos_hoy, name='mis_pedidos_hoy'),
-
-    # Camionero
-    path("camionero/", views.camionero_entregas, name="camionero_entregas"),
+    path('reporte_ventas/', views.reporte_ventas, name='reporte_ventas'),
+    path('cliente_pedido/', views.cliente_pedido, name='cliente_pedido'),
+    # path('camionero_entregas/', views.camionero_entregas, name='camionero_entregas'),
+    path('precios/', views.precios_balones, name='precios_balones'),
+    path('consultas-pedidos/', views.consultas_pedidos, name='consultas_pedidos'),
     path('mis-entregas-camionero/', views.mis_entregas_camionero, name='mis_entregas'),
+    path('mis-pedidos-hoy/',   views.mis_pedidos_hoy,        name='mis_pedidos_hoy'),
+    path("camionero/", views.camionero_entregas, name="camionero_entregas"),
     path("camionero/tomar/<int:pedido_id>/", views.camionero_tomar_pedido, name="camionero_tomar_pedido"),
     path("camionero/entregado/<int:pedido_id>/", views.camionero_marcar_entregado, name="camionero_marcar_entregado"),
     path('camionero/cancelar/<int:pedido_id>/', views.camionero_cancelar_entrega, name='camionero_cancelar_entrega'),
-
-    # ────────────────────────────────────────────────
-    # Reportes y gestión administrativa (Jefe / Admin)
-    # ────────────────────────────────────────────────
-    path('reporte_ventas/', views.reporte_ventas, name='reporte_ventas'),
-    path('precios/', views.precios_balones, name='precios_balones'),
-    path('consultas_pedidos/', views.consultas_pedidos, name='consultas_pedidos'),
-
-    # Nota: esta ruta duplicada la dejamos comentada para evitar confusión
-    # path('consultas-pedidos/', views.consultas_pedidos, name='consultas_pedidos'),  # ← duplicada, usar la de arriba
-
-    # ────────────────────────────────────────────────
-    # Gestión de sobres diarios (cierre de caja)
-    # ────────────────────────────────────────────────
     path('sobres/', views.lista_sobres_diarios, name='lista_sobres_diarios'),
     path('sobres/editar/', views.editar_sobre_diario, name='editar_sobre_diario'),
+    
 ]
