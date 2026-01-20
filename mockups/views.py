@@ -931,7 +931,7 @@ def editar_sobre_diario(request, sobre_id=None):
     for balon in balones_activos:
         qty_calc = resumen_dict.get(balon.id, 0) or 0
 
-        # ✅ CORRECCIÓN: Solo establecer cantidad_declarada en CREACIÓN
+        # CORRECCIÓN: Solo establecer cantidad_declarada en CREACIÓN
         linea, creada = LineaSobre.objects.get_or_create(
             sobre=sobre,
             balon=balon,
