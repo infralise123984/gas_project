@@ -385,3 +385,17 @@ class LineaSobre(models.Model):
 
     def __str__(self):
         return f"{self.balon.nombre} → {self.cantidad_declarada} (calc: {self.cantidad_calculada})"
+    
+class HistorialCambioPedido(models.Model):
+    pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name='historial_cambios')
+    usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, verbose_name="Usuario que editó")
+    fecha = models.DateTimeField(auto_now_add=True, verbose_name="Fecha del cambio")
+    descripcion = models.TextField(verbose_name="Qué cambió", help_text="Descripción automática de los cambios realizados")
+
+    class Meta:
+        verbose_name = "Historial de Cambio en Pedido"
+        verbose_name_plural = "Historial de Cambios en Pedidos"
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f"Cambio en Pedido #{self.pedido.id} por {self.usuario} ({self.fecha})"
