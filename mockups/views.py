@@ -29,7 +29,8 @@ from .forms import (
     DetallePedidoForm, 
     PedidoCabeceraForm, 
     DetalleFormSet, 
-    LineaSobreFormSet
+    LineaSobreFormSet,
+    DetalleFormSetEdit
 )
 from .models import (
     Pedido, 
@@ -38,7 +39,8 @@ from .models import (
     DetallePedido, 
     HistorialEstadoPedido, 
     LineaSobre, 
-    SobreDiario
+    SobreDiario,
+    HistorialCambioPedido
 )
 
 
@@ -338,12 +340,133 @@ def transaccional_pedido(request):
 
 
 @login_required
-def cliente_pedido(request):
-    """Vista pública para que el cliente simule un pedido (sin login requerido)."""
-    # El login_required está en la url, pero aquí permitimos acceso anónimo si se configurara así
-    return render(request, "cliente_pedido.html")
+def editar_pedido(request, pedido_id):
+    """
+    Edición de pedidos con reglas específicas por rol:
+    - Telefonista: solo sus propios pedidos
+    - Camionero: solo los que tiene en ruta (estado 'en_ruta')
+    - Bodeguero: pedidos propios + pedidos de telefonistas
+    - Jefe/Admin: cualquier pedido
+    Solo permite editar si está pendiente o en ruta.
+    Registra todo cambio en HistorialCambioPedido.
+    """
+    pedido = get_object_or_404(Pedido, id=pedido_id)
 
+    user_rol = request.user.rol
 
+    # 1. Validación por rol y propiedad del pedido
+    if user_rol == 'telefonista':
+        if pedido.registrador != request.user:
+            messages.error(request, "Como telefonista solo puedes editar los pedidos que tú registraste.")
+            return redirect('mis_pedidos_hoy')
+
+    elif user_rol == 'camionero':
+        if pedido.entregador != request.user or pedido.estado != 'en_ruta':
+            messages.error(request, "Como camionero solo puedes editar pedidos que estén en tu ruta actual (estado 'en ruta').")
+            return redirect('camionero_entregas')
+
+    elif user_rol == 'bodeguero':
+        # Puede editar propios o de telefonistas
+        if pedido.registrador != request.user and pedido.registrador.rol != 'telefonista':
+            messages.error(request, "Como bodeguero solo puedes editar tus pedidos o los registrados por telefonistas.")
+            return redirect('mis_pedidos_hoy')
+
+    # Jefe y admin pueden editar cualquier pedido → no hay restricción adicional aquí
+
+    # 2. Bloqueo general por estado (independiente del rol)
+    if pedido.estado not in ['pendiente', 'en_ruta']:
+        if pedido.estado == 'entregado':
+            messages.error(request, "No se puede editar un pedido que ya fue entregado.")
+        elif pedido.estado == 'cancelado':
+            messages.error(request, "No se puede editar un pedido que fue cancelado.")
+        else:
+            messages.error(request, f"No se puede editar un pedido en estado '{pedido.get_estado_display()}'.")
+        return redirect('detalle_pedido', pedido_id=pedido.id)
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # Procesamiento del formulario
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    if request.method == 'POST':
+        old_data = {
+            'metodo_pago': pedido.metodo_pago,
+            'sector': pedido.sector,
+            'direccion_entrega': pedido.direccion_entrega,
+            'detalles': list(pedido.detalles.values('balon_id', 'cantidad')),
+            'estado': pedido.estado,
+        }
+
+        form_cabecera = PedidoCabeceraForm(request.POST, instance=pedido)
+        formset = DetalleFormSetEdit(
+            request.POST, 
+            instance=pedido,
+            form_kwargs={'user': request.user}  # ← Pasar usuario para precios correctos
+        )
+
+        if form_cabecera.is_valid() and formset.is_valid():
+            form_cabecera.save()
+            
+            # Guardar detalles con precios actualizados
+            detalles_guardados = 0
+            for detalle_form in formset:
+                if detalle_form.cleaned_data and not detalle_form.cleaned_data.get('DELETE', False):
+                    balon = detalle_form.cleaned_data.get('balon')
+                    cantidad = detalle_form.cleaned_data.get('cantidad')
+                    
+                    if balon and cantidad and cantidad > 0:
+                        detalle = detalle_form.save(commit=False)
+                        detalle.pedido = pedido
+                        
+                        # Si es un detalle nuevo (sin id), asignar precios
+                        if not detalle.pk:
+                            es_bodeguero = request.user.rol == "bodeguero"
+                            detalle.precio_venta_unitario = balon.precio_local if es_bodeguero else balon.precio_domicilio
+                            detalle.precio_compra_unitario = balon.precio_compra
+                        
+                        detalle.save()
+                        detalles_guardados += 1
+
+            # Detectar qué cambió (para historial claro)
+            cambios = []
+            if pedido.metodo_pago != old_data['metodo_pago']:
+                cambios.append(f"Método pago: {old_data['metodo_pago']} → {pedido.metodo_pago}")
+            if pedido.sector != old_data['sector']:
+                cambios.append(f"Sector: {old_data['sector'] or '—'} → {pedido.sector or '—'}")
+            if pedido.direccion_entrega != old_data['direccion_entrega']:
+                cambios.append("Dirección modificada")
+            if list(pedido.detalles.values('balon_id', 'cantidad')) != old_data['detalles']:
+                cambios.append("Productos/cantidades modificados")
+            if pedido.estado != old_data['estado']:
+                cambios.append(f"Estado: {old_data['estado']} → {pedido.estado}")
+
+            if cambios:
+                HistorialCambioPedido.objects.create(
+                    pedido=pedido,
+                    usuario=request.user,
+                    descripcion="; ".join(cambios)
+                )
+
+            # Recalcular totales
+            pedido.calcular_totales()
+
+            messages.success(request, "Pedido actualizado correctamente.")
+            return redirect('detalle_pedido', pedido_id=pedido.id)
+
+        else:
+            messages.error(request, "Por favor corrige los errores en el formulario.")
+    else:
+        form_cabecera = PedidoCabeceraForm(instance=pedido)
+        formset = DetalleFormSetEdit(
+            instance=pedido,
+            form_kwargs={'user': request.user}
+        )
+
+    return render(request, 'editar_pedido.html', {
+        'pedido': pedido,
+        'form_cabecera': form_cabecera,
+        'formset': formset,
+    })
+    
+    
 # ──────────────────────────────────────────────────────────────
 # 6. GESTIÓN DE PEDIDOS POR ROL
 # ──────────────────────────────────────────────────────────────
