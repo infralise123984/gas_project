@@ -4,8 +4,24 @@
 {% block title %}Mis Pedidos de Hoy - GasFácil{% endblock %}
 
 {% block content %}
-<div class="container mt-4 mb-5 px-2 px-md-3">
 
+<!-- Estilos específicos de esta vista (al inicio del content para carga correcta) -->
+<style>
+    .card {
+        border-radius: 12px;
+        transition: all 0.2s;
+    }
+    .card:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15) !important;
+    }
+    @media (min-width: 768px) {
+        .card-body {
+            padding: 1.5rem !important;
+        }
+    }
+</style>
+
+<div class="container mt-4 mb-5 px-2 px-md-3">
     <!-- Título adaptado al rol -->
     <h2 class="text-primary fw-bold mb-4 text-center">
         <i class="bi bi-clock-history me-2"></i>
@@ -84,6 +100,20 @@
                             <h5 class="fw-bold text-success mb-0">
                                 Total: ${{ pedido.monto_total|floatformat:0|intcomma }}
                             </h5>
+                            <!-- Botón Editar textual y condicional -->
+                            {% if pedido.estado in 'pendiente,en_ruta' %}
+                                {% if user.rol == 'telefonista' and pedido.registrador == user %}
+                                    <a href="{% url 'editar_pedido' pedido.id %}" 
+                                       class="btn btn-warning btn-sm mt-2">
+                                        Editar Pedido
+                                    </a>
+                                {% elif user.rol == 'bodeguero' and pedido.registrador == user or pedido.registrador.rol == 'telefonista' %}
+                                    <a href="{% url 'editar_pedido' pedido.id %}" 
+                                       class="btn btn-warning btn-sm mt-2">
+                                        Editar Pedido
+                                    </a>
+                                {% endif %}
+                            {% endif %}
                         </div>
                     </div>
 
@@ -105,21 +135,5 @@
         </p>
     </div>
     {% endif %}
-
 </div>
-
-<style>
-    .card {
-        border-radius: 12px;
-        transition: all 0.2s;
-    }
-    .card:hover {
-        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15) !important;
-    }
-    @media (min-width: 768px) {
-        .card-body {
-            padding: 1.5rem !important;
-        }
-    }
-</style>
 {% endblock %}
