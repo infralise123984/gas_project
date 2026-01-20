@@ -51,45 +51,51 @@
             {% else %}
             <p class="text-muted mb-4 fs-5">Sin dirección específica</p>
             {% endif %}
-            <!-- Botones horizontales -->
-            <div class="row g-3">
-                <div class="col-6">
-                    <form method="post" action="{% url 'camionero_marcar_entregado' pedido.id %}"
-                          onsubmit="return confirm('¿Marcar como ENTREGADO el pedido #{{ pedido.id }}?');">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-success btn-lg w-100 py-4 fs-6 shadow rounded-3">
-                            <i class="bi bi-check-circle-fill me-2"></i> ENTREGAR
-                        </button>
-                    </form>
-                </div>
-                <div class="col-6">
-                    <form method="post" action="{% url 'camionero_cancelar_entrega' pedido.id %}"
-                          onsubmit="return confirm('¿Cancelar entrega del pedido #{{ pedido.id }}?');">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-danger btn-lg w-100 py-4 fs-6 shadow rounded-3">
-                            <i class="bi bi-x-circle-fill me-2"></i> CANCELAR
-                        </button>
-                    </form>
-                </div>
+
+            <!-- Acciones (mantengo el d-grid, agrego botón Editar textual solo si aplica) -->
+            <div class="d-grid gap-2">
+                <form method="post" action="{% url 'camionero_marcar_entregado' pedido.id %}"
+                      onsubmit="return confirm('¿Marcar como entregado el pedido #{{ pedido.id }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-success btn-lg w-100 py-4 fs-5 shadow rounded-3">
+                        <i class="bi bi-check-circle-fill me-2"></i> MARCAR ENTREGADO
+                    </button>
+                </form>
+
+                <form method="post" action="{% url 'camionero_cancelar_entrega' pedido.id %}"
+                      onsubmit="return confirm('¿Cancelar entrega del pedido #{{ pedido.id }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger btn-lg w-100 py-4 fs-5 shadow rounded-3">
+                        <i class="bi bi-x-circle-fill me-2"></i> CANCELAR ENTREGA
+                    </button>
+                </form>
+
+                <!-- Botón Editar textual (solo si estado en ruta y es su pedido) -->
+                {% if pedido.estado == 'en_ruta' and pedido.entregador == user %}
+                <a href="{% url 'editar_pedido' pedido.id %}" class="btn btn-warning btn-lg w-100 py-4 fs-5 shadow rounded-3">
+                    Editar Pedido
+                </a>
+                {% endif %}
             </div>
         </div>
     </div>
     {% endfor %}
     {% endif %}
+
     <!-- Sección: Pendientes -->
     {% if pendientes %}
     <h5 class="text-info fw-bold mb-4 text-center fs-5">Pendientes ({{ pendientes.count }})</h5>
     {% for pedido in pendientes %}
     <div class="card shadow-lg mb-5 border-info border-3 rounded-4">
         <div class="card-body p-4 text-center">
+            <!-- Número de pedido -->
             <h4 class="fw-bold mb-4 text-dark">Pedido #{{ pedido.id }}</h4>
             <!-- Productos -->
             <div class="mb-4">
-                <h5 class="fw-bold mb-3">Productos:</h5>
                 <ul class="list-group list-group-flush mb-3">
                     {% for detalle in pedido.detalles.all %}
                     <li class="list-group-item d-flex justify-content-between align-items-center fs-5 py-3">
-                        {{ detalle.cantidad }} × {{ detalle.balon.nombre }}
+                        <span>{{ detalle.cantidad }} X {{ detalle.balon.nombre }}</span>
                         <span class="badge bg-success fs-5 px-3 py-2">${{ detalle.subtotal|floatformat:0|intcomma }}</span>
                     </li>
                     {% empty %}
@@ -113,7 +119,8 @@
             {% else %}
             <p class="text-muted mb-4 fs-5">Sin dirección específica</p>
             {% endif %}
-            <!-- Botón tomar (solo uno) -->
+
+            <!-- Botón tomar (y NO botón editar aquí, ya que pendientes no son editables por camionero) -->
             <div class="d-grid gap-2">
                 <form method="post" action="{% url 'camionero_tomar_pedido' pedido.id %}"
                       onsubmit="return confirm('¿Tomar este pedido #{{ pedido.id }}?');">
@@ -127,6 +134,7 @@
     </div>
     {% endfor %}
     {% endif %}
+
     <!-- Mensaje sin pedidos -->
     {% if not pedidos_en_ruta and not pendientes %}
     <div class="alert alert-light text-center py-5 shadow-sm rounded-4">
