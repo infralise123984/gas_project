@@ -20,6 +20,8 @@
         }
     }
 </style>
+    
+
 
 <div class="container mt-4 mb-5 px-2 px-md-3">
     <!-- Título adaptado al rol -->
@@ -104,12 +106,12 @@
                             {% if pedido.estado in 'pendiente,en_ruta' %}
                                 {% if user.rol == 'telefonista' and pedido.registrador == user %}
                                     <a href="{% url 'editar_pedido' pedido.id %}" 
-                                       class="btn btn-warning btn-sm mt-2">
+                                       class="btn btn-warning btn-lg mt-2 w-100">
                                         Editar Pedido
                                     </a>
                                 {% elif user.rol == 'bodeguero' and pedido.registrador == user or pedido.registrador.rol == 'telefonista' %}
                                     <a href="{% url 'editar_pedido' pedido.id %}" 
-                                       class="btn btn-warning btn-sm mt-2">
+                                       class="btn btn-warning btn-lg mt-2 w-100">
                                         Editar Pedido
                                     </a>
                                 {% endif %}
