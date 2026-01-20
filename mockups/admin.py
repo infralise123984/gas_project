@@ -1,6 +1,8 @@
 # mockups/admin.py
 from django.contrib import admin
-from .models import Usuario, TipoBalon, HistorialPrecioBalon, Pedido, DetallePedido, HistorialEstadoPedido
+from django.utils.html import format_html
+from django.db.models import Sum, F, ExpressionWrapper, DecimalField
+from .models import Usuario, TipoBalon, HistorialPrecioBalon, Pedido, DetallePedido, HistorialEstadoPedido, SobreDiario, LineaSobre
 
 
 @admin.register(Usuario)
@@ -128,4 +130,82 @@ class DetallePedidoAdmin(admin.ModelAdmin):
     readonly_fields = ('subtotal', 'ganancia')
     ordering = ('pedido__fecha', 'balon__peso_neto_gas')
     
-    
+
+@admin.register(SobreDiario)
+class SobreDiarioAdmin(admin.ModelAdmin):
+    list_display = (
+        'fecha',
+        'get_tipo_display',
+        'trabajador',
+        'creado_por',
+        'total_declarado',
+        'total_diferencia',
+    )
+    list_filter = ('fecha', 'tipo', 'trabajador')
+    search_fields = ('trabajador__username', 'creado_por__username')
+    date_hierarchy = 'fecha'
+    ordering = ('-fecha',)
+    readonly_fields = ('total_declarado', 'total_diferencia')
+
+    def total_declarado(self, obj):
+        return obj.lineas.aggregate(total=Sum('cantidad_declarada'))['total'] or 0
+    total_declarado.short_description = 'Total Declarado'
+
+    def total_diferencia(self, obj):
+        return obj.lineas.aggregate(
+            total=Sum(F('cantidad_declarada') - F('cantidad_calculada'))
+        )['total'] or 0
+    total_diferencia.short_description = 'Diferencia Total'
+
+    fieldsets = (
+        ('Información básica', {
+            'fields': ('fecha', 'tipo', 'trabajador', 'creado_por')
+        }),
+        ('Resumen calculado (solo lectura)', {
+            'fields': ('total_declarado', 'total_diferencia')
+        }),
+    )
+
+    # Inline para ver y editar líneas directamente desde el sobre
+    class LineaInline(admin.TabularInline):
+        model = LineaSobre
+        extra = 0
+        fields = ('balon', 'cantidad_calculada', 'cantidad_declarada', 'diferencia_cantidad', 'nota')
+        readonly_fields = ('balon', 'cantidad_calculada', 'diferencia_cantidad')
+        can_delete = False
+        show_change_link = True
+
+    inlines = [LineaInline]
+
+
+@admin.register(LineaSobre)
+class LineaSobreAdmin(admin.ModelAdmin):
+    list_display = (
+        'sobre',
+        'balon',
+        'cantidad_calculada',
+        'cantidad_declarada',
+        'diferencia_cantidad',
+        'subtotal_declarado',
+        'nota_corta',
+    )
+    list_filter = ('sobre__fecha', 'balon')
+    search_fields = ('balon__nombre', 'sobre__trabajador__username')
+    readonly_fields = ('diferencia_cantidad', 'subtotal_declarado')
+
+    def nota_corta(self, obj):
+        return (obj.nota[:40] + '...') if obj.nota else '-'
+    nota_corta.short_description = 'Nota'
+
+    fieldsets = (
+        (None, {
+            'fields': ('sobre', 'balon', 'cantidad_calculada', 'cantidad_declarada')
+        }),
+        ('Calculados', {
+            'fields': ('diferencia_cantidad', 'subtotal_declarado'),
+            'classes': ('collapse',)
+        }),
+        ('Observaciones', {
+            'fields': ('nota',)
+        }),
+    )
