@@ -55,7 +55,7 @@
             <div class="">
                 <div class="balon-card text-center p-3 border rounded shadow-sm bg-white" 
                      data-id="{{ balon.id }}" 
-                     data-precio="{{ balon.precio_domicilio }}">
+                     data-precio="{{ balon.precio_domicilio|stringformat:'d' }}">
                     
                     <div class="fs-5 fw-bold mb-1">{{ balon.nombre }}</div>
                     <div class="small text-muted mb-2">${{ balon.precio_domicilio|floatformat:0|intcomma }}</div>
@@ -111,9 +111,21 @@ let cantidades = {}; // id_balón → cantidad
 
 function actualizarTotal() {
     let total = 0;
+    
     document.querySelectorAll('.balon-card').forEach(card => {
         const id = card.dataset.id;
-        const precio = parseInt(card.dataset.precio) || 0;
+        const precioStr = card.dataset.precio;
+        
+        // DEBUG: Descomentar estas líneas para ver qué valor llega
+        // console.log('ID:', id, 'Precio string:', precioStr, 'Tipo:', typeof precioStr);
+        
+        // Eliminar cualquier carácter no numérico excepto el punto decimal
+        const precioLimpio = precioStr.replace(/[^0-9.]/g, '');
+        const precio = Number(precioLimpio) || 0;
+        
+        // DEBUG: Ver el precio parseado
+        // console.log('Precio limpio:', precioLimpio, 'Precio final:', precio);
+        
         const qty = cantidades[id] || 0;
         total += qty * precio;
 
@@ -128,13 +140,29 @@ function actualizarTotal() {
             }
             input.value = qty;
         } else if (input) {
-            input.remove(); // limpiamos si qty vuelve a 0
+            input.remove();
         }
     });
-    document.getElementById('totalDisplay').textContent = `$${total.toLocaleString('es-CL')}`;
+    
+    // DEBUG: Ver el total calculado
+    console.log('Total calculado:', total);
+    
+    // Formatear total
+    const totalRedondeado = Math.round(total);
+    const totalFormateado = totalRedondeado.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    
+    console.log('Total formateado:', totalFormateado);
+    
+    document.getElementById('totalDisplay').textContent = `$${totalFormateado}`;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // DEBUG: Ver todos los precios al cargar
+    console.log('=== PRECIOS AL CARGAR ===');
+    document.querySelectorAll('.balon-card').forEach(card => {
+        console.log('Balón ID:', card.dataset.id, 'Precio:', card.dataset.precio);
+    });
+    
     // Selección de método de pago
     document.querySelectorAll('.pago-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -166,7 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
             actualizarTotal();
         });
 
-        // Botón –
+        // Botón −
         card.querySelector('.minus')?.addEventListener('click', () => {
             cantidades[id] = Math.max(0, (cantidades[id] || 0) - 1);
             qtySpan.textContent = cantidades[id];
