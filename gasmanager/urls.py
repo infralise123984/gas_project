@@ -52,6 +52,7 @@ urlpatterns = [
     path("camionero/tomar/<int:pedido_id>/", views.camionero_tomar_pedido, name="camionero_tomar_pedido"),
     path("camionero/entregado/<int:pedido_id>/", views.camionero_marcar_entregado, name="camionero_marcar_entregado"),
     path('camionero/cancelar/<int:pedido_id>/', views.camionero_cancelar_entrega, name='camionero_cancelar_entrega'),
+    path('tarreo/', views.tarreo_pedido, name='tarreo_pedido'),
 
     # ────────────────────────────────────────────────
     # Reportes y gestión administrativa (Jefe / Admin)

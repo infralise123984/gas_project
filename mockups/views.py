@@ -709,6 +709,88 @@ def camionero_cancelar_entrega(request, pedido_id):
     return redirect("camionero_entregas")
 
 
+@login_required
+def tarreo_pedido(request):
+    if request.user.rol != 'camionero':
+        messages.error(request, "Acceso solo para camioneros.")
+        return redirect('index')
+
+    balones = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
+
+    if request.method == 'POST':
+        metodo_pago = request.POST.get('metodo_pago')
+        direccion_ingresada = request.POST.get('direccion_entrega', '').strip()
+
+        if not metodo_pago:
+            messages.error(request, "Selecciona un método de pago.")
+            return render(request, 'tarreo.html', {'balones': balones})
+
+        # Dirección por defecto si está vacía
+        direccion_final = direccion_ingresada if direccion_ingresada else "Tarreo / venta directa en camión"
+
+        # Crear cabecera del pedido
+        pedido = Pedido(
+            origen='tarreo',
+            metodo_pago=metodo_pago,
+            direccion_entrega=direccion_final,
+            registrador=request.user,
+            entregador=request.user,
+            estado='entregado',  # venta directa → entregado inmediatamente
+            fecha=timezone.now(),
+        )
+        pedido.save()
+
+        # Procesar detalles (similar a transaccional_pedido)
+        detalles_guardados = 0
+        total_monto = 0
+
+        for balon in balones:
+            qty_key = f'cantidad_{balon.id}'
+            cantidad_str = request.POST.get(qty_key, '0')
+            try:
+                cantidad = int(cantidad_str)
+            except ValueError:
+                cantidad = 0
+
+            if cantidad > 0:
+                detalle = DetallePedido(
+                    pedido=pedido,
+                    balon=balon,
+                    cantidad=cantidad,
+                    precio_venta_unitario=balon.precio_domicilio,
+                    precio_compra_unitario=balon.precio_compra,
+                    # NO pasamos subtotal aquí — se calcula solo
+                )
+                detalle.save()  # ← guarda sin tocar subtotal
+
+                # Acumular total usando el property subtotal (como en transaccional)
+                total_monto += detalle.subtotal
+                detalles_guardados += 1
+
+        if detalles_guardados == 0:
+            pedido.delete()
+            messages.error(request, "Debe agregar al menos un producto.")
+            return render(request, 'tarreo.html', {'balones': balones})
+
+        # Actualizar total en el pedido (si tienes el método calcular_totales)
+        pedido.monto_total = total_monto
+        pedido.save()
+
+        # Historial
+        HistorialEstadoPedido.objects.create(
+            pedido=pedido,
+            estado_nuevo='entregado',
+            cambiado_por=request.user,
+            comentario="Venta tarreo registrada y entregada directamente."
+        )
+
+        messages.success(request, f"¡Venta tarreo #{pedido.id} guardada correctamente con {detalles_guardados} producto(s)! Total: ${total_monto:,}")
+        return redirect('mis_entregas')  # o 'camionero_entregas'
+
+    # GET
+    return render(request, 'tarreo.html', {
+        'balones': balones,
+    })
 # ──────────────────────────────────────────────────────────────
 # 7. REPORTES Y CONSULTAS (Admin/Jefe)
 # ──────────────────────────────────────────────────────────────

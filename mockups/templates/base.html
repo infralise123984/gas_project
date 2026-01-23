@@ -238,14 +238,31 @@
     <main class="container py-4 flex-grow-1">
         {% block content %}{% endblock %}
     </main>
-    {% if user.is_authenticated %}
-    <a href="{% url 'index' %}"
-        class="btn btn-primary btn-lg rounded-circle shadow-lg position-fixed bottom-0 end-0 m-4 d-flex align-items-center justify-content-center"
-        style="width: 70px; height: 70px; z-index: 1050; transition: all 0.2s;">
-        <i class="bi bi-house-door-fill fs-3"></i>
+<!-- En base.html, justo antes del </body> o después del <main> -->
+
+{% if user.is_authenticated %}
+<div class="position-fixed bottom-0 end-0 p-4 d-flex flex-column gap-3 align-items-end" style="z-index: 1050;">
+    
+    <!-- Botón TARREO - solo camioneros (arriba) -->
+    {% if user.rol == "camionero" %}
+    <a href="{% url 'tarreo_pedido' %}"
+       class="btn btn-success btn-lg rounded-circle shadow-lg d-flex align-items-center justify-content-center"
+       style="width: 70px; height: 70px;"
+       data-bs-toggle="tooltip" data-bs-placement="left" title="Nueva venta tarreo">
+        <i class="bi bi-plus-circle-fill fs-3"></i>
     </a>
     {% endif %}
 
+    <!-- Botón INICIO (siempre abajo) -->
+    <a href="{% url 'index' %}"
+       class="btn btn-primary btn-lg rounded-circle shadow-lg d-flex align-items-center justify-content-center"
+       style="width: 70px; height: 70px;"
+       data-bs-toggle="tooltip" data-bs-placement="left" title="Volver al inicio">
+        <i class="bi bi-house-door-fill fs-3"></i>
+    </a>
+
+</div>
+{% endif %}
     <footer class="bg-light border-top mt-auto py-4">
         <div class="container text-center text-muted small">
             © 2025-2026 Kim Gas - Todos los derechos reservados
