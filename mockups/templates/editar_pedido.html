@@ -14,7 +14,7 @@
         <!-- Errores globales -->
         {% if formset.non_form_errors %}
         <div class="alert alert-danger mb-4">
-            <strong>⚠️ Errores:</strong>
+            <strong> Errores:</strong>
             <ul class="mb-0">
                 {% for error in formset.non_form_errors %}
                 <li>{{ error }}</li>
@@ -83,7 +83,7 @@
                             </button>
                         </div>
                     </div>
-                    <!-- ⚠️ CRÍTICO: Campos hidden necesarios para el formset -->
+                    <!--  CRÍTICO: Campos hidden necesarios para el formset -->
                     {{ form.id }}
                     <div style="display: none;">{{ form.DELETE }}</div>
                 </div>
@@ -103,7 +103,7 @@
             <button type="submit" class="btn btn-success btn-lg py-3 fs-5 shadow">
                 <i class="bi bi-save me-2"></i> Guardar Cambios
             </button>
-            <a href="{% url 'detalle_pedido' pedido.id %}" class="btn btn-outline-secondary btn-lg py-3 fs-5">
+            <a href="{% url 'mis-entregas-camionero' %}" class="btn btn-outline-secondary btn-lg py-3 fs-5">
                 Cancelar
             </a>
         </div>
