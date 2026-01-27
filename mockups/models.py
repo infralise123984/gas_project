@@ -100,23 +100,37 @@ class TipoBalon(models.Model):
 
 
 class HistorialPrecioBalon(models.Model):
-    tipo_balón = models.ForeignKey(
-        TipoBalon, on_delete=models.CASCADE, related_name="historial_precios"
+    # Snapshot del nombre del balón en el momento del cambio (para que se entienda de qué se trata sin FK)
+    nombre_balon = models.CharField(
+        max_length=100,
+        verbose_name="Nombre del Balón (snapshot)",
+        null=True,          # ← temporal, para pasar la migración
+        blank=True,
     )
-    precio_compra_anterior     = models.DecimalField(max_digits=10, decimal_places=0)
-    precio_local_anterior      = models.DecimalField(max_digits=10, decimal_places=0)
-    precio_domicilio_anterior  = models.DecimalField(max_digits=10, decimal_places=0)
-    activo_anterior            = models.BooleanField()
-    fecha_cambio               = models.DateTimeField(default=timezone.now)
-    actualizado_por            = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Precios anteriores (los 3 tipos)
+    precio_compra_anterior     = models.DecimalField(max_digits=10, decimal_places=0, verbose_name="Precio Compra Anterior")
+    precio_local_anterior      = models.DecimalField(max_digits=10, decimal_places=0, verbose_name="Precio Local Anterior")
+    precio_domicilio_anterior  = models.DecimalField(max_digits=10, decimal_places=0, verbose_name="Precio Domicilio Anterior")
+    
+    activo_anterior            = models.BooleanField(verbose_name="Disponible Anterior")
+    
+    fecha_cambio               = models.DateTimeField(default=timezone.now, verbose_name="Fecha del Cambio")
+    actualizado_por            = models.ForeignKey(
+        'Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Actualizado por"
+    )
 
     class Meta:
-        verbose_name = "Historial de precio"
-        verbose_name_plural = "Historial de precios"
+        verbose_name = "Historial de Precio de Balón"
+        verbose_name_plural = "Historial de Precios de Balones"
         ordering = ["-fecha_cambio"]
 
     def __str__(self):
-        return f"{self.tipo_balón} - {self.fecha_cambio.date()}"
+        return f"{self.nombre_balon} - {self.fecha_cambio.date()}"
 
 
 class Pedido(models.Model):

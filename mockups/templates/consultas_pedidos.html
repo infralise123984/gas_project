@@ -28,35 +28,6 @@
     </div>
 
     <!-- Tarjetas de estadísticas rápidas -->
-    <div class="row g-3 mb-4">
-        <div class="col-md-4 col-sm-6">
-            <div class="card border-primary shadow-sm text-center">
-                <div class="card-body">
-                    <i class="bi bi-box-seam fs-1 text-primary mb-2 d-block"></i>
-                    <h3 class="fw-bold mb-1">{{ estadisticas.total_pedidos }}</h3>
-                    <small class="text-muted">Pedidos encontrados</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 col-sm-6">
-            <div class="card border-success shadow-sm text-center">
-                <div class="card-body">
-                    <i class="bi bi-cash-stack fs-1 text-success mb-2 d-block"></i>
-                    <h3 class="fw-bold mb-1">${{ estadisticas.total_ventas|floatformat:0|intcomma }}</h3>
-                    <small class="text-muted">Monto total ventas</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 col-sm-6">
-            <div class="card border-info shadow-sm text-center">
-                <div class="card-body">
-                    <i class="bi bi-graph-up-arrow fs-1 text-info mb-2 d-block"></i>
-                    <h3 class="fw-bold mb-1">${{ estadisticas.total_ganancias|floatformat:0|intcomma }}</h3>
-                    <small class="text-muted">Ganancia estimada</small>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Filtros -->
     <div class="card shadow-sm mb-4 border-0">
