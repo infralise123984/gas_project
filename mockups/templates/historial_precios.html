@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+{% load humanize static %}
+
+{% block title %}Historial de Precios - GasFácil{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <h2 class="text-primary fw-bold mb-0">
+            <i class="bi bi-clock-history me-2"></i>Historial de Cambios de Precios
+        </h2>
+        <a href="{% url 'precios_balones' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver a Precios
+        </a>
+    </div>
+
+    <!-- Selector de balón -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">Seleccionar balón:</label>
+                    <select name="balon" class="form-select form-select-lg" onchange="this.form.submit()">
+                        <option value="">— Ver últimos cambios generales —</option>
+                        {% for balon in balones %}
+                            <option value="{{ balon.id }}" {% if balon_seleccionado.id == balon.id %}selected{% endif %}>
+                                {{ balon.nombre }} ({{ balon.peso_neto_gas }} kg)
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Gráfico (solo si hay datos para un balón específico) -->
+    {% if chart_data %}
+    <div class="card shadow-sm mb-5">
+        <div class="card-header bg-primary text-white text-center">
+            <h5 class="mb-0">Evolución de Precios - {{ chart_data.nombre_balon }}</h5>
+        </div>
+        <div class="card-body">
+            <canvas id="precioChart" height="280"></canvas>
+        </div>
+    </div>
+
+    <script>
+    const ctx = document.getElementById('precioChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_data.labels|safe }},
+            datasets: [
+                {
+                    label: 'Precio Compra',
+                    data: {{ chart_data.compra|safe }},
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                    tension: 0.1,
+                    fill: true
+                },
+                {
+                    label: 'Precio Local',
+                    data: {{ chart_data.local|safe }},
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                    tension: 0.1,
+                    fill: true
+                },
+                {
+                    label: 'Precio Domicilio',
+                    data: {{ chart_data.domicilio|safe }},
+                    borderColor: '#198754',
+                    backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                    tension: 0.1,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': $' + context.parsed.y.toLocaleString('es-CL');
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toLocaleString('es-CL');
+                        }
+                    }
+                }
+            }
+        }
+    });
+    </script>
+    {% else %}
+    <div class="alert alert-info text-center py-4">
+        <i class="bi bi-info-circle fs-4 me-2"></i>
+        Selecciona un balón para ver su evolución de precios en gráfico.
+    </div>
+    {% endif %}
+
+    <!-- Tabla de registros -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">
+                {% if balon_seleccionado %}
+                    Registros de {{ balon_seleccionado.nombre }}
+                {% else %}
+                    Últimos cambios registrados (general)
+                {% endif %}
+            </h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-striped align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Balón</th>
+                        <th>Compra anterior</th>
+                        <th>Local anterior</th>
+                        <th>Domicilio anterior</th>
+                        <th>Disponible</th>
+                        <th>Por</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for reg in historial %}
+                    <tr>
+                        <td>{{ reg.fecha_cambio|date:"d/m/Y H:i" }}</td>
+                        <td>{{ reg.nombre_balon }}</td>
+                        <td class="text-end">${{ reg.precio_compra_anterior|floatformat:0|intcomma }}</td>
+                        <td class="text-end">${{ reg.precio_local_anterior|floatformat:0|intcomma }}</td>
+                        <td class="text-end">${{ reg.precio_domicilio_anterior|floatformat:0|intcomma }}</td>
+                        <td class="text-center">
+                            <span class="badge bg-{% if reg.activo_anterior %}success{% else %}danger{% endif %}">
+                                {% if reg.activo_anterior %}Sí{% else %}No{% endif %}
+                            </span>
+                        </td>
+                        <td>{{ reg.actualizado_por.get_full_name|default:reg.actualizado_por.username|default:"—" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-4 d-block mb-3"></i>
+                            No hay cambios registrados {% if balon_seleccionado %}para este balón{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
