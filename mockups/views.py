@@ -40,7 +40,8 @@ from .models import (
     HistorialEstadoPedido, 
     LineaSobre, 
     SobreDiario,
-    HistorialCambioPedido
+    HistorialCambioPedido,
+    HistorialPrecioBalon
 )
 
 
@@ -188,14 +189,15 @@ def crear_usuario(request):
 
     return render(request, "crear_usuario.html", {"roles_choices": roles_choices})
 
-
 @login_required
 def precios_balones(request):
     """
-    Vista para Jefes y Admins.
+    Vista para Jefes, admin y bodegueros.
     Permite actualizar masivamente precios de compra, venta y estado de balones.
+    Registra historial automático de los valores ANTERIORES cuando hay cambios.
     """
-    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para gestionar precios.")
+    # Verificación de rol (tu función existente)
+    resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para gestionar precios.")
     if resp:
         return resp
 
@@ -205,16 +207,17 @@ def precios_balones(request):
         cambios_realizados = False
 
         for balon in balones:
-            # Mapeo de campos del formulario
-            compra_key = f"precio_compra_{balon.id}"
-            local_key  = f"precio_local_{balon.id}"
-            dom_key    = f"precio_domicilio_{balon.id}"
-            activo_key = f"activo_{balon.id}"
+            # Claves de los campos del formulario
+            compra_key    = f"precio_compra_{balon.id}"
+            local_key     = f"precio_local_{balon.id}"
+            dom_key       = f"precio_domicilio_{balon.id}"
+            activo_key    = f"activo_{balon.id}"
 
-            nuevo_compra_str = request.POST.get(compra_key)
-            nuevo_local_str  = request.POST.get(local_key)
-            nuevo_dom_str    = request.POST.get(dom_key)
-            nuevo_activo     = activo_key in request.POST
+            # Valores enviados (o los actuales si no se enviaron)
+            nuevo_compra_str    = request.POST.get(compra_key)
+            nuevo_local_str     = request.POST.get(local_key)
+            nuevo_dom_str       = request.POST.get(dom_key)
+            nuevo_activo        = activo_key in request.POST
 
             try:
                 nuevo_compra     = int(nuevo_compra_str) if nuevo_compra_str else balon.precio_compra
@@ -227,31 +230,112 @@ def precios_balones(request):
                 messages.error(request, f"Precio inválido para {balon.nombre}. Se ignoraron cambios en esta fila.")
                 continue
 
-            # Verificar si hubo cambios reales antes de guardar
-            if (balon.precio_compra != nuevo_compra or
-                balon.precio_local != nuevo_local or
-                balon.precio_domicilio != nuevo_domicilio or
-                balon.activo != nuevo_activo):
+            # Detectar si realmente hay algún cambio
+            hubo_cambio = (
+                balon.precio_compra     != nuevo_compra or
+                balon.precio_local      != nuevo_local or
+                balon.precio_domicilio  != nuevo_domicilio or
+                balon.activo            != nuevo_activo
+            )
 
-                balon.precio_compra    = nuevo_compra
-                balon.precio_local     = nuevo_local
-                balon.precio_domicilio = nuevo_domicilio
-                balon.activo           = nuevo_activo
+            if hubo_cambio:
+                # ────────────────────────────────────────────────
+                # GUARDAR HISTORIAL ANTES de aplicar los cambios
+                # ────────────────────────────────────────────────
+                HistorialPrecioBalon.objects.create(
+                    nombre_balon       = balon.nombre,                # snapshot actual (antes del cambio)
+                    precio_compra_anterior     = balon.precio_compra,
+                    precio_local_anterior      = balon.precio_local,
+                    precio_domicilio_anterior  = balon.precio_domicilio,
+                    activo_anterior            = balon.activo,
+                    actualizado_por            = request.user,
+                    # fecha_cambio se autogenera con default=timezone.now
+                )
+
+                # Ahora sí aplicar los nuevos valores
+                balon.precio_compra     = nuevo_compra
+                balon.precio_local      = nuevo_local
+                balon.precio_domicilio  = nuevo_domicilio
+                balon.activo            = nuevo_activo
                 balon.actualizado_por   = request.user
-                balon.save()  # Disparará señal automática de historial si existe
+                balon.save()
 
                 cambios_realizados = True
 
         if cambios_realizados:
-            messages.success(request, "Precios y disponibilidad actualizados correctamente.")
+            messages.success(request, "Precios y disponibilidad actualizados correctamente. Historial registrado.")
         else:
             messages.info(request, "No se detectaron cambios válidos.")
 
         return redirect("precios_balones")
 
+    # GET → mostrar formulario
     return render(request, "precios_balones.html", {"balones": balones})
 
+@login_required
+def historial_precios(request):
+    if request.user.rol not in ['jefe', 'admin', 'bodeguero']:
+        messages.error(request, "No tienes permiso para ver el historial de precios.")
+        return redirect('index')
 
+    balones = TipoBalon.objects.all().order_by('nombre')
+    balon_id = request.GET.get('balon')
+    balon_seleccionado = None
+    historial = []
+    precios_actuales = None  # ← nuevo
+
+    if balon_id:
+        try:
+            balon_seleccionado = TipoBalon.objects.get(id=balon_id)
+            historial = HistorialPrecioBalon.objects.filter(
+                nombre_balon=balon_seleccionado.nombre
+            ).order_by('-fecha_cambio')
+
+            # Precios actuales del balón seleccionado
+            precios_actuales = {
+                'compra': balon_seleccionado.precio_compra,
+                'local': balon_seleccionado.precio_local,
+                'domicilio': balon_seleccionado.precio_domicilio,
+                'activo': balon_seleccionado.activo,
+            }
+
+        except TipoBalon.DoesNotExist:
+            messages.warning(request, "Balón no encontrado.")
+    else:
+        historial = HistorialPrecioBalon.objects.all().order_by('-fecha_cambio')[:50]
+
+    # Preparar datos para Chart.js (igual que antes)
+    chart_data = None
+    if balon_seleccionado and historial:
+        labels = []
+        compra_data = []
+        local_data = []
+        domicilio_data = []
+
+        for reg in historial.order_by('fecha_cambio'):  # cronológico
+            labels.append(reg.fecha_cambio.strftime('%d/%m/%Y %H:%M'))
+            compra_data.append(float(reg.precio_compra_anterior))
+            local_data.append(float(reg.precio_local_anterior))
+            domicilio_data.append(float(reg.precio_domicilio_anterior))
+
+        chart_data = {
+            'labels': labels,
+            'compra': compra_data,
+            'local': local_data,
+            'domicilio': domicilio_data,
+            'nombre_balon': balon_seleccionado.nombre
+        }
+
+    context = {
+        'balones': balones,
+        'balon_seleccionado': balon_seleccionado,
+        'historial': historial,
+        'chart_data': chart_data,
+        'precios_actuales': precios_actuales,  # ← nuevo
+        'title': 'Historial de Cambios de Precios' + (f' - {balon_seleccionado.nombre}' if balon_seleccionado else '')
+    }
+
+    return render(request, 'historial_precios.html', context)
 # ──────────────────────────────────────────────────────────────
 # 5. OPERACIONES TRANSACCIONALES (Registro de Ventas)
 # ──────────────────────────────────────────────────────────────
