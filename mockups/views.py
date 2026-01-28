@@ -189,18 +189,15 @@ def crear_usuario(request):
 
     return render(request, "crear_usuario.html", {"roles_choices": roles_choices})
 
-
-# views.py
-
 @login_required
 def precios_balones(request):
     """
-    Vista para Jefes y Admins.
+    Vista para Jefes, admin y bodegueros.
     Permite actualizar masivamente precios de compra, venta y estado de balones.
     Registra historial automático de los valores ANTERIORES cuando hay cambios.
     """
     # Verificación de rol (tu función existente)
-    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para gestionar precios.")
+    resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para gestionar precios.")
     if resp:
         return resp
 
@@ -277,17 +274,15 @@ def precios_balones(request):
 
 @login_required
 def historial_precios(request):
-    if request.user.rol not in ['jefe', 'admin']:
+    if request.user.rol not in ['jefe', 'admin', 'bodeguero']:
         messages.error(request, "No tienes permiso para ver el historial de precios.")
         return redirect('index')
 
-    # Todos los balones activos + inactivos (para ver historial completo)
     balones = TipoBalon.objects.all().order_by('nombre')
-
-    # Balón seleccionado (por GET o default al primero)
     balon_id = request.GET.get('balon')
     balon_seleccionado = None
     historial = []
+    precios_actuales = None  # ← nuevo
 
     if balon_id:
         try:
@@ -295,13 +290,21 @@ def historial_precios(request):
             historial = HistorialPrecioBalon.objects.filter(
                 nombre_balon=balon_seleccionado.nombre
             ).order_by('-fecha_cambio')
+
+            # Precios actuales del balón seleccionado
+            precios_actuales = {
+                'compra': balon_seleccionado.precio_compra,
+                'local': balon_seleccionado.precio_local,
+                'domicilio': balon_seleccionado.precio_domicilio,
+                'activo': balon_seleccionado.activo,
+            }
+
         except TipoBalon.DoesNotExist:
             messages.warning(request, "Balón no encontrado.")
     else:
-        # Si no hay selección, mostramos el historial más reciente de cualquier balón
         historial = HistorialPrecioBalon.objects.all().order_by('-fecha_cambio')[:50]
 
-    # Preparar datos para Chart.js (solo si hay balón seleccionado)
+    # Preparar datos para Chart.js (igual que antes)
     chart_data = None
     if balon_seleccionado and historial:
         labels = []
@@ -309,7 +312,7 @@ def historial_precios(request):
         local_data = []
         domicilio_data = []
 
-        for reg in historial.order_by('fecha_cambio'):  # orden cronológico para gráfico
+        for reg in historial.order_by('fecha_cambio'):  # cronológico
             labels.append(reg.fecha_cambio.strftime('%d/%m/%Y %H:%M'))
             compra_data.append(float(reg.precio_compra_anterior))
             local_data.append(float(reg.precio_local_anterior))
@@ -328,11 +331,11 @@ def historial_precios(request):
         'balon_seleccionado': balon_seleccionado,
         'historial': historial,
         'chart_data': chart_data,
+        'precios_actuales': precios_actuales,  # ← nuevo
         'title': 'Historial de Cambios de Precios' + (f' - {balon_seleccionado.nombre}' if balon_seleccionado else '')
     }
 
     return render(request, 'historial_precios.html', context)
-
 # ──────────────────────────────────────────────────────────────
 # 5. OPERACIONES TRANSACCIONALES (Registro de Ventas)
 # ──────────────────────────────────────────────────────────────

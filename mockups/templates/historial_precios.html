@@ -8,8 +8,9 @@
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4 mb-5">
+<div class="container mt-4 mb-5 px-3">
 
+    <!-- Encabezado -->
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
         <h2 class="text-primary fw-bold mb-0">
             <i class="bi bi-clock-history me-2"></i>Historial de Cambios de Precios
@@ -19,10 +20,10 @@
         </a>
     </div>
 
-    <!-- Selector de balón -->
+    <!-- 1. Selector de balón -->
     <div class="card shadow-sm mb-4">
         <div class="card-body">
-            <form method="get" class="row g-3 align-items-end">
+            <form method="get" class="row g-3 align-items-center">
                 <div class="col-md-6">
                     <label class="form-label fw-bold">Seleccionar balón:</label>
                     <select name="balon" class="form-select form-select-lg" onchange="this.form.submit()">
@@ -38,11 +39,42 @@
         </div>
     </div>
 
-    <!-- Gráfico (solo si hay datos para un balón específico) -->
+    <!-- 2. Precios vigentes (solo si hay balón seleccionado) -->
+    {% if precios_actuales %}
+    <div class="card shadow border-primary mb-5">
+        <div class="card-header bg-primary text-white text-center py-3">
+            <h5 class="mb-0">Precios Vigentes Hoy — {{ balon_seleccionado.nombre }}</h5>
+        </div>
+        <div class="card-body">
+            <div class="row text-center g-4">
+                <div class="col-6 col-md-3">
+                    <strong>Compra</strong><br>
+                    <h4 class="fw-bold text-danger">${{ precios_actuales.compra|floatformat:0|intcomma }}</h4>
+                </div>
+                <div class="col-6 col-md-3">
+                    <strong>Local</strong><br>
+                    <h4 class="fw-bold text-primary">${{ precios_actuales.local|floatformat:0|intcomma }}</h4>
+                </div>
+                <div class="col-6 col-md-3">
+                    <strong>Domicilio</strong><br>
+                    <h4 class="fw-bold text-success">${{ precios_actuales.domicilio|floatformat:0|intcomma }}</h4>
+                </div>
+                <div class="col-6 col-md-3">
+                    <strong>Disponible</strong><br>
+                    <span class="badge fs-5 bg-{% if precios_actuales.activo %}success{% else %}danger{% endif %}">
+                        {% if precios_actuales.activo %}SÍ{% else %}NO{% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 3. Gráfico -->
     {% if chart_data %}
     <div class="card shadow-sm mb-5">
         <div class="card-header bg-primary text-white text-center">
-            <h5 class="mb-0">Evolución de Precios - {{ chart_data.nombre_balon }}</h5>
+            <h5 class="mb-0">Evolución de Precios — {{ chart_data.nombre_balon }}</h5>
         </div>
         <div class="card-body">
             <canvas id="precioChart" height="280"></canvas>
@@ -56,85 +88,41 @@
         data: {
             labels: {{ chart_data.labels|safe }},
             datasets: [
-                {
-                    label: 'Precio Compra',
-                    data: {{ chart_data.compra|safe }},
-                    borderColor: '#dc3545',
-                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
-                    tension: 0.1,
-                    fill: true
-                },
-                {
-                    label: 'Precio Local',
-                    data: {{ chart_data.local|safe }},
-                    borderColor: '#0d6efd',
-                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                    tension: 0.1,
-                    fill: true
-                },
-                {
-                    label: 'Precio Domicilio',
-                    data: {{ chart_data.domicilio|safe }},
-                    borderColor: '#198754',
-                    backgroundColor: 'rgba(25, 135, 84, 0.1)',
-                    tension: 0.1,
-                    fill: true
-                }
+                { label: 'Compra', data: {{ chart_data.compra|safe }}, borderColor: '#dc3545', backgroundColor: 'rgba(220,53,69,0.1)', tension: 0.1, fill: true },
+                { label: 'Local', data: {{ chart_data.local|safe }}, borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.1)', tension: 0.1, fill: true },
+                { label: 'Domicilio', data: {{ chart_data.domicilio|safe }}, borderColor: '#198754', backgroundColor: 'rgba(25,135,84,0.1)', tension: 0.1, fill: true }
             ]
         },
         options: {
             responsive: true,
-            plugins: {
-                legend: { position: 'top' },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.dataset.label + ': $' + context.parsed.y.toLocaleString('es-CL');
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: false,
-                    ticks: {
-                        callback: function(value) {
-                            return '$' + value.toLocaleString('es-CL');
-                        }
-                    }
-                }
-            }
+            plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString('es-CL') } } },
+            scales: { y: { ticks: { callback: v => '$' + v.toLocaleString('es-CL') } } }
         }
     });
     </script>
     {% else %}
-    <div class="alert alert-info text-center py-4">
-        <i class="bi bi-info-circle fs-4 me-2"></i>
-        Selecciona un balón para ver su evolución de precios en gráfico.
+    <div class="alert alert-info text-center py-5">
+        Selecciona un balón para ver su historial y evolución de precios.
     </div>
     {% endif %}
 
-    <!-- Tabla de registros -->
+    <!-- 4. Tabla histórica -->
     <div class="card shadow-sm">
         <div class="card-header bg-light">
             <h5 class="mb-0">
-                {% if balon_seleccionado %}
-                    Registros de {{ balon_seleccionado.nombre }}
-                {% else %}
-                    Últimos cambios registrados (general)
-                {% endif %}
+                {% if balon_seleccionado %}Cambios de {{ balon_seleccionado.nombre }}{% else %}Últimos cambios (general){% endif %}
             </h5>
         </div>
         <div class="table-responsive">
-            <table class="table table-hover table-striped align-middle">
+            <table class="table table-hover table-striped">
                 <thead class="table-dark">
                     <tr>
                         <th>Fecha</th>
                         <th>Balón</th>
-                        <th>Compra anterior</th>
-                        <th>Local anterior</th>
-                        <th>Domicilio anterior</th>
-                        <th>Disponible</th>
+                        <th class="text-end">Compra ant.</th>
+                        <th class="text-end">Local ant.</th>
+                        <th class="text-end">Domicilio ant.</th>
+                        <th class="text-center">Disponible</th>
                         <th>Por</th>
                     </tr>
                 </thead>
@@ -148,18 +136,13 @@
                         <td class="text-end">${{ reg.precio_domicilio_anterior|floatformat:0|intcomma }}</td>
                         <td class="text-center">
                             <span class="badge bg-{% if reg.activo_anterior %}success{% else %}danger{% endif %}">
-                                {% if reg.activo_anterior %}Sí{% else %}No{% endif %}
+                                {{ reg.activo_anterior|yesno:"Sí,No" }}
                             </span>
                         </td>
-                        <td>{{ reg.actualizado_por.get_full_name|default:reg.actualizado_por.username|default:"—" }}</td>
+                        <td>{{ reg.actualizado_por.get_full_name|default:"—" }}</td>
                     </tr>
                     {% empty %}
-                    <tr>
-                        <td colspan="7" class="text-center py-5 text-muted">
-                            <i class="bi bi-inbox fs-4 d-block mb-3"></i>
-                            No hay cambios registrados {% if balon_seleccionado %}para este balón{% endif %}
-                        </td>
-                    </tr>
+                    <tr><td colspan="7" class="text-center py-4">No hay registros</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
