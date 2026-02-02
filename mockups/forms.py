@@ -1,7 +1,7 @@
 # mockups/forms.py
 from django import forms
 from django.forms import inlineformset_factory, BaseInlineFormSet
-from .models import Pedido, DetallePedido, TipoBalon, SobreDiario, LineaSobre
+from .models import Pedido, DetallePedido, TipoBalon, SobreDiario, LineaSobre, LineaPago, LineaGasto
 
 SECTORES = [
     ("", "— Seleccionar sector —"),
@@ -152,4 +152,42 @@ DetalleFormSetEdit = inlineformset_factory(
     can_delete=True,
     min_num=0,
     validate_min=False,
+)
+
+class LineaPagoForm(forms.ModelForm):
+    class Meta:
+        model = LineaPago
+        fields = ['tipo_pago', 'monto', 'referencia']
+        widgets = {
+            'tipo_pago': forms.Select(attrs={'class': 'form-select'}),
+            'monto': forms.NumberInput(attrs={'class': 'form-control text-end', 'min': 0}),
+            'referencia': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej: Nº transacción o cheque'}),
+        }
+
+LineaPagoFormSet = inlineformset_factory(
+    SobreDiario,
+    LineaPago,
+    form=LineaPagoForm,
+    extra=1,  # Permite agregar líneas nuevas
+    can_delete=True,
+    min_num=0,
+)
+
+class LineaGastoForm(forms.ModelForm):
+    class Meta:
+        model = LineaGasto
+        fields = ['descripcion', 'monto', 'nota']
+        widgets = {
+            'descripcion': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej: Compra agua o pago aseo'}),
+            'monto': forms.NumberInput(attrs={'class': 'form-control text-end', 'min': 0}),
+            'nota': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': 'Detalles adicionales'}),
+        }
+
+LineaGastoFormSet = inlineformset_factory(
+    SobreDiario,
+    LineaGasto,
+    form=LineaGastoForm,
+    extra=1,  # Permite agregar líneas nuevas
+    can_delete=True,
+    min_num=0,
 )

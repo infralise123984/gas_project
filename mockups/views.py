@@ -30,7 +30,9 @@ from .forms import (
     PedidoCabeceraForm, 
     DetalleFormSet, 
     LineaSobreFormSet,
-    DetalleFormSetEdit
+    DetalleFormSetEdit,
+    LineaPagoFormSet,
+    LineaGastoFormSet
 )
 from .models import (
     Pedido, 
@@ -552,8 +554,8 @@ def editar_pedido(request, pedido_id):
         'form_cabecera': form_cabecera,
         'formset': formset,
     })
-    
-    
+
+
 # ──────────────────────────────────────────────────────────────
 # 6. GESTIÓN DE PEDIDOS POR ROL
 # ──────────────────────────────────────────────────────────────
@@ -762,8 +764,8 @@ def camionero_marcar_entregado(request, pedido_id):
     )
     messages.success(request, f"¡Pedido #{pedido.id} marcado como ENTREGADO exitosamente!")
     return redirect("camionero_entregas")
-    
-    
+
+
 @login_required
 def camionero_cancelar_entrega(request, pedido_id):
     """Camionero cancela una entrega que tenía en ruta."""
@@ -1165,96 +1167,139 @@ def lista_sobres_diarios(request):
         'camioneros': camioneros,
     })
 
-
 @login_required
-def editar_sobre_diario(request, sobre_id=None):
-    """
-    Vista para editar o crear el sobre de un día específico.
-    Calcula automáticamente las cantidades vendidas contra las declaradas.
-    """
-    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
-        messages.error(request, "Acceso no permitido.")
+def editar_sobre_diario(request):
+    hoy = timezone.now().date()
+    usuario = request.user
+
+    # Determinar si es bodega o camionero específico
+    es_bodega = request.GET.get('bodega') == '1'
+    camionero_id = request.GET.get('camionero')
+
+    if es_bodega:
+        tipo_sobre = 'bodega'
+        trabajador = None
+        titulo = "Sobre Diario - Bodega"
+    elif camionero_id:
+        tipo_sobre = 'camion'
+        trabajador = get_object_or_404(Usuario, id=camionero_id, rol='camionero')
+        titulo = f"Sobre Diario - {trabajador.get_full_name() or trabajador.username}"
+    else:
+        messages.error(request, "Debe seleccionar bodega o un camionero.")
         return redirect('lista_sobres_diarios')
 
-    # 1. Determinar fecha correcta (Zona horaria Chile)
-    tz_chile = ZoneInfo('America/Santiago')
-    ahora = timezone.now().astimezone(tz_chile)
-    hoy = ahora.date()
-    inicio_dia = timezone.make_aware(datetime.combine(hoy, datetime.min.time()), timezone=tz_chile)
-    fin_dia = timezone.make_aware(datetime.combine(hoy, datetime.max.time()), timezone=tz_chile)
-
-    # 2. Obtener o crear el objeto Sobre
-    if sobre_id:
-        sobre = get_object_or_404(SobreDiario, id=sobre_id)
-    else:
-        trabajador_id = request.GET.get('camionero')
-        es_bodega = request.GET.get('bodega') == '1'
-        trabajador = None
-        tipo_sobre = 'bodega' if es_bodega else 'camion'
-        
-        if not es_bodega and trabajador_id:
-            trabajador = get_object_or_404(Usuario, id=trabajador_id, rol='camionero')
-            
-        sobre, creado = SobreDiario.objects.get_or_create(
-            fecha=hoy,
-            trabajador=trabajador,
-            tipo=tipo_sobre,
-            defaults={'creado_por': request.user}
-        )
-
-    # 3. Recalcular líneas (Poblamiento robusto)
-    balones_activos = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
-
-    # Definir queryset de pedidos según tipo de sobre
-    qs_pedidos = Pedido.objects.filter(fecha__gte=inicio_dia, fecha__lte=fin_dia, estado='entregado')
-    if sobre.tipo == 'bodega':
-        qs_pedidos = qs_pedidos.filter(origen='local')
-    else:
-        qs_pedidos = qs_pedidos.filter(entregador=sobre.trabajador)
-
-    # Obtener resumen de ventas por balón
-    resumen_dict = dict(
-        qs_pedidos.values('detalles__balon')
-          .annotate(total=Sum('detalles__cantidad'))
-          .values_list('detalles__balon', 'total')
+    # Obtener o crear el sobre del día
+    sobre, creado = SobreDiario.objects.get_or_create(
+        fecha=hoy,
+        tipo=tipo_sobre,
+        trabajador=trabajador,
+        defaults={
+            'creado_por': usuario,
+        }
     )
 
-    # Crear o actualizar líneas para cada balón activo
-    for balon in balones_activos:
-        qty_calc = resumen_dict.get(balon.id, 0) or 0
+    # Si es nuevo, inicializamos las líneas de balones
+    if creado:
+        balones_activos = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
+        for balon in balones_activos:
+            # Calcular cantidad real según pedidos del día
+            if tipo_sobre == 'bodega':
+                qs_pedidos = Pedido.objects.filter(
+                    fecha__date=hoy,
+                    origen='local',
+                    estado='entregado'
+                )
+            else:
+                qs_pedidos = Pedido.objects.filter(
+                    fecha__date=hoy,
+                    estado='entregado',
+                    entregador=trabajador
+                )
 
-        # CORRECCIÓN: Solo establecer cantidad_declarada en CREACIÓN
-        linea, creada = LineaSobre.objects.get_or_create(
-            sobre=sobre,
-            balon=balon,
-            defaults={
-                'cantidad_calculada': qty_calc,
-                'cantidad_declarada': qty_calc,  # Solo al crear
-                'precio_venta_unitario': balon.precio_local if sobre.tipo == 'bodega' else balon.precio_domicilio
-            }
-        )
-        
-        # Si la línea ya existía, solo actualizar cantidad_calculada y precio
-        if not creada:
-            linea.cantidad_calculada = qty_calc
-            linea.precio_venta_unitario = balon.precio_local if sobre.tipo == 'bodega' else balon.precio_domicilio
-            linea.save(update_fields=['cantidad_calculada', 'precio_venta_unitario'])
+            qty_calc = qs_pedidos.filter(detalles__balon=balon).aggregate(total=Sum('detalles__cantidad'))['total'] or 0
 
-    # 4. Manejo del Formset
-    formset = LineaSobreFormSet(request.POST or None, instance=sobre)
+            LineaSobre.objects.create(
+                sobre=sobre,
+                balon=balon,
+                cantidad_calculada=qty_calc,
+                cantidad_declarada=qty_calc,  # Valor inicial = calculado
+                precio_venta_unitario=(
+                    balon.precio_local if tipo_sobre == 'bodega' else balon.precio_domicilio
+                )
+            )
+
+    # Preparar los formsets
+    formset_lineas = LineaSobreFormSet(
+        request.POST or None,
+        instance=sobre,
+        prefix='lineas'
+    )
+
+    formset_pagos = LineaPagoFormSet(
+        request.POST or None,
+        instance=sobre,
+        prefix='pagos'
+    )
+
+    formset_gastos = LineaGastoFormSet(
+        request.POST or None,
+        instance=sobre,
+        prefix='gastos'
+    )
 
     if request.method == "POST":
-        if formset.is_valid():
-            formset.save()
-            sobre.creado_por = request.user
-            sobre.save()
-            messages.success(request, f"Sobre guardado correctamente ({sobre}).")
-            return redirect('lista_sobres_diarios')
-        else:
-            messages.error(request, "Revisa los datos ingresados.")
+        if all([
+            formset_lineas.is_valid(),
+            formset_pagos.is_valid(),
+            formset_gastos.is_valid()
+        ]):
+            # Guardar todos los formsets
+            formset_lineas.save()
+            formset_pagos.save()
+            formset_gastos.save()
 
-    return render(request, 'sobres.html', {
+            # Actualizar campos adicionales del sobre
+            if "kilometraje_camion" in request.POST:
+                try:
+                    sobre.kilometraje_camion = int(request.POST["kilometraje_camion"])
+                except (ValueError, TypeError):
+                    sobre.kilometraje_camion = 0
+
+            sobre.creado_por = request.user  # Quién modificó por última vez
+            sobre.save()
+
+            # Si se presionó el botón "Cerrar"
+            if "cerrar" in request.POST:
+                if sobre.cerrado:
+                    messages.warning(request, "Este sobre ya estaba cerrado.")
+                else:
+                    sobre.cerrado = True
+                    sobre.declarado_el = timezone.now()
+                    sobre.nota_cierre = request.POST.get("nota_cierre", "")
+                    sobre.save()
+                    messages.success(
+                        request,
+                        f"Sobre cerrado correctamente el {sobre.declarado_el.strftime('%d/%m/%Y %H:%M')}. "
+                        f"Kilometraje: {sobre.kilometraje_camion} km."
+                    )
+                    return redirect('lista_sobres_diarios')
+            else:
+                messages.success(request, "Cambios guardados correctamente (borrador).")
+
+            return redirect('editar_sobre_diario')  # Recargar la misma página
+
+        else:
+            messages.error(request, "Hay errores en el formulario. Revise los campos marcados.")
+
+    # Contexto para el template
+    context = {
         'sobre': sobre,
-        'formset': formset,
+        'formset_lineas': formset_lineas,
+        'formset_pagos': formset_pagos,
+        'formset_gastos': formset_gastos,
         'hoy': hoy,
-    })
+        'titulo': titulo,
+        'es_bodega': es_bodega,
+    }
+
+    return render(request, 'sobres.html', context)
