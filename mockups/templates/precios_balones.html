@@ -14,11 +14,8 @@
                     <i class="bi bi-tags me-2"></i>Gestión de Precios y Disponibilidad
                 </h2>
                 <div class="d-flex gap-2">
-                    <span class="badge bg-primary fs-6 px-3 py-2">
-                        {% if user.rol == "jefe" %}Jefe{% else %}Administrador{% endif %}
-                    </span>
-                    <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-arrow-left"></i> Volver a Reportes
+                    <a href="{% url 'historial_precios' %}" class="btn btn-outline-info btn-sm">  <!-- ← Botón nuevo -->
+                        <i class="bi bi-clock-history me-1"></i> Ver Historial
                     </a>
                     <a href="{% url 'historial_precios' %}" class="btn btn-outline-info btn-sm">  <!-- ← Botón nuevo -->
                         <i class="bi bi-clock-history me-1"></i> Ver Historial
