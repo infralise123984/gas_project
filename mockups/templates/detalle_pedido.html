@@ -107,6 +107,7 @@
                         <tr>
                             <th>Balón</th>
                             <th class="text-center">Cantidad</th>
+                            <th class="text-end">Precio compra</th>
                             <th class="text-end">Precio unitario</th>
                             <th class="text-end">Subtotal</th>
                         </tr>
@@ -116,6 +117,7 @@
                         <tr>
                             <td class="fw-semibold">{{ detalle.balon.nombre }}</td>
                             <td class="text-center">{{ detalle.cantidad }}</td>
+                            <td class="text-end">${{ detalle.precio_compra_unitario|floatformat:0|intcomma }}</td>
                             <td class="text-end">${{ detalle.precio_venta_unitario|floatformat:0|intcomma }}</td>
                             <td class="text-end fw-bold text-success">
                                 ${{ detalle.subtotal|floatformat:0|intcomma }}

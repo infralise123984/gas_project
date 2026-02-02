@@ -1,0 +1,162 @@
+<!-- templates/historial_sobres.html -->
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Historial de Sobres Cerrados - GasFácil{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5 px-3" style="max-width: 1400px;">
+
+    <!-- Título y botón volver -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <h2 class="text-primary fw-bold mb-0">
+            <i class="bi bi-journal-bookmark-fill me-2"></i>Historial de Sobres Cerrados
+        </h2>
+        <div class="d-flex gap-2">
+            <a href="{% url 'lista_sobres_diarios' %}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left me-2"></i>Volver a Sobres
+            </a>
+            <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-graph-up me-2"></i>Reportes
+            </a>
+        </div>
+    </div>
+
+    <!-- Resumen total (tarjetas) -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="card text-center border-primary shadow h-100">
+                <div class="card-body py-4">
+                    <h5 class="text-primary fw-bold mb-3">Total Efectivo</h5>
+                    <h2 class="display-6 fw-bold text-primary">
+                        ${{ total_efectivo|floatformat:0|intcomma }}
+                    </h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-info shadow h-100">
+                <div class="card-body py-4">
+                    <h5 class="text-info fw-bold mb-3">Total No Efectivo</h5>
+                    <h2 class="display-6 fw-bold text-info">
+                        ${{ total_no_efectivo|floatformat:0|intcomma }}
+                    </h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-danger shadow h-100">
+                <div class="card-body py-4">
+                    <h5 class="text-danger fw-bold mb-3">Total Gastos</h5>
+                    <h2 class="display-6 fw-bold text-danger">
+                        ${{ total_gastos|floatformat:0|intcomma }}
+                    </h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-success shadow h-100">
+                <div class="card-body py-4">
+                    <h5 class="text-success fw-bold mb-3">Neto Total</h5>
+                    <h2 class="display-6 fw-bold text-success">
+                        ${{ total_neto|floatformat:0|intcomma }}
+                    </h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla de historial -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-primary text-white text-center py-3">
+            <h5 class="mb-0">Registros Cerrados</h5>
+            <small class="d-block mt-1">Ordenados del más reciente al más antiguo</small>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Tipo / Responsable</th>
+                        <th class="text-end">Efectivo Declarado</th>
+                        <th class="text-end">No Efectivo</th>
+                        <th class="text-end">Gastos</th>
+                        <th class="text-end">Neto</th>
+                        <th class="text-center">Kilometraje</th>
+                        <th class="text-center">Cerrado por</th>
+                        <th class="text-center">Nota</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sobre in sobres %}
+                    <tr>
+                        <td>{{ sobre.fecha|date:"d/m/Y" }}</td>
+                        <td>
+                            {% if sobre.tipo == 'bodega' %}
+                                <i class="bi bi-shop-window me-2"></i>Bodega
+                            {% else %}
+                                <i class="bi bi-truck me-2"></i>{{ sobre.trabajador.get_full_name|default:sobre.trabajador.username }}
+                            {% endif %}
+                        </td>
+                        <td class="text-end text-primary fw-bold">${{ sobre.efectivo_declarado|floatformat:0|intcomma }}</td>
+                        <td class="text-end text-info">${{ sobre.total_no_efectivo|floatformat:0|intcomma }}</td>
+                        <td class="text-end text-danger">${{ sobre.total_gastos|floatformat:0|intcomma }}</td>
+                        <td class="text-end text-success fw-bold">${{ sobre.total_neto|floatformat:0|intcomma }}</td>
+                        <td class="text-center">
+                            {% if sobre.kilometraje_camion > 0 %}
+                                {{ sobre.kilometraje_camion }} km
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="text-center">{{ sobre.creado_por.get_full_name|default:sobre.creado_por.username }}</td>
+                        <td class="text-center">
+                            {% if sobre.nota_cierre %}
+                                <i class="bi bi-chat-left-text" data-bs-toggle="tooltip" title="{{ sobre.nota_cierre }}"></i>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <!-- Botón para ver detalle (podrías agregar una vista de detalle si lo deseas) -->
+                            <a href="{% url 'editar_sobre_diario' %}?{% if sobre.tipo == 'bodega' %}bodega=1{% else %}camionero={{ sobre.trabajador.id }}{% endif %}&fecha={{ sobre.fecha|date:'Y-m-d' }}" 
+                               class="btn btn-sm btn-outline-info" title="Ver detalle">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center py-5 text-muted">
+                            <i class="bi bi-journal-x fs-1 d-block mb-3"></i>
+                            <strong>No hay sobres cerrados registrados aún</strong><br>
+                            <small>Cierra un sobre diario para que aparezca aquí</small>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Nota final -->
+    <div class="text-center mt-4 text-muted small">
+        Este historial muestra solo sobres cerrados. Para editar o cerrar uno nuevo, ve a la lista de sobres diarios.
+    </div>
+
+</div>
+
+<style>
+    /* Estilos para tooltips y tabla */
+    .table th, .table td {
+        vertical-align: middle;
+    }
+    .bi-chat-left-text {
+        cursor: pointer;
+        font-size: 1.2rem;
+        color: #6c757d;
+    }
+</style>
+
+{% endblock %}

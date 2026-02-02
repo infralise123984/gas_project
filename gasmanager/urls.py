@@ -69,4 +69,6 @@ urlpatterns = [
     # ────────────────────────────────────────────────
     path('sobres/', views.lista_sobres_diarios, name='lista_sobres_diarios'),
     path('sobres/editar/', views.editar_sobre_diario, name='editar_sobre_diario'),
+    path('historial-sobres/', views.historial_sobres, name='historial_sobres'),
+    path('sobres/exportar/<int:sobre_id>/', views.exportar_sobre_excel, name='exportar_sobre_excel'),
 ]
