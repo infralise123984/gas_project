@@ -88,8 +88,8 @@
                                 <tbody>
                                     {% for form in formset_lineas %}
                                     <tr data-index="{{ forloop.counter0 }}"
-                                        data-precio="{{ form.instance.precio_venta_unitario|stringformat:'d' }}"
-                                        data-peso="{{ form.instance.balon.peso_neto_gas|stringformat:'d' }}">
+                                        data-precio="{{ form.instance.precio_venta_unitario|unlocalize }}"
+                                        data-peso="{{ form.instance.balon.peso_neto_gas|unlocalize }}">
                                         <td class="fw-bold align-middle">{{ form.instance.balon.nombre }}</td>
                                         <td class="text-center fw-semibold text-muted align-middle">
                                             {{ form.instance.balon.peso_neto_gas }}
@@ -99,7 +99,11 @@
                                         </td>
                                         <td class="text-center align-middle">
                                             {{ form.id }}
-                                            {{ form.cantidad_declarada }}
+                                            {% if sobre.cerrado %}
+                                                <span class="fw-bold">{{ form.instance.cantidad_declarada }}</span>
+                                            {% else %}
+                                                {{ form.cantidad_declarada }}
+                                            {% endif %}
                                         </td>
                                         <td class="text-center fw-bold align-middle diferencia-celda" data-diferencia="0">
                                             0
@@ -111,7 +115,11 @@
                                             $0
                                         </td>
                                         <td class="align-middle">
-                                            {{ form.nota }}
+                                            {% if sobre.cerrado %}
+                                                <span class="small">{{ form.instance.nota|default:"—" }}</span>
+                                            {% else %}
+                                                {{ form.nota }}
+                                            {% endif %}
                                         </td>
                                     </tr>
                                     {% empty %}
@@ -160,8 +168,8 @@
                                 <thead class="table-info">
                                     <tr>
                                         <th style="width: 35%;">Tipo</th>
-                                        <th style="width: 35%;">Referencia</th>
-                                        <th style="width: 25%;">Monto</th>
+                                        <th style="width: 30%;">Referencia</th>
+                                        <th style="width: 30%;">Monto</th>
                                         <th style="width: 5%;"><i class="bi bi-trash"></i></th>
                                     </tr>
                                 </thead>
@@ -170,51 +178,67 @@
                                     <tr class="pago-row" data-tipo-pago="{{ form.instance.tipo_pago }}">
                                         <td class="align-middle">
                                             {{ form.id }}
-                                            {{ form.tipo_pago }}
+                                            {% if sobre.cerrado %}
+                                                <span class="fw-bold">{{ form.instance.get_tipo_pago_display }}</span>
+                                            {% else %}
+                                                {{ form.tipo_pago }}
+                                                {{ form.DELETE }}
+                                            {% endif %}
                                         </td>
-                                        <td class="align-middle">{{ form.referencia }}</td>
-                                        <td class="align-middle">{{ form.monto }}</td>
+                                        <td class="align-middle">
+                                            {% if sobre.cerrado %}
+                                                <span class="small">{{ form.instance.referencia|default:"—" }}</span>
+                                            {% else %}
+                                                {{ form.referencia }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="align-middle text-end">
+                                            {% if sobre.cerrado %}
+                                                <span class="fw-bold">${{ form.instance.monto|floatformat:0 }}</span>
+                                            {% else %}
+                                                {{ form.monto }}
+                                            {% endif %}
+                                        </td>
                                         <td class="text-center align-middle">
                                             {% if not sobre.cerrado %}
-                                            <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                            {{ form.DELETE }}
+                                                <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
                                             {% endif %}
                                         </td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
                                 <tfoot class="table-light">
-                                    <tr>
-                                        <td colspan="4" class="text-center py-2">
-                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="agregarPago()" {% if sobre.cerrado %}disabled{% endif %}>
-                                                <i class="bi bi-plus-circle me-1"></i>Agregar Método de Pago
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    <tr class="fw-bold fs-6 table-success">
-                                        <td colspan="2" class="text-end">Total Entregado:</td>
-                                        <td colspan="2" class="text-center text-success" id="totalPagos">$0</td>
+                                    <tr class="fw-bold">
+                                        <td colspan="2" class="text-end align-middle">Total Pagos:</td>
+                                        <td colspan="2" class="text-center text-primary align-middle" id="totalPagos">$0</td>
                                     </tr>
                                 </tfoot>
                             </table>
+                            {% if not sobre.cerrado %}
+                            <div class="text-end">
+                                <button type="button" class="btn btn-sm btn-success" onclick="agregarPago()">
+                                    <i class="bi bi-plus-circle me-1"></i>Agregar Pago
+                                </button>
+                            </div>
+                            {% endif %}
                         </div>
 
-                        <!-- GASTOS EXTRAS -->
-                        <h5 class="text-danger mb-3">
-                            <i class="bi bi-dash-circle me-2"></i>Gastos del Día
+                        <!-- GASTOS -->
+                        <h5 class="text-primary mb-3">
+                            <i class="bi bi-receipt me-2"></i>Gastos del Día
                         </h5>
-                        <div class="alert alert-warning py-2 px-3 mb-3 small">
+                        <div class="alert alert-info py-2 px-3 mb-3 small">
                             <i class="bi bi-info-circle me-1"></i>
-                            Dinero que sacaste del efectivo (agua, almuerzo, etc.)
+                            Registra los gastos del día (colación, agua, propinas, etc.)
                         </div>
                         <div class="table-responsive mb-4">
                             <table class="table table-bordered table-sm excel-table" id="tablaGastos">
                                 <thead class="table-warning">
                                     <tr>
-                                        <th style="width: 65%;">Descripción</th>
-                                        <th style="width: 30%;">Monto</th>
+                                        <th style="width: 60%;">Descripción</th>
+                                        <th style="width: 35%;">Monto</th>
                                         <th style="width: 5%;"><i class="bi bi-trash"></i></th>
                                     </tr>
                                 </thead>
@@ -223,116 +247,112 @@
                                     <tr class="gasto-row">
                                         <td class="align-middle">
                                             {{ form.id }}
-                                            {{ form.descripcion }}
+                                            {% if sobre.cerrado %}
+                                                <span>{{ form.instance.descripcion|default:"—" }}</span>
+                                            {% else %}
+                                                {{ form.descripcion }}
+                                                {{ form.DELETE }}
+                                            {% endif %}
                                         </td>
-                                        <td class="align-middle">{{ form.monto }}</td>
+                                        <td class="align-middle text-end">
+                                            {% if sobre.cerrado %}
+                                                <span class="fw-bold">${{ form.instance.monto|floatformat:0 }}</span>
+                                            {% else %}
+                                                {{ form.monto }}
+                                            {% endif %}
+                                        </td>
                                         <td class="text-center align-middle">
                                             {% if not sobre.cerrado %}
-                                            <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                            {{ form.DELETE }}
+                                                <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
                                             {% endif %}
                                         </td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
                                 <tfoot class="table-light">
-                                    <tr>
-                                        <td colspan="3" class="text-center py-2">
-                                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="agregarGasto()" {% if sobre.cerrado %}disabled{% endif %}>
-                                                <i class="bi bi-plus-circle me-1"></i>Agregar Gasto
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    <tr class="fw-bold fs-6 text-danger">
-                                        <td class="text-end">Total Gastos:</td>
-                                        <td colspan="2" class="text-center" id="totalGastos">$0</td>
+                                    <tr class="fw-bold">
+                                        <td class="text-end align-middle">Total Gastos:</td>
+                                        <td colspan="2" class="text-center text-warning align-middle" id="totalGastos">$0</td>
                                     </tr>
                                 </tfoot>
                             </table>
+                            {% if not sobre.cerrado %}
+                            <div class="text-end">
+                                <button type="button" class="btn btn-sm btn-success" onclick="agregarGasto()">
+                                    <i class="bi bi-plus-circle me-1"></i>Agregar Gasto
+                                </button>
+                            </div>
+                            {% endif %}
                         </div>
 
                         <!-- RESUMEN FINAL -->
-                        <div class="card border-dark mb-4">
-                            <div class="card-header bg-dark text-white py-2">
-                                <h6 class="mb-0"><i class="bi bi-calculator me-2"></i>Resumen Final</h6>
+                        <div class="card border-primary shadow-sm">
+                            <div class="card-header bg-primary text-white text-center fw-bold py-3">
+                                <i class="bi bi-calculator me-2"></i>Resumen General
                             </div>
-                            <div class="card-body p-3">
-                                <table class="table table-sm table-borderless mb-0">
-                                    <tr class="fw-bold fs-6 table-light">
-                                        <td>Total Ventas:</td>
-                                        <td class="text-end text-primary" id="resumenVentas">$0</td>
-                                    </tr>
-                                    <tr class="border-top border-2">
-                                        <td class="text-success">Pagos entregados:</td>
-                                        <td class="text-end text-success" id="resumenPagos">$0</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="text-danger">Gastos del día:</td>
-                                        <td class="text-end text-danger" id="resumenGastos">$0</td>
-                                    </tr>
-                                    <tr class="border-top border-2 fw-bold">
-                                        <td>Total contabilizado:</td>
-                                        <td class="text-end" id="resumenContabilizado">$0</td>
-                                    </tr>
-                                    <tr class="border-top border-3" id="filaDiferencia">
-                                        <td class="fw-bold">Diferencia:</td>
-                                        <td class="text-end fw-bold fs-5" id="resumenDiferencia">$0</td>
-                                    </tr>
+                            <div class="card-body p-0">
+                                <table class="table table-sm mb-0">
+                                    <tbody>
+                                        <tr>
+                                            <td class="fw-semibold">Total Ventas:</td>
+                                            <td class="text-end fw-bold text-success" id="resumenVentas">$0</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="fw-semibold">Total Pagos:</td>
+                                            <td class="text-end fw-bold text-primary" id="resumenPagos">$0</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="fw-semibold">Total Gastos:</td>
+                                            <td class="text-end fw-bold text-warning" id="resumenGastos">$0</td>
+                                        </tr>
+                                        <tr class="table-light">
+                                            <td class="fw-bold">Total Contabilizado:</td>
+                                            <td class="text-end fw-bold" id="resumenContabilizado">$0</td>
+                                        </tr>
+                                        <tr class="border-top border-3" id="filaDiferencia">
+                                            <td class="fw-bold fs-5">Diferencia:</td>
+                                            <td class="text-end fw-bold fs-5" id="resumenDiferencia">$0</td>
+                                        </tr>
+                                    </tbody>
                                 </table>
                                 <div class="alert mb-0 mt-2 py-2 small" id="alertaDiferencia">
-                                    <i class="bi bi-info-circle me-1"></i>
-                                    <span id="mensajeDiferencia">Total contabilizado = Pagos + Gastos</span>
+                                    <span id="mensajeDiferencia"></span>
                                 </div>
                             </div>
                         </div>
-
-                        <!-- KILOMETRAJE -->
-                        {% if sobre.tipo == 'camion' %}
-                        <div class="mb-4">
-                            <label class="form-label fw-bold">
-                                <i class="bi bi-speedometer2 me-2"></i>Kilometraje del Camión:
-                            </label>
-                            <input type="number"
-                                   name="kilometraje_camion"
-                                   class="form-control form-control-lg text-center fw-bold"
-                                   value="{{ sobre.kilometraje_camion|default:0 }}"
-                                   min="0"
-                                   placeholder="Ingrese kilometraje"
-                                   {% if sobre.cerrado %}disabled{% endif %}>
-                        </div>
-                        {% endif %}
                     </div>
                 </div>
-
-                <!-- BOTONES DE ACCIÓN -->
-                <div class="row mt-4">
-                    <div class="col-12">
+                <!-- BOTONES -->
+                <div class="row mt-5">
+                    <div class="col-12 text-center">
                         {% if not sobre.cerrado %}
-                        <div class="d-flex gap-2 justify-content-center flex-wrap">
-                            <button type="submit" class="btn btn-primary btn-lg px-5">
-                                <i class="bi bi-save me-2"></i>Guardar Cambios (Borrador)
-                            </button>
-                            <button type="submit" name="cerrar" class="btn btn-success btn-lg px-5"
-                                    onclick="return confirmarCierre()">
-                                <i class="bi bi-lock-fill me-2"></i>Cerrar Sobre (Final)
-                            </button>
-                            <a href="{% url 'lista_sobres_diarios' %}" class="btn btn-secondary btn-lg px-5">
-                                <i class="bi bi-arrow-left me-2"></i>Volver
-                            </a>
-                        </div>
+                        <button type="submit" name="guardar" class="btn btn-primary btn-lg px-5 me-3">
+                            <i class="bi bi-save me-2"></i>Guardar Cambios
+                        </button>
+                        <button type="submit" name="cerrar" class="btn btn-success btn-lg px-5" onclick="return confirmarCierre()">
+                            <i class="bi bi-lock-fill me-2"></i>Guardar y Cerrar Sobre
+                        </button>
                         {% else %}
                         <div class="alert alert-success text-center">
                             <i class="bi bi-check-circle-fill me-2"></i>
                             Este sobre fue cerrado el {{ sobre.declarado_el|date:"d/m/Y H:i" }} y no puede modificarse.
                         </div>
-                        <div class="text-center">
+                        {% endif %}
+                        
+                        <!-- NUEVO: Botón Exportar Excel -->
+                        <a href="{% url 'exportar_sobre_excel' sobre.id %}" 
+                           class="btn btn-success btn-lg px-5 ms-3"
+                           target="_blank">
+                            <i class="bi bi-file-earmark-excel me-2"></i>Exportar a Excel
+                        </a>
+                        
+                        <div class="text-center mt-3">
                             <a href="{% url 'lista_sobres_diarios' %}" class="btn btn-secondary btn-lg px-5">
                                 <i class="bi bi-arrow-left me-2"></i>Volver
                             </a>
                         </div>
-                        {% endif %}
                     </div>
                 </div>
             </form>
@@ -348,6 +368,17 @@ let pagoFormIdx = parseInt(document.querySelector('#id_pagos-TOTAL_FORMS').value
 let gastoFormIdx = parseInt(document.querySelector('#id_gastos-TOTAL_FORMS').value) || 0;
 
 // ══════════════════════════════════════════════════════════════════
+// FUNCIÓN AUXILIAR: Limpiar y parsear números humanizados
+// ══════════════════════════════════════════════════════════════════
+function parseNumero(valor) {
+    if (!valor) return 0;
+    // Eliminar todo excepto dígitos y punto decimal
+    // Esto convierte "200 000" o "200.000" o "$200.000" a "200000"
+    const limpio = String(valor).replace(/[^\d.-]/g, '');
+    return parseInt(limpio) || 0;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL DE CÁLCULO Y ACTUALIZACIÓN
 // ══════════════════════════════════════════════════════════════════
 const updateTotals = () => {
@@ -357,10 +388,10 @@ const updateTotals = () => {
 
     rows.forEach(row => {
         const input = row.querySelector('input[name$="-cantidad_declarada"]');
-        const calculada = parseInt(row.querySelector('.calculada-celda')?.textContent || 0);
-        const precio = parseInt(row.dataset.precio || 0);
-        const peso = parseInt(row.dataset.peso || 0);
-        const declarada = parseInt(input?.value || 0);
+        const calculada = parseNumero(row.querySelector('.calculada-celda')?.textContent);
+        const precio = parseNumero(row.dataset.precio);
+        const peso = parseNumero(row.dataset.peso);
+        const declarada = input ? parseNumero(input.value) : parseNumero(row.querySelector('.text-center.align-middle .fw-bold')?.textContent);
 
         const diferencia = declarada - calculada;
         const subtotal = declarada * precio;
@@ -403,8 +434,17 @@ const updateTotals = () => {
         if (deleteCheck && deleteCheck.checked) return;
 
         const montoInput = row.querySelector('input[name$="-monto"]');
-        const monto = parseInt(montoInput?.value || 0);
-        totalPagos += monto;
+        if (montoInput) {
+            const monto = parseNumero(montoInput.value);
+            totalPagos += monto;
+        } else {
+            // Si está cerrado, leer del span
+            const montoSpan = row.querySelector('td:nth-child(3) .fw-bold');
+            if (montoSpan) {
+                const monto = parseNumero(montoSpan.textContent);
+                totalPagos += monto;
+            }
+        }
     });
 
     document.getElementById('totalPagos').textContent = '$' + totalPagos.toLocaleString('es-CL');
@@ -418,8 +458,17 @@ const updateTotals = () => {
         if (deleteCheck && deleteCheck.checked) return;
 
         const montoInput = row.querySelector('input[name$="-monto"]');
-        const monto = parseInt(montoInput?.value || 0);
-        totalGastos += monto;
+        if (montoInput) {
+            const monto = parseNumero(montoInput.value);
+            totalGastos += monto;
+        } else {
+            // Si está cerrado, leer del span
+            const montoSpan = row.querySelector('td:nth-child(2) .fw-bold');
+            if (montoSpan) {
+                const monto = parseNumero(montoSpan.textContent);
+                totalGastos += monto;
+            }
+        }
     });
 
     document.getElementById('totalGastos').textContent = '$' + totalGastos.toLocaleString('es-CL');
@@ -522,7 +571,6 @@ function agregarPago() {
 
     newRow.innerHTML = `
         <td class="align-middle">
-            <input type="hidden" name="pagos-${pagoFormIdx}-id">
             <select name="pagos-${pagoFormIdx}-tipo_pago" class="form-control form-control-sm" onchange="updateTotals()">
                 <option value="abono">Abono Caja</option>
                 <option value="transferencia">Transferencia</option>
@@ -541,7 +589,6 @@ function agregarPago() {
             <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
                 <i class="bi bi-trash"></i>
             </button>
-            <input type="checkbox" name="pagos-${pagoFormIdx}-DELETE" class="form-check-input d-none">
         </td>
     `;
 
@@ -557,7 +604,6 @@ function agregarGasto() {
 
     newRow.innerHTML = `
         <td class="align-middle">
-            <input type="hidden" name="gastos-${gastoFormIdx}-id">
             <input type="text" name="gastos-${gastoFormIdx}-descripcion" class="form-control form-control-sm" placeholder="Ej: Agua, Almuerzo...">
         </td>
         <td class="align-middle">
@@ -567,7 +613,6 @@ function agregarGasto() {
             <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
                 <i class="bi bi-trash"></i>
             </button>
-            <input type="checkbox" name="gastos-${gastoFormIdx}-DELETE" class="form-check-input d-none">
         </td>
     `;
 
@@ -621,6 +666,17 @@ function confirmarCierre() {
     border-color: #0d6efd;
     box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
 }
+.excel-table select {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px;
+    font-size: 0.85rem;
+}
+.excel-table select:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
 .excel-table textarea {
     border: 1px solid #dee2e6;
     border-radius: 4px;
@@ -633,7 +689,8 @@ function confirmarCierre() {
     box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
 }
 .excel-table textarea:disabled,
-.excel-table input:disabled {
+.excel-table input:disabled,
+.excel-table select:disabled {
     background-color: #e9ecef;
     cursor: not-allowed;
 }

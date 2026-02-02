@@ -443,6 +443,7 @@ class LineaPago(models.Model):
         ('transferencia', 'Transferencia'),
         ('visa', 'Visa'),
         ('cheque', 'Cheque'),
+        ('efectivo', 'Efectivo'),
         ('otro', 'Otro'),
     ]
 

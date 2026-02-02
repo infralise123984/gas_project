@@ -8,6 +8,7 @@ from datetime import date, datetime
 from calendar import monthrange
 from django.utils import timezone
 from zoneinfo import ZoneInfo
+from django.urls import reverse
 
 # Django contrib
 from django.contrib import messages
@@ -22,7 +23,8 @@ from django.http import HttpResponse
 
 # Librerías de terceros
 import openpyxl
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side 
+from openpyxl.utils import get_column_letter   # ← AGREGAR ESTA LÍNEA
 
 # App local
 from .forms import (
@@ -1169,7 +1171,6 @@ def lista_sobres_diarios(request):
 
 @login_required
 def editar_sobre_diario(request):
-    hoy = timezone.now().date()
     usuario = request.user
 
     # Determinar si es bodega o camionero específico
@@ -1189,6 +1190,7 @@ def editar_sobre_diario(request):
         return redirect('lista_sobres_diarios')
 
     # Obtener o crear el sobre del día
+    hoy = timezone.now().date()
     sobre, creado = SobreDiario.objects.get_or_create(
         fecha=hoy,
         tipo=tipo_sobre,
@@ -1285,8 +1287,11 @@ def editar_sobre_diario(request):
                     return redirect('lista_sobres_diarios')
             else:
                 messages.success(request, "Cambios guardados correctamente (borrador).")
-
-            return redirect('editar_sobre_diario')  # Recargar la misma página
+                # Redirigir a la misma URL conservando los parámetros GET
+                if es_bodega:
+                    return redirect(f"{reverse('editar_sobre_diario')}?bodega=1")
+                else:
+                    return redirect(f"{reverse('editar_sobre_diario')}?camionero={camionero_id}")
 
         else:
             messages.error(request, "Hay errores en el formulario. Revise los campos marcados.")
@@ -1303,3 +1308,278 @@ def editar_sobre_diario(request):
     }
 
     return render(request, 'sobres.html', context)
+@login_required
+def historial_sobres(request):
+
+
+    # Sobres cerrados, más recientes primero
+    sobres = SobreDiario.objects.filter(cerrado=True).order_by('-fecha')
+
+    # Totales usando campos que SÍ existen
+    agregados = sobres.aggregate(
+        total_declarado=Sum('monto_declarado'),
+        total_gastos=Sum('gastos__monto'),
+        total_no_efectivo=Sum('pagos__monto'),
+    )
+
+    total_declarado   = agregados['total_declarado']   or 0
+    total_gastos      = agregados['total_gastos']      or 0
+    total_no_efectivo = agregados['total_no_efectivo'] or 0
+
+    # Neto = declarado + no efectivo - gastos
+    total_neto = total_declarado + total_no_efectivo - total_gastos
+
+    context = {
+        'sobres': sobres,
+        'total_declarado': total_declarado,
+        'total_no_efectivo': total_no_efectivo,
+        'total_gastos': total_gastos,
+        'total_neto': total_neto,
+        'hoy': timezone.now().date(),
+    }
+
+    return render(request, 'historial_sobres.html', context)
+from openpyxl.utils import get_column_letter
+# ... otros imports que ya tienes ...
+
+@login_required
+def exportar_sobre_excel(request, sobre_id):
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
+        messages.error(request, "No tienes permiso para exportar sobres.")
+        return redirect('index')
+
+    sobre = get_object_or_404(SobreDiario, id=sobre_id)
+    lineas = sobre.lineas.all().order_by('balon__peso_neto_gas')
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sobre Diario"
+
+    # Estilos
+    font_title = Font(name='Arial', size=14, bold=True)
+    font_header = Font(name='Arial', size=10, bold=True)
+    font_normal = Font(name='Arial', size=10)
+    fill_yellow = PatternFill(start_color='FFFF00', fill_type='solid')
+    fill_light_yellow = PatternFill(start_color='FFFFCC', fill_type='solid')
+    fill_green = PatternFill(start_color='C6EFCE', fill_type='solid')
+    fill_red = PatternFill(start_color='FFC7CE', fill_type='solid')
+    fill_gray = PatternFill(start_color='D3D3D3', fill_type='solid')
+
+    border_thin = Border(left=Side(style='thin'), right=Side(style='thin'),
+                         top=Side(style='thin'), bottom=Side(style='thin'))
+    border_medium = Border(left=Side(style='medium'), right=Side(style='medium'),
+                           top=Side(style='medium'), bottom=Side(style='medium'))
+
+    align_center = Alignment(horizontal='center', vertical='center')
+    align_right = Alignment(horizontal='right', vertical='center')
+    align_left = Alignment(horizontal='left', vertical='center')
+
+    # =============================================
+    # ENCABEZADO
+    # =============================================
+    ws.merge_cells('A1:J1')
+    ws['A1'] = "CUENTAS SOBRES"
+    ws['A1'].font = font_title
+    ws['A1'].alignment = align_center
+
+    # Chofer y fecha (fila 2)
+    ws['A2'] = "Chofer:"
+    ws['A2'].font = font_header
+    ws['A2'].alignment = align_right
+
+    chofer_nombre = "BODEGA" if sobre.tipo == 'bodega' else (sobre.trabajador.get_full_name() or sobre.trabajador.username).upper()
+    ws['B2'] = chofer_nombre
+    ws['B2'].font = font_header
+    ws['B2'].alignment = align_left
+
+    ws['D2'] = sobre.fecha.day
+    ws['E2'] = sobre.fecha.strftime("%b").upper()  # FEB
+    ws['F2'] = sobre.fecha.year
+
+    for col in 'DEF':
+        ws[f'{col}2'].font = font_header
+        ws[f'{col}2'].alignment = align_center
+        ws[f'{col}2'].fill = fill_yellow
+        ws[f'{col}2'].border = border_thin
+
+    # =============================================
+    # BALONES - fila 4: pesos, fila 5: precios, etc.
+    # =============================================
+    start_col = 1
+    col = start_col + 1  # Empieza en B
+
+    # Fila 4: 5 KG | 11 KG | etc.
+    for linea in lineas:
+        ws.cell(row=4, column=col).value = f"{linea.balon.peso_neto_gas} KG"
+        ws.cell(row=4, column=col).font = font_header
+        ws.cell(row=4, column=col).alignment = align_center
+        ws.cell(row=4, column=col).border = border_thin
+        col += 1
+
+    end_col_balones = col - 1
+
+    # Fila 5: Precios amarillo
+    col = start_col + 1
+    for linea in lineas:
+        cell = ws.cell(row=5, column=col)
+        cell.value = int(linea.precio_venta_unitario or 0)
+        cell.fill = fill_yellow
+        cell.font = font_header
+        cell.alignment = align_center
+        cell.border = border_thin
+        cell.number_format = '#,##0'
+        col += 1
+
+    # Fila 6: Cantidad calculada
+    col = start_col + 1
+    for linea in lineas:
+        ws.cell(row=6, column=col).value = linea.cantidad_calculada or 0
+        ws.cell(row=6, column=col).alignment = align_center
+        ws.cell(row=6, column=col).border = border_thin
+        col += 1
+
+    # Fila 7: Cantidad declarada + color
+    col = start_col + 1
+    for linea in lineas:
+        cell = ws.cell(row=7, column=col)
+        cell.value = linea.cantidad_declarada or 0
+        cell.alignment = align_center
+        cell.border = border_thin
+        if (linea.cantidad_declarada or 0) == (linea.cantidad_calculada or 0):
+            cell.fill = fill_green
+        else:
+            cell.fill = fill_gray
+        col += 1
+
+    # Fila 8: Diferencia
+    col = start_col + 1
+    for linea in lineas:
+        diff = (linea.cantidad_declarada or 0) - (linea.cantidad_calculada or 0)
+        cell = ws.cell(row=8, column=col)
+        cell.value = diff
+        cell.alignment = align_center
+        cell.border = border_thin
+        if diff != 0:
+            cell.font = Font(bold=True, color="FF0000")
+            cell.fill = fill_red
+        col += 1
+
+    # Fila 9: Subtotales
+    col = start_col + 1
+    for i in range(len(lineas)):
+        precio_coord = f"{get_column_letter(col)}5"
+        decl_coord = f"{get_column_letter(col)}7"
+        cell = ws.cell(row=9, column=col)
+        cell.value = f"={decl_coord}*{precio_coord}"
+        cell.number_format = '#,##0'
+        cell.alignment = align_center
+        cell.border = border_thin
+        col += 1
+
+    # Total Ventas (a la derecha)
+    ventas_col = end_col_balones + 3
+    ws.cell(row=7, column=ventas_col - 1).value = "VENTAS"
+    ws.cell(row=7, column=ventas_col - 1).font = font_header
+    ws.cell(row=7, column=ventas_col - 1).alignment = align_right
+
+    if lineas.exists():
+        ws.cell(row=7, column=ventas_col).value = f"=SUM({get_column_letter(start_col+1)}9:{get_column_letter(end_col_balones)}9)"
+    else:
+        ws.cell(row=7, column=ventas_col).value = 0
+    ws.cell(row=7, column=ventas_col).fill = fill_light_yellow
+    ws.cell(row=7, column=ventas_col).number_format = '#,##0'
+    ws.cell(row=7, column=ventas_col).font = font_header
+    ws.cell(row=7, column=ventas_col).alignment = align_right
+
+    # KILOS (fila 10, fusionado)
+    ws.merge_cells(f'A10:{get_column_letter(start_col)}10')
+    ws['A10'] = "KILOS"
+    ws['A10'].font = font_header
+    ws['A10'].alignment = align_center
+    ws['A10'].fill = fill_yellow
+
+    if lineas.exists():
+        kilos_parts = [f"({get_column_letter(c)}7*{lineas[i].balon.peso_neto_gas})" for i, c in enumerate(range(start_col+1, end_col_balones+1))]
+        ws.cell(row=10, column=start_col+1).value = "=" + "+".join(kilos_parts)
+    else:
+        ws.cell(row=10, column=start_col+1).value = 0
+    ws.cell(row=10, column=start_col+1).fill = fill_yellow
+    ws.cell(row=10, column=start_col+1).number_format = '#,##0'
+    ws.cell(row=10, column=start_col+1).font = font_header
+    ws.cell(row=10, column=start_col+1).alignment = align_center
+
+    # =============================================
+    # PAGOS (derecha)
+    # =============================================
+    pagos_col_label = ventas_col + 2
+    pagos_col_monto = pagos_col_label + 1
+
+    ws.cell(row=4, column=pagos_col_label).value = "TIPO PAGO"
+    ws.cell(row=4, column=pagos_col_monto).value = "MONTO"
+    for c in [pagos_col_label, pagos_col_monto]:
+        ws.cell(row=4, column=c).font = font_header
+        ws.cell(row=4, column=c).fill = fill_gray
+        ws.cell(row=4, column=c).alignment = align_center
+        ws.cell(row=4, column=c).border = border_thin
+
+    row_p = 5
+    total_pagos = 0
+
+    tipo_map = {
+        'abono': 'ABONO CAJA',
+        'visa': 'VISA/POS',
+        'transferencia': 'TRANSFERENCIA',
+        # agrega más si es necesario
+    }
+
+    for pago in sobre.pagos.all():
+        tipo = tipo_map.get(pago.tipo_pago, pago.tipo_pago.upper())
+        ws.cell(row=row_p, column=pagos_col_label).value = tipo
+        ws.cell(row=row_p, column=pagos_col_monto).value = pago.monto
+        ws.cell(row=row_p, column=pagos_col_monto).number_format = '#,##0'
+        ws.cell(row=row_p, column=pagos_col_monto).alignment = align_right
+        total_pagos += pago.monto
+        row_p += 1
+
+    ws.cell(row=row_p, column=pagos_col_label).value = "TOTAL PAGOS"
+    ws.cell(row=row_p, column=pagos_col_label).font = font_header
+    ws.cell(row=row_p, column=pagos_col_monto).value = total_pagos
+    ws.cell(row=row_p, column=pagos_col_monto).font = font_header
+    ws.cell(row=row_p, column=pagos_col_monto).number_format = '#,##0'
+    ws.cell(row=row_p, column=pagos_col_monto).alignment = align_right
+
+    # Diferencia
+    diff_row = row_p + 2
+    ws.cell(row=diff_row, column=pagos_col_label).value = "DIFERENCIA"
+    ws.cell(row=diff_row, column=pagos_col_label).font = font_header
+    ws.cell(row=diff_row, column=pagos_col_monto).value = f"={get_column_letter(ventas_col)}7 - {get_column_letter(pagos_col_monto)}{row_p}"
+    ws.cell(row=diff_row, column=pagos_col_monto).fill = fill_yellow
+    ws.cell(row=diff_row, column=pagos_col_monto).font = Font(bold=True, size=12)
+    ws.cell(row=diff_row, column=pagos_col_monto).number_format = '#,##0;[Red](#,##0)'
+    ws.cell(row=diff_row, column=pagos_col_monto).alignment = align_right
+
+    # KM y Firma
+    km_row = diff_row + 3
+    ws.cell(row=km_row, column=1).value = "KM"
+    if sobre.kilometraje_camion:
+        ws.cell(row=km_row, column=2).value = sobre.kilometraje_camion
+        ws.cell(row=km_row, column=2).fill = fill_yellow
+
+    ws.cell(row=km_row + 2, column=2).value = "FIRMA ___________________________"
+    ws.cell(row=km_row + 2, column=2).border = Border(bottom=Side(style='medium'))
+
+    # Anchos
+    ws.column_dimensions['A'].width = 10
+    for c in range(start_col + 1, end_col_balones + 1):
+        ws.column_dimensions[get_column_letter(c)].width = 10
+    ws.column_dimensions[get_column_letter(pagos_col_label)].width = 18
+    ws.column_dimensions[get_column_letter(pagos_col_monto)].width = 14
+
+    # Respuesta
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    tipo = "BODEGA" if sobre.tipo == 'bodega' else (sobre.trabajador.username.upper() or "CAM")
+    filename = f"Sobre_{tipo}_{sobre.fecha.strftime('%d%m%Y')}.xlsx"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    wb.save(response)
+    return response
