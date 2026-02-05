@@ -1339,12 +1339,10 @@ def historial_sobres(request):
     }
 
     return render(request, 'historial_sobres.html', context)
-from openpyxl.utils import get_column_letter
-# ... otros imports que ya tienes ...
 
 @login_required
 def exportar_sobre_excel(request, sobre_id):
-    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin', 'camionero']:
         messages.error(request, "No tienes permiso para exportar sobres.")
         return redirect('index')
 
@@ -1355,70 +1353,85 @@ def exportar_sobre_excel(request, sobre_id):
     ws = wb.active
     ws.title = "Sobre Diario"
 
-    # Estilos
+    # ── Estilos ───────────────────────────────────────
     font_title = Font(name='Arial', size=14, bold=True)
     font_header = Font(name='Arial', size=10, bold=True)
     font_normal = Font(name='Arial', size=10)
+    font_label = Font(name='Arial', size=10, bold=True)
+    
     fill_yellow = PatternFill(start_color='FFFF00', fill_type='solid')
     fill_light_yellow = PatternFill(start_color='FFFFCC', fill_type='solid')
     fill_green = PatternFill(start_color='C6EFCE', fill_type='solid')
     fill_red = PatternFill(start_color='FFC7CE', fill_type='solid')
     fill_gray = PatternFill(start_color='D3D3D3', fill_type='solid')
+    fill_blue_light = PatternFill(start_color='DDEBF7', fill_type='solid')
 
     border_thin = Border(left=Side(style='thin'), right=Side(style='thin'),
                          top=Side(style='thin'), bottom=Side(style='thin'))
     border_medium = Border(left=Side(style='medium'), right=Side(style='medium'),
                            top=Side(style='medium'), bottom=Side(style='medium'))
-
-    align_center = Alignment(horizontal='center', vertical='center')
+    
+    align_center = Alignment(horizontal='center', vertical='center', wrap_text=True)
     align_right = Alignment(horizontal='right', vertical='center')
     align_left = Alignment(horizontal='left', vertical='center')
 
-    # =============================================
-    # ENCABEZADO
-    # =============================================
-    ws.merge_cells('A1:J1')
-    ws['A1'] = "CUENTAS SOBRES"
+    # ── ENCABEZADO ────────────────────────────────────
+    ws.merge_cells('A1:K1')
+    ws['A1'] = "CUENTAS SOBRES - KIM GAS"
     ws['A1'].font = font_title
     ws['A1'].alignment = align_center
+    ws['A1'].fill = fill_blue_light
 
-    # Chofer y fecha (fila 2)
-    ws['A2'] = "Chofer:"
+    ws['A2'] = "Responsable:"
     ws['A2'].font = font_header
     ws['A2'].alignment = align_right
 
     chofer_nombre = "BODEGA" if sobre.tipo == 'bodega' else (sobre.trabajador.get_full_name() or sobre.trabajador.username).upper()
     ws['B2'] = chofer_nombre
     ws['B2'].font = font_header
-    ws['B2'].alignment = align_left
 
-    ws['D2'] = sobre.fecha.day
-    ws['E2'] = sobre.fecha.strftime("%b").upper()  # FEB
-    ws['F2'] = sobre.fecha.year
-
-    for col in 'DEF':
+    # Fecha en formato visual
+    ws['D2'] = "FECHA:"
+    ws['D2'].font = font_header
+    ws['D2'].alignment = align_right
+    
+    ws['E2'] = sobre.fecha.day
+    ws['F2'] = sobre.fecha.strftime("%b").upper()
+    ws['G2'] = sobre.fecha.year
+    for col in 'EFG':
         ws[f'{col}2'].font = font_header
         ws[f'{col}2'].alignment = align_center
         ws[f'{col}2'].fill = fill_yellow
         ws[f'{col}2'].border = border_thin
 
-    # =============================================
-    # BALONES - fila 4: pesos, fila 5: precios, etc.
-    # =============================================
-    start_col = 1
-    col = start_col + 1  # Empieza en B
+    # ── TABLA BALONES ─────────────────────────────────
+    start_col = 1  # Columna A
+    col = start_col + 1  # B en adelante
 
-    # Fila 4: 5 KG | 11 KG | etc.
+    # FILA 4: PESOS (5 KG, 11 KG, etc.)
+    ws.cell(row=4, column=start_col).value = "TIPO BALÓN"
+    ws.cell(row=4, column=start_col).font = font_label
+    ws.cell(row=4, column=start_col).fill = fill_blue_light
+    ws.cell(row=4, column=start_col).alignment = align_center
+    ws.cell(row=4, column=start_col).border = border_thin
+    
     for linea in lineas:
         ws.cell(row=4, column=col).value = f"{linea.balon.peso_neto_gas} KG"
         ws.cell(row=4, column=col).font = font_header
         ws.cell(row=4, column=col).alignment = align_center
+        ws.cell(row=4, column=col).fill = fill_blue_light
         ws.cell(row=4, column=col).border = border_thin
         col += 1
 
     end_col_balones = col - 1
 
-    # Fila 5: Precios amarillo
+    # FILA 5: PRECIOS UNITARIOS (amarillo)
+    ws.cell(row=5, column=start_col).value = "PRECIO UNITARIO"
+    ws.cell(row=5, column=start_col).font = font_label
+    ws.cell(row=5, column=start_col).fill = fill_yellow
+    ws.cell(row=5, column=start_col).alignment = align_center
+    ws.cell(row=5, column=start_col).border = border_thin
+    
     col = start_col + 1
     for linea in lineas:
         cell = ws.cell(row=5, column=col)
@@ -1430,28 +1443,49 @@ def exportar_sobre_excel(request, sobre_id):
         cell.number_format = '#,##0'
         col += 1
 
-    # Fila 6: Cantidad calculada
+    # FILA 6: CANTIDAD CALCULADA (APP)
+    ws.cell(row=6, column=start_col).value = "CANT. CALCULADA (APP)"
+    ws.cell(row=6, column=start_col).font = font_label
+    ws.cell(row=6, column=start_col).fill = fill_gray
+    ws.cell(row=6, column=start_col).alignment = align_center
+    ws.cell(row=6, column=start_col).border = border_thin
+    
     col = start_col + 1
     for linea in lineas:
-        ws.cell(row=6, column=col).value = linea.cantidad_calculada or 0
-        ws.cell(row=6, column=col).alignment = align_center
-        ws.cell(row=6, column=col).border = border_thin
+        cell = ws.cell(row=6, column=col)
+        cell.value = linea.cantidad_calculada or 0
+        cell.alignment = align_center
+        cell.border = border_thin
+        cell.font = font_normal
         col += 1
 
-    # Fila 7: Cantidad declarada + color
+    # FILA 7: CANTIDAD DECLARADA (REAL)
+    ws.cell(row=7, column=start_col).value = "CANT. DECLARADA (REAL)"
+    ws.cell(row=7, column=start_col).font = font_label
+    ws.cell(row=7, column=start_col).fill = fill_gray
+    ws.cell(row=7, column=start_col).alignment = align_center
+    ws.cell(row=7, column=start_col).border = border_thin
+    
     col = start_col + 1
     for linea in lineas:
         cell = ws.cell(row=7, column=col)
         cell.value = linea.cantidad_declarada or 0
         cell.alignment = align_center
         cell.border = border_thin
+        cell.font = Font(bold=True)
         if (linea.cantidad_declarada or 0) == (linea.cantidad_calculada or 0):
             cell.fill = fill_green
         else:
-            cell.fill = fill_gray
+            cell.fill = fill_light_yellow
         col += 1
 
-    # Fila 8: Diferencia
+    # FILA 8: DIFERENCIA
+    ws.cell(row=8, column=start_col).value = "DIFERENCIA"
+    ws.cell(row=8, column=start_col).font = font_label
+    ws.cell(row=8, column=start_col).fill = fill_gray
+    ws.cell(row=8, column=start_col).alignment = align_center
+    ws.cell(row=8, column=start_col).border = border_thin
+    
     col = start_col + 1
     for linea in lineas:
         diff = (linea.cantidad_declarada or 0) - (linea.cantidad_calculada or 0)
@@ -1462,9 +1496,17 @@ def exportar_sobre_excel(request, sobre_id):
         if diff != 0:
             cell.font = Font(bold=True, color="FF0000")
             cell.fill = fill_red
+        else:
+            cell.font = Font(bold=True)
         col += 1
 
-    # Fila 9: Subtotales
+    # FILA 9: SUBTOTAL POR BALÓN (NUEVO - fórmula)
+    ws.cell(row=9, column=start_col).value = "SUBTOTAL VENTA"
+    ws.cell(row=9, column=start_col).font = font_label
+    ws.cell(row=9, column=start_col).fill = fill_light_yellow
+    ws.cell(row=9, column=start_col).alignment = align_center
+    ws.cell(row=9, column=start_col).border = border_thin
+    
     col = start_col + 1
     for i in range(len(lineas)):
         precio_coord = f"{get_column_letter(col)}5"
@@ -1474,106 +1516,161 @@ def exportar_sobre_excel(request, sobre_id):
         cell.number_format = '#,##0'
         cell.alignment = align_center
         cell.border = border_thin
+        cell.font = Font(bold=True)
+        cell.fill = fill_light_yellow
         col += 1
 
-    # Total Ventas (a la derecha)
-    ventas_col = end_col_balones + 3
-    ws.cell(row=7, column=ventas_col - 1).value = "VENTAS"
-    ws.cell(row=7, column=ventas_col - 1).font = font_header
-    ws.cell(row=7, column=ventas_col - 1).alignment = align_right
+    # ── RESUMEN A LA DERECHA ──────────────────────────
+    ventas_col = end_col_balones + 2
+
+    # TOTAL VENTAS
+    ws.cell(row=5, column=ventas_col).value = "TOTAL VENTAS"
+    ws.cell(row=5, column=ventas_col).font = Font(bold=True, size=11)
+    ws.cell(row=5, column=ventas_col).alignment = align_right
+    ws.cell(row=5, column=ventas_col).border = border_thin
 
     if lineas.exists():
-        ws.cell(row=7, column=ventas_col).value = f"=SUM({get_column_letter(start_col+1)}9:{get_column_letter(end_col_balones)}9)"
+        ws.cell(row=5, column=ventas_col + 1).value = f"=SUM({get_column_letter(start_col+1)}9:{get_column_letter(end_col_balones)}9)"
     else:
-        ws.cell(row=7, column=ventas_col).value = 0
-    ws.cell(row=7, column=ventas_col).fill = fill_light_yellow
-    ws.cell(row=7, column=ventas_col).number_format = '#,##0'
-    ws.cell(row=7, column=ventas_col).font = font_header
-    ws.cell(row=7, column=ventas_col).alignment = align_right
+        ws.cell(row=5, column=ventas_col + 1).value = 0
+    ws.cell(row=5, column=ventas_col + 1).fill = fill_yellow
+    ws.cell(row=5, column=ventas_col + 1).number_format = '#,##0'
+    ws.cell(row=5, column=ventas_col + 1).font = Font(bold=True, size=12)
+    ws.cell(row=5, column=ventas_col + 1).alignment = align_right
+    ws.cell(row=5, column=ventas_col + 1).border = border_medium
 
-    # KILOS (fila 10, fusionado)
-    ws.merge_cells(f'A10:{get_column_letter(start_col)}10')
-    ws['A10'] = "KILOS"
-    ws['A10'].font = font_header
-    ws['A10'].alignment = align_center
-    ws['A10'].fill = fill_yellow
+    # TOTAL KILOS
+    ws.cell(row=6, column=ventas_col).value = "TOTAL KILOS"
+    ws.cell(row=6, column=ventas_col).font = Font(bold=True, size=11)
+    ws.cell(row=6, column=ventas_col).alignment = align_right
+    ws.cell(row=6, column=ventas_col).border = border_thin
 
     if lineas.exists():
-        kilos_parts = [f"({get_column_letter(c)}7*{lineas[i].balon.peso_neto_gas})" for i, c in enumerate(range(start_col+1, end_col_balones+1))]
-        ws.cell(row=10, column=start_col+1).value = "=" + "+".join(kilos_parts)
+        kilos_parts = [f"({get_column_letter(c)}7*{lineas[i].balon.peso_neto_gas})" 
+                      for i, c in enumerate(range(start_col+1, end_col_balones+1))]
+        ws.cell(row=6, column=ventas_col + 1).value = "=" + "+".join(kilos_parts)
     else:
-        ws.cell(row=10, column=start_col+1).value = 0
-    ws.cell(row=10, column=start_col+1).fill = fill_yellow
-    ws.cell(row=10, column=start_col+1).number_format = '#,##0'
-    ws.cell(row=10, column=start_col+1).font = font_header
-    ws.cell(row=10, column=start_col+1).alignment = align_center
+        ws.cell(row=6, column=ventas_col + 1).value = 0
+    ws.cell(row=6, column=ventas_col + 1).fill = fill_yellow
+    ws.cell(row=6, column=ventas_col + 1).number_format = '#,##0'
+    ws.cell(row=6, column=ventas_col + 1).font = Font(bold=True, size=12)
+    ws.cell(row=6, column=ventas_col + 1).alignment = align_right
+    ws.cell(row=6, column=ventas_col + 1).border = border_medium
 
-    # =============================================
-    # PAGOS (derecha)
-    # =============================================
-    pagos_col_label = ventas_col + 2
-    pagos_col_monto = pagos_col_label + 1
+    # ── PAGOS ─────────────────────────────────────────
+    pagos_col_label = ventas_col
+    pagos_col_monto = ventas_col + 1
 
-    ws.cell(row=4, column=pagos_col_label).value = "TIPO PAGO"
-    ws.cell(row=4, column=pagos_col_monto).value = "MONTO"
+    pagos_row_start = 10
+    ws.cell(row=pagos_row_start, column=pagos_col_label).value = "TIPO PAGO"
+    ws.cell(row=pagos_row_start, column=pagos_col_monto).value = "MONTO"
     for c in [pagos_col_label, pagos_col_monto]:
-        ws.cell(row=4, column=c).font = font_header
-        ws.cell(row=4, column=c).fill = fill_gray
-        ws.cell(row=4, column=c).alignment = align_center
-        ws.cell(row=4, column=c).border = border_thin
+        ws.cell(row=pagos_row_start, column=c).font = font_header
+        ws.cell(row=pagos_row_start, column=c).fill = fill_blue_light
+        ws.cell(row=pagos_row_start, column=c).alignment = align_center
+        ws.cell(row=pagos_row_start, column=c).border = border_thin
 
-    row_p = 5
+    row_p = pagos_row_start + 1
     total_pagos = 0
 
     tipo_map = {
-        'abono': 'ABONO CAJA',
-        'visa': 'VISA/POS',
-        'transferencia': 'TRANSFERENCIA',
-        # agrega más si es necesario
+        'abono': 'Abono Caja',
+        'transferencia': 'Transferencia',
+        'visa': 'Visa/POS',
+        'cheque': 'Cheque',
+        'efectivo': 'Efectivo',
+        'otro': 'Otro',
     }
 
     for pago in sobre.pagos.all():
         tipo = tipo_map.get(pago.tipo_pago, pago.tipo_pago.upper())
         ws.cell(row=row_p, column=pagos_col_label).value = tipo
+        ws.cell(row=row_p, column=pagos_col_label).border = border_thin
         ws.cell(row=row_p, column=pagos_col_monto).value = pago.monto
         ws.cell(row=row_p, column=pagos_col_monto).number_format = '#,##0'
         ws.cell(row=row_p, column=pagos_col_monto).alignment = align_right
+        ws.cell(row=row_p, column=pagos_col_monto).border = border_thin
         total_pagos += pago.monto
         row_p += 1
 
     ws.cell(row=row_p, column=pagos_col_label).value = "TOTAL PAGOS"
     ws.cell(row=row_p, column=pagos_col_label).font = font_header
+    ws.cell(row=row_p, column=pagos_col_label).fill = fill_blue_light
+    ws.cell(row=row_p, column=pagos_col_label).border = border_thin
     ws.cell(row=row_p, column=pagos_col_monto).value = total_pagos
-    ws.cell(row=row_p, column=pagos_col_monto).font = font_header
+    ws.cell(row=row_p, column=pagos_col_monto).font = Font(bold=True, size=11)
     ws.cell(row=row_p, column=pagos_col_monto).number_format = '#,##0'
     ws.cell(row=row_p, column=pagos_col_monto).alignment = align_right
+    ws.cell(row=row_p, column=pagos_col_monto).fill = fill_blue_light
+    ws.cell(row=row_p, column=pagos_col_monto).border = border_medium
 
-    # Diferencia
-    diff_row = row_p + 2
-    ws.cell(row=diff_row, column=pagos_col_label).value = "DIFERENCIA"
-    ws.cell(row=diff_row, column=pagos_col_label).font = font_header
-    ws.cell(row=diff_row, column=pagos_col_monto).value = f"={get_column_letter(ventas_col)}7 - {get_column_letter(pagos_col_monto)}{row_p}"
+    # ── GASTOS ────────────────────────────────────────
+    gastos_row_start = row_p + 2
+    ws.cell(row=gastos_row_start, column=pagos_col_label).value = "DESCRIPCIÓN GASTO"
+    ws.cell(row=gastos_row_start, column=pagos_col_monto).value = "MONTO"
+    for c in [pagos_col_label, pagos_col_monto]:
+        ws.cell(row=gastos_row_start, column=c).font = font_header
+        ws.cell(row=gastos_row_start, column=c).fill = fill_blue_light
+        ws.cell(row=gastos_row_start, column=c).alignment = align_center
+        ws.cell(row=gastos_row_start, column=c).border = border_thin
+
+    row_g = gastos_row_start + 1
+    total_gastos = 0
+
+    for gasto in sobre.gastos.all():
+        ws.cell(row=row_g, column=pagos_col_label).value = gasto.descripcion[:40]
+        ws.cell(row=row_g, column=pagos_col_label).border = border_thin
+        ws.cell(row=row_g, column=pagos_col_monto).value = gasto.monto
+        ws.cell(row=row_g, column=pagos_col_monto).number_format = '#,##0'
+        ws.cell(row=row_g, column=pagos_col_monto).alignment = align_right
+        ws.cell(row=row_g, column=pagos_col_monto).border = border_thin
+        total_gastos += gasto.monto
+        row_g += 1
+
+    ws.cell(row=row_g, column=pagos_col_label).value = "TOTAL GASTOS"
+    ws.cell(row=row_g, column=pagos_col_label).font = font_header
+    ws.cell(row=row_g, column=pagos_col_label).fill = fill_blue_light
+    ws.cell(row=row_g, column=pagos_col_label).border = border_thin
+    ws.cell(row=row_g, column=pagos_col_monto).value = total_gastos
+    ws.cell(row=row_g, column=pagos_col_monto).font = Font(bold=True, size=11)
+    ws.cell(row=row_g, column=pagos_col_monto).number_format = '#,##0'
+    ws.cell(row=row_g, column=pagos_col_monto).alignment = align_right
+    ws.cell(row=row_g, column=pagos_col_monto).fill = fill_blue_light
+    ws.cell(row=row_g, column=pagos_col_monto).border = border_medium
+
+    # ── DIFERENCIA FINAL ──────────────────────────────
+    diff_row = row_g + 2
+    ws.cell(row=diff_row, column=pagos_col_label).value = "DIFERENCIA FINAL"
+    ws.cell(row=diff_row, column=pagos_col_label).font = Font(bold=True, size=12)
+    ws.cell(row=diff_row, column=pagos_col_label).border = border_medium
+    ws.cell(row=diff_row, column=pagos_col_monto).value = f"={get_column_letter(ventas_col + 1)}5 - {get_column_letter(pagos_col_monto)}{row_p} - {get_column_letter(pagos_col_monto)}{row_g}"
     ws.cell(row=diff_row, column=pagos_col_monto).fill = fill_yellow
-    ws.cell(row=diff_row, column=pagos_col_monto).font = Font(bold=True, size=12)
-    ws.cell(row=diff_row, column=pagos_col_monto).number_format = '#,##0;[Red](#,##0)'
+    ws.cell(row=diff_row, column=pagos_col_monto).font = Font(bold=True, size=14)
+    ws.cell(row=diff_row, column=pagos_col_monto).number_format = '#,##0;[Red]-#,##0'
     ws.cell(row=diff_row, column=pagos_col_monto).alignment = align_right
+    ws.cell(row=diff_row, column=pagos_col_monto).border = border_medium
 
-    # KM y Firma
+    # ── KM y Firma ────────────────────────────────────
     km_row = diff_row + 3
-    ws.cell(row=km_row, column=1).value = "KM"
+    ws.cell(row=km_row, column=1).value = "KM RECORRIDOS:"
+    ws.cell(row=km_row, column=1).font = font_header
     if sobre.kilometraje_camion:
         ws.cell(row=km_row, column=2).value = sobre.kilometraje_camion
         ws.cell(row=km_row, column=2).fill = fill_yellow
+        ws.cell(row=km_row, column=2).font = Font(bold=True)
+        ws.cell(row=km_row, column=2).border = border_thin
 
-    ws.cell(row=km_row + 2, column=2).value = "FIRMA ___________________________"
-    ws.cell(row=km_row + 2, column=2).border = Border(bottom=Side(style='medium'))
+    ws.cell(row=km_row + 3, column=2).value = "FIRMA RESPONSABLE"
+    ws.cell(row=km_row + 3, column=2).font = font_header
+    ws.cell(row=km_row + 4, column=2).value = "_" * 40
+    ws.cell(row=km_row + 4, column=2).font = Font(size=14)
 
-    # Anchos
-    ws.column_dimensions['A'].width = 10
+    # ── Anchos de columnas ────────────────────────────
+    ws.column_dimensions['A'].width = 22
     for c in range(start_col + 1, end_col_balones + 1):
-        ws.column_dimensions[get_column_letter(c)].width = 10
-    ws.column_dimensions[get_column_letter(pagos_col_label)].width = 18
-    ws.column_dimensions[get_column_letter(pagos_col_monto)].width = 14
+        ws.column_dimensions[get_column_letter(c)].width = 12
+    ws.column_dimensions[get_column_letter(pagos_col_label)].width = 24
+    ws.column_dimensions[get_column_letter(pagos_col_monto)].width = 16
 
     # Respuesta
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
