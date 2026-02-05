@@ -331,7 +331,7 @@
                         <button type="submit" name="guardar" class="btn btn-primary btn-lg px-5 me-3">
                             <i class="bi bi-save me-2"></i>Guardar Cambios
                         </button>
-                        <button type="submit" name="cerrar" class="btn btn-success btn-lg px-5" onclick="return confirmarCierre()">
+                        <button type="submit" name="cerrar" class="btn btn-danger btn-lg px-5" onclick="return confirmarCierre()">
                             <i class="bi bi-lock-fill me-2"></i>Guardar y Cerrar Sobre
                         </button>
                         {% else %}
@@ -348,11 +348,6 @@
                             <i class="bi bi-file-earmark-excel me-2"></i>Exportar a Excel
                         </a>
                         
-                        <div class="text-center mt-3">
-                            <a href="{% url 'lista_sobres_diarios' %}" class="btn btn-secondary btn-lg px-5">
-                                <i class="bi bi-arrow-left me-2"></i>Volver
-                            </a>
-                        </div>
                     </div>
                 </div>
             </form>
@@ -360,189 +355,235 @@
     </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- TEMPLATES OCULTOS PARA FORMSETS DINÁMICOS -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+
+<!-- Template para nuevos pagos -->
+<table id="empty-pago-template" style="display: none;">
+    <tbody>
+        <tr class="pago-row" data-tipo-pago="">
+            <td class="align-middle">
+                {{ formset_pagos.empty_form.id }}
+                {{ formset_pagos.empty_form.tipo_pago }}
+                {{ formset_pagos.empty_form.DELETE }}
+            </td>
+            <td class="align-middle">
+                {{ formset_pagos.empty_form.referencia }}
+            </td>
+            <td class="align-middle text-end">
+                {{ formset_pagos.empty_form.monto }}
+            </td>
+            <td class="text-center align-middle">
+                <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- Template para nuevos gastos -->
+<table id="empty-gasto-template" style="display: none;">
+    <tbody>
+        <tr class="gasto-row">
+            <td class="align-middle">
+                {{ formset_gastos.empty_form.id }}
+                {{ formset_gastos.empty_form.descripcion }}
+                {{ formset_gastos.empty_form.DELETE }}
+            </td>
+            <td class="align-middle text-end">
+                {{ formset_gastos.empty_form.monto }}
+            </td>
+            <td class="text-center align-middle">
+                <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
 <script>
 // ══════════════════════════════════════════════════════════════════
-// VARIABLES GLOBALES DE FORMSETS
+// VARIABLES GLOBALES E INICIALIZACIÓN
 // ══════════════════════════════════════════════════════════════════
-let pagoFormIdx = parseInt(document.querySelector('#id_pagos-TOTAL_FORMS').value) || 0;
-let gastoFormIdx = parseInt(document.querySelector('#id_gastos-TOTAL_FORMS').value) || 0;
+let pagoFormIdx = {{ formset_pagos.total_form_count }};
+let gastoFormIdx = {{ formset_gastos.total_form_count }};
 
 // ══════════════════════════════════════════════════════════════════
-// FUNCIÓN AUXILIAR: Limpiar y parsear números humanizados
+// FUNCIONES DE ACTUALIZACIÓN DE TOTALES
 // ══════════════════════════════════════════════════════════════════
-function parseNumero(valor) {
-    if (!valor) return 0;
-    // Eliminar todo excepto dígitos y punto decimal
-    // Esto convierte "200 000" o "200.000" o "$200.000" a "200000"
-    const limpio = String(valor).replace(/[^\d.-]/g, '');
-    return parseInt(limpio) || 0;
-}
+function updateTotals() {
+    // Variables de totales
+    let totalCalculada = 0;
+    let totalDeclarada = 0;
+    let totalDiferencia = 0;
+    let totalKilos = 0;
+    let totalVentas = 0;
+    let totalPagos = 0;
+    let totalGastos = 0;
 
-// ══════════════════════════════════════════════════════════════════
-// FUNCIÓN PRINCIPAL DE CÁLCULO Y ACTUALIZACIÓN
-// ══════════════════════════════════════════════════════════════════
-const updateTotals = () => {
-    // 1. TOTALES DE VENTAS (tabla de balones)
-    const rows = document.querySelectorAll('#sobreTable tbody tr[data-index]');
-    let totalCalc = 0, totalDecl = 0, totalDif = 0, totalKilos = 0, totalVentas = 0;
-
-    rows.forEach(row => {
-        const input = row.querySelector('input[name$="-cantidad_declarada"]');
-        const calculada = parseNumero(row.querySelector('.calculada-celda')?.textContent);
-        const precio = parseNumero(row.dataset.precio);
-        const peso = parseNumero(row.dataset.peso);
-        const declarada = input ? parseNumero(input.value) : parseNumero(row.querySelector('.text-center.align-middle .fw-bold')?.textContent);
-
+    // ─────────────────────────────────────────────────────────────
+    // CALCULAR TOTALES DE BALONES
+    // ─────────────────────────────────────────────────────────────
+    document.querySelectorAll('#sobreTable tbody tr[data-index]').forEach(row => {
+        const precio = parseFloat(row.dataset.precio) || 0;
+        const peso = parseFloat(row.dataset.peso) || 0;
+        
+        // Obtener calculada
+        const calculadaCelda = row.querySelector('.calculada-celda');
+        const calculada = parseInt(calculadaCelda.textContent) || 0;
+        
+        // Obtener declarada
+        const inputDeclarada = row.querySelector('input[name*="cantidad_declarada"]');
+        const declarada = inputDeclarada ? (parseInt(inputDeclarada.value) || 0) : parseInt(row.querySelector('td:nth-child(4)').textContent) || 0;
+        
+        // Calcular diferencia y subtotal
         const diferencia = declarada - calculada;
         const subtotal = declarada * precio;
         const kilos = declarada * peso;
-
-        // Actualizar celdas de la fila
-        const difCelda = row.querySelector('.diferencia-celda');
-        if (difCelda) {
-            difCelda.textContent = diferencia;
-            difCelda.dataset.diferencia = diferencia;
-            difCelda.style.color = diferencia === 0 ? '#000' : (diferencia > 0 ? 'green' : 'red');
-        }
-
+        
+        // Actualizar celdas de diferencia y subtotal
+        const diferenciaCelda = row.querySelector('.diferencia-celda');
         const subtotalCelda = row.querySelector('.subtotal-celda');
-        if (subtotalCelda) {
-            subtotalCelda.textContent = '$' + subtotal.toLocaleString('es-CL');
+        
+        if (diferenciaCelda) {
+            diferenciaCelda.textContent = diferencia;
+            diferenciaCelda.dataset.diferencia = diferencia;
+            
+            // Color según diferencia
+            diferenciaCelda.classList.remove('text-danger', 'text-success', 'text-dark');
+            if (diferencia < 0) {
+                diferenciaCelda.classList.add('text-danger');
+            } else if (diferencia > 0) {
+                diferenciaCelda.classList.add('text-success');
+            } else {
+                diferenciaCelda.classList.add('text-dark');
+            }
         }
-
+        
+        if (subtotalCelda) {
+            subtotalCelda.textContent = '$' + subtotal.toLocaleString('es-CL', {minimumFractionDigits: 0});
+        }
+        
         // Acumular totales
-        totalCalc += calculada;
-        totalDecl += declarada;
-        totalDif += diferencia;
+        totalCalculada += calculada;
+        totalDeclarada += declarada;
+        totalDiferencia += diferencia;
         totalKilos += kilos;
         totalVentas += subtotal;
     });
 
-    // Actualizar footer de la tabla de ventas
-    document.getElementById('totalCalculada').textContent = totalCalc;
-    document.getElementById('totalDeclarada').textContent = totalDecl;
-    document.getElementById('totalDiferencia').textContent = totalDif;
-    document.getElementById('totalKilos').textContent = totalKilos.toLocaleString('es-CL') + ' kg';
-    document.getElementById('totalVentas').textContent = '$' + totalVentas.toLocaleString('es-CL');
-
-    // 2. TOTALES DE PAGOS
-    const pagoRows = document.querySelectorAll('.pago-row');
-    let totalPagos = 0;
-
-    pagoRows.forEach(row => {
-        const deleteCheck = row.querySelector('input[type="checkbox"][name*="DELETE"]');
-        if (deleteCheck && deleteCheck.checked) return;
-
-        const montoInput = row.querySelector('input[name$="-monto"]');
-        if (montoInput) {
-            const monto = parseNumero(montoInput.value);
+    // ─────────────────────────────────────────────────────────────
+    // CALCULAR TOTALES DE PAGOS
+    // ─────────────────────────────────────────────────────────────
+    document.querySelectorAll('.pago-row').forEach(row => {
+        if (row.style.display === 'none') return; // Ignorar eliminadas
+        
+        const inputMonto = row.querySelector('input[name*="monto"]');
+        if (inputMonto) {
+            const monto = parseFloat(inputMonto.value) || 0;
             totalPagos += monto;
         } else {
-            // Si está cerrado, leer del span
-            const montoSpan = row.querySelector('td:nth-child(3) .fw-bold');
-            if (montoSpan) {
-                const monto = parseNumero(montoSpan.textContent);
+            // Si es un registro cerrado (span)
+            const spanMonto = row.querySelector('td:nth-child(3) span');
+            if (spanMonto) {
+                const texto = spanMonto.textContent.replace(/\$/g, '').replace(/\./g, '').trim();
+                const monto = parseFloat(texto) || 0;
                 totalPagos += monto;
             }
         }
     });
 
-    document.getElementById('totalPagos').textContent = '$' + totalPagos.toLocaleString('es-CL');
-
-    // 3. TOTALES DE GASTOS
-    const gastoRows = document.querySelectorAll('.gasto-row');
-    let totalGastos = 0;
-
-    gastoRows.forEach(row => {
-        const deleteCheck = row.querySelector('input[type="checkbox"][name*="DELETE"]');
-        if (deleteCheck && deleteCheck.checked) return;
-
-        const montoInput = row.querySelector('input[name$="-monto"]');
-        if (montoInput) {
-            const monto = parseNumero(montoInput.value);
+    // ─────────────────────────────────────────────────────────────
+    // CALCULAR TOTALES DE GASTOS
+    // ─────────────────────────────────────────────────────────────
+    document.querySelectorAll('.gasto-row').forEach(row => {
+        if (row.style.display === 'none') return; // Ignorar eliminadas
+        
+        const inputMonto = row.querySelector('input[name*="monto"]');
+        if (inputMonto) {
+            const monto = parseFloat(inputMonto.value) || 0;
             totalGastos += monto;
         } else {
-            // Si está cerrado, leer del span
-            const montoSpan = row.querySelector('td:nth-child(2) .fw-bold');
-            if (montoSpan) {
-                const monto = parseNumero(montoSpan.textContent);
+            // Si es un registro cerrado (span)
+            const spanMonto = row.querySelector('td:nth-child(2) span');
+            if (spanMonto) {
+                const texto = spanMonto.textContent.replace(/\$/g, '').replace(/\./g, '').trim();
+                const monto = parseFloat(texto) || 0;
                 totalGastos += monto;
             }
         }
     });
 
-    document.getElementById('totalGastos').textContent = '$' + totalGastos.toLocaleString('es-CL');
+    // ─────────────────────────────────────────────────────────────
+    // ACTUALIZAR CELDAS DE TOTALES - TABLA BALONES
+    // ─────────────────────────────────────────────────────────────
+    document.getElementById('totalCalculada').textContent = totalCalculada;
+    document.getElementById('totalDeclarada').textContent = totalDeclarada;
+    document.getElementById('totalDiferencia').textContent = totalDiferencia;
+    document.getElementById('totalKilos').textContent = totalKilos.toLocaleString('es-CL', {minimumFractionDigits: 1}) + ' kg';
+    document.getElementById('totalVentas').textContent = '$' + totalVentas.toLocaleString('es-CL', {minimumFractionDigits: 0});
 
-    // 4. RESUMEN FINAL
+    // ─────────────────────────────────────────────────────────────
+    // ACTUALIZAR TOTALES DE PAGOS Y GASTOS
+    // ─────────────────────────────────────────────────────────────
+    document.getElementById('totalPagos').textContent = '$' + totalPagos.toLocaleString('es-CL', {minimumFractionDigits: 0});
+    document.getElementById('totalGastos').textContent = '$' + totalGastos.toLocaleString('es-CL', {minimumFractionDigits: 0});
+
+    // ─────────────────────────────────────────────────────────────
+    // CALCULAR RESUMEN FINAL
+    // ─────────────────────────────────────────────────────────────
     const totalContabilizado = totalPagos + totalGastos;
     const diferencia = totalVentas - totalContabilizado;
-    
-    const resumenVentas = document.getElementById('resumenVentas');
-    const resumenPagos = document.getElementById('resumenPagos');
-    const resumenGastos = document.getElementById('resumenGastos');
-    const resumenContabilizado = document.getElementById('resumenContabilizado');
-    const resumenDiferencia = document.getElementById('resumenDiferencia');
+
+    document.getElementById('resumenVentas').textContent = '$' + totalVentas.toLocaleString('es-CL', {minimumFractionDigits: 0});
+    document.getElementById('resumenPagos').textContent = '$' + totalPagos.toLocaleString('es-CL', {minimumFractionDigits: 0});
+    document.getElementById('resumenGastos').textContent = '$' + totalGastos.toLocaleString('es-CL', {minimumFractionDigits: 0});
+    document.getElementById('resumenContabilizado').textContent = '$' + totalContabilizado.toLocaleString('es-CL', {minimumFractionDigits: 0});
+    document.getElementById('resumenDiferencia').textContent = '$' + diferencia.toLocaleString('es-CL', {minimumFractionDigits: 0});
+
+    // Colorear fila de diferencia
+    const filaDiferencia = document.getElementById('filaDiferencia');
     const alertaDiferencia = document.getElementById('alertaDiferencia');
     const mensajeDiferencia = document.getElementById('mensajeDiferencia');
-    const filaDiferencia = document.getElementById('filaDiferencia');
 
-    resumenVentas.textContent = '$' + totalVentas.toLocaleString('es-CL');
-    resumenPagos.textContent = '$' + totalPagos.toLocaleString('es-CL');
-    resumenGastos.textContent = '$' + totalGastos.toLocaleString('es-CL');
-    resumenContabilizado.textContent = '$' + totalContabilizado.toLocaleString('es-CL');
-    resumenDiferencia.textContent = '$' + diferencia.toLocaleString('es-CL');
-    
-    // Colorear y mostrar mensaje según la diferencia
-    if (Math.abs(diferencia) < 100) {
-        // Cuadra perfecto (diferencia menor a $100)
-        resumenDiferencia.style.color = '#198754'; // Verde
-        filaDiferencia.className = 'border-top border-3 table-success';
-        alertaDiferencia.className = 'alert alert-success mb-0 mt-2 py-2 small';
-        mensajeDiferencia.innerHTML = '<strong>✓ Cuadra perfecto:</strong> Ventas = Pagos + Gastos';
+    filaDiferencia.classList.remove('table-success', 'table-danger', 'table-warning');
+    alertaDiferencia.classList.remove('alert-success', 'alert-danger', 'alert-warning', 'd-none');
+
+    if (diferencia === 0) {
+        filaDiferencia.classList.add('table-success');
+        alertaDiferencia.classList.add('alert-success');
+        mensajeDiferencia.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> ¡Perfecto! Las ventas coinciden con lo entregado.';
     } else if (diferencia > 0) {
-        // Falta contabilizar dinero
-        resumenDiferencia.style.color = '#dc3545'; // Rojo
-        filaDiferencia.className = 'border-top border-3 table-danger';
-        alertaDiferencia.className = 'alert alert-warning mb-0 mt-2 py-2 small';
-        mensajeDiferencia.innerHTML = '<strong>⚠ Atención:</strong> Faltan $' + diferencia.toLocaleString('es-CL') + ' por contabilizar en pagos o gastos';
+        filaDiferencia.classList.add('table-warning');
+        alertaDiferencia.classList.add('alert-warning');
+        mensajeDiferencia.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Falta dinero por entregar: $' + diferencia.toLocaleString('es-CL');
     } else {
-        // Sobra dinero contabilizado
-        resumenDiferencia.style.color = '#dc3545'; // Rojo
-        filaDiferencia.className = 'border-top border-3 table-danger';
-        alertaDiferencia.className = 'alert alert-warning mb-0 mt-2 py-2 small';
-        mensajeDiferencia.innerHTML = '<strong>⚠ Atención:</strong> Hay $' + Math.abs(diferencia).toLocaleString('es-CL') + ' de más contabilizado';
+        filaDiferencia.classList.add('table-danger');
+        alertaDiferencia.classList.add('alert-danger');
+        mensajeDiferencia.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Se entregó más dinero del generado en ventas: $' + Math.abs(diferencia).toLocaleString('es-CL');
     }
-};
+}
 
 // ══════════════════════════════════════════════════════════════════
 // EVENT LISTENERS
 // ══════════════════════════════════════════════════════════════════
-// Escuchar cambios en balones
-const rows = document.querySelectorAll('#sobreTable tbody tr[data-index]');
-rows.forEach(row => {
-    const input = row.querySelector('input[name$="-cantidad_declarada"]');
-    if (input) {
+document.addEventListener('DOMContentLoaded', function() {
+    // Agregar listeners a inputs de cantidad declarada
+    document.querySelectorAll('input[name*="cantidad_declarada"]').forEach(input => {
         input.addEventListener('input', updateTotals);
-        input.addEventListener('change', updateTotals);
-    }
+    });
+    
+    // Agregar listeners a inputs de montos
+    document.querySelectorAll('input[name*="monto"]').forEach(input => {
+        input.addEventListener('input', updateTotals);
+    });
+    
+    // Calcular totales al cargar la página
+    updateTotals();
 });
-
-// Listener global para TODOS los cambios (incluye filas nuevas)
-document.addEventListener('input', function(e) {
-    if (e.target.type === 'number' || e.target.tagName === 'SELECT') {
-        updateTotals();
-    }
-});
-
-// Listener para eliminar filas
-document.addEventListener('change', function(e) {
-    if (e.target.type === 'checkbox' && e.target.name.includes('DELETE')) {
-        updateTotals();
-    }
-});
-
-// Cálculo inicial
-updateTotals();
 
 // ══════════════════════════════════════════════════════════════════
 // FUNCIONES PARA AGREGAR Y ELIMINAR FILAS DINÁMICAMENTE
@@ -565,59 +606,81 @@ function eliminarFila(boton) {
 
 function agregarPago() {
     const tbody = document.getElementById('tablaPagosBody');
-    const newRow = document.createElement('tr');
-    newRow.className = 'pago-row';
-    newRow.setAttribute('data-tipo-pago', '');
-
-    newRow.innerHTML = `
-        <td class="align-middle">
-            <select name="pagos-${pagoFormIdx}-tipo_pago" class="form-control form-control-sm" onchange="updateTotals()">
-                <option value="abono">Abono Caja</option>
-                <option value="transferencia">Transferencia</option>
-                <option value="visa">Visa</option>
-                <option value="cheque">Cheque</option>
-                <option value="otro">Otro</option>
-            </select>
-        </td>
-        <td class="align-middle">
-            <input type="text" name="pagos-${pagoFormIdx}-referencia" class="form-control form-control-sm" placeholder="Nº transacción...">
-        </td>
-        <td class="align-middle">
-            <input type="number" name="pagos-${pagoFormIdx}-monto" class="form-control form-control-sm text-end" min="0" step="100" value="0" oninput="updateTotals()">
-        </td>
-        <td class="text-center align-middle">
-            <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
-                <i class="bi bi-trash"></i>
-            </button>
-        </td>
-    `;
-
+    const template = document.getElementById('empty-pago-template');
+    
+    if (!template) {
+        console.error('Template de pago no encontrado');
+        return;
+    }
+    
+    // Clonar el template (tabla > tbody > tr)
+    const templateRow = template.querySelector('tbody tr');
+    if (!templateRow) {
+        console.error('No se encontró el <tr> dentro del template de pago');
+        return;
+    }
+    
+    const newRow = templateRow.cloneNode(true);
+    
+    // Reemplazar __prefix__ con el índice actual
+    newRow.innerHTML = newRow.innerHTML.replace(/__prefix__/g, pagoFormIdx);
+    
+    // Agregar la fila al tbody
     tbody.appendChild(newRow);
-    document.querySelector('#id_pagos-TOTAL_FORMS').value = ++pagoFormIdx;
+    
+    // Incrementar el contador
+    pagoFormIdx++;
+    
+    // Actualizar el campo TOTAL_FORMS
+    document.querySelector('#id_pagos-TOTAL_FORMS').value = pagoFormIdx;
+    
+    // Agregar event listener al input de monto
+    const inputMonto = newRow.querySelector('input[name*="monto"]');
+    if (inputMonto) {
+        inputMonto.addEventListener('input', updateTotals);
+    }
+    
+    // Actualizar totales
     updateTotals();
 }
 
 function agregarGasto() {
     const tbody = document.getElementById('tablaGastosBody');
-    const newRow = document.createElement('tr');
-    newRow.className = 'gasto-row';
-
-    newRow.innerHTML = `
-        <td class="align-middle">
-            <input type="text" name="gastos-${gastoFormIdx}-descripcion" class="form-control form-control-sm" placeholder="Ej: Agua, Almuerzo...">
-        </td>
-        <td class="align-middle">
-            <input type="number" name="gastos-${gastoFormIdx}-monto" class="form-control form-control-sm text-end" min="0" step="100" value="0" oninput="updateTotals()">
-        </td>
-        <td class="text-center align-middle">
-            <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
-                <i class="bi bi-trash"></i>
-            </button>
-        </td>
-    `;
-
+    const template = document.getElementById('empty-gasto-template');
+    
+    if (!template) {
+        console.error('Template de gasto no encontrado');
+        return;
+    }
+    
+    // Clonar el template (tabla > tbody > tr)
+    const templateRow = template.querySelector('tbody tr');
+    if (!templateRow) {
+        console.error('No se encontró el <tr> dentro del template de gasto');
+        return;
+    }
+    
+    const newRow = templateRow.cloneNode(true);
+    
+    // Reemplazar __prefix__ con el índice actual
+    newRow.innerHTML = newRow.innerHTML.replace(/__prefix__/g, gastoFormIdx);
+    
+    // Agregar la fila al tbody
     tbody.appendChild(newRow);
-    document.querySelector('#id_gastos-TOTAL_FORMS').value = ++gastoFormIdx;
+    
+    // Incrementar el contador
+    gastoFormIdx++;
+    
+    // Actualizar el campo TOTAL_FORMS
+    document.querySelector('#id_gastos-TOTAL_FORMS').value = gastoFormIdx;
+    
+    // Agregar event listener al input de monto
+    const inputMonto = newRow.querySelector('input[name*="monto"]');
+    if (inputMonto) {
+        inputMonto.addEventListener('input', updateTotals);
+    }
+    
+    // Actualizar totales
     updateTotals();
 }
 
