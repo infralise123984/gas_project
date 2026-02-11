@@ -38,6 +38,31 @@
                 {{ formset_gastos.management_form }}
                 {{ formset_pagos.management_form }}
 
+                <!-- Campo de fecha correspondiente -->
+                {% if not sobre.cerrado %}
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">
+                            <i class="bi bi-calendar-event me-2"></i>Fecha correspondiente al sobre
+                        </label>
+                        <input 
+                            type="date" 
+                            name="fecha_correspondiente" 
+                            class="form-control"
+                            value="{{ sobre.fecha_correspondiente|date:'Y-m-d' }}"
+                        >
+                        <small class="form-text text-muted">
+                            Fecha a la que corresponden las ventas (por defecto: hoy)
+                        </small>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-4">
+                    <i class="bi bi-calendar-check me-2"></i>
+                    <strong>Fecha del sobre:</strong> {{ sobre.fecha_correspondiente|date:"d/m/Y" }}
+                </div>
+                {% endif %}
+
                 <!-- Bloque de errores -->
                 {% if formset_lineas.errors or formset_lineas.non_form_errors or formset_gastos.errors or formset_pagos.errors %}
                 <div class="alert alert-danger mb-4">
@@ -772,4 +797,4 @@ function confirmarCierre() {
     font-size: 0.95rem;
 }
 </style>
-{% endblock %}
+{% endblock %}  

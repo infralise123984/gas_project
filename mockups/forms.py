@@ -180,7 +180,7 @@ class LineaPagoForm(forms.ModelForm):
             'monto': forms.NumberInput(attrs={
                 'class': 'form-control text-end',
                 'min': 0,
-                'step': 100,
+                'step': 1,
                 'placeholder': '0'
             }),
             'referencia': forms.TextInput(attrs={
@@ -212,7 +212,7 @@ class LineaGastoForm(forms.ModelForm):
             'monto': forms.NumberInput(attrs={
                 'class': 'form-control text-end',
                 'min': 0,
-                'step': 100,
+                'step': 1,
                 'placeholder': '0'
             }),
             'nota': forms.Textarea(attrs={

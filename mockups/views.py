@@ -1169,13 +1169,24 @@ def lista_sobres_diarios(request):
         'camioneros': camioneros,
     })
 
+# CAMBIOS MÍNIMOS EN views.py - SOLO LO NECESARIO
+
+# ══════════════════════════════════════════════════════════════
+# REEMPLAZAR LA FUNCIÓN editar_sobre_diario() COMPLETA
+# ══════════════════════════════════════════════════════════════
+
 @login_required
 def editar_sobre_diario(request):
+    """
+    Vista para editar/crear un sobre diario.
+    CORREGIDO: Guarda el sobre ANTES de validar formsets para evitar el bug.
+    """
     usuario = request.user
 
     # Determinar si es bodega o camionero específico
     es_bodega = request.GET.get('bodega') == '1'
     camionero_id = request.GET.get('camionero')
+    sobre_id = request.GET.get('sobre_id')  # Para editar un sobre existente específico
 
     if es_bodega:
         tipo_sobre = 'bodega'
@@ -1189,31 +1200,39 @@ def editar_sobre_diario(request):
         messages.error(request, "Debe seleccionar bodega o un camionero.")
         return redirect('lista_sobres_diarios')
 
-    # Obtener o crear el sobre del día
-    hoy = timezone.now().date()
-    sobre, creado = SobreDiario.objects.get_or_create(
-        fecha=hoy,
-        tipo=tipo_sobre,
-        trabajador=trabajador,
-        defaults={
-            'creado_por': usuario,
-        }
-    )
+    # Si viene sobre_id, cargar ese sobre específico
+    if sobre_id:
+        sobre = get_object_or_404(SobreDiario, id=sobre_id)
+        creado = False
+    else:
+        # Buscar el sobre del día o crear uno nuevo
+        hoy = timezone.now().date()
+        sobre, creado = SobreDiario.objects.get_or_create(
+            fecha=hoy,
+            tipo=tipo_sobre,
+            trabajador=trabajador,
+            defaults={
+                'creado_por': usuario,
+                'fecha_correspondiente': hoy,  # Nuevo campo
+            }
+        )
 
     # Si es nuevo, inicializamos las líneas de balones
     if creado:
         balones_activos = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
+        fecha_para_calcular = sobre.fecha_correspondiente or sobre.fecha
+        
         for balon in balones_activos:
             # Calcular cantidad real según pedidos del día
             if tipo_sobre == 'bodega':
                 qs_pedidos = Pedido.objects.filter(
-                    fecha__date=hoy,
+                    fecha__date=fecha_para_calcular,
                     origen='local',
                     estado='entregado'
                 )
             else:
                 qs_pedidos = Pedido.objects.filter(
-                    fecha__date=hoy,
+                    fecha__date=fecha_para_calcular,
                     estado='entregado',
                     entregador=trabajador
                 )
@@ -1224,7 +1243,7 @@ def editar_sobre_diario(request):
                 sobre=sobre,
                 balon=balon,
                 cantidad_calculada=qty_calc,
-                cantidad_declarada=qty_calc,  # Valor inicial = calculado
+                cantidad_declarada=qty_calc,
                 precio_venta_unitario=(
                     balon.precio_local if tipo_sobre == 'bodega' else balon.precio_domicilio
                 )
@@ -1250,6 +1269,29 @@ def editar_sobre_diario(request):
     )
 
     if request.method == "POST":
+        # ✅ CORRECCIÓN PRINCIPAL: Guardar el sobre PRIMERO para que tenga pk
+        if not sobre.pk:
+            sobre.save()
+        
+        # Actualizar campos adicionales del sobre
+        if "kilometraje_camion" in request.POST:
+            try:
+                sobre.kilometraje_camion = int(request.POST["kilometraje_camion"])
+            except (ValueError, TypeError):
+                sobre.kilometraje_camion = 0
+        
+        # Si se especifica fecha correspondiente
+        fecha_correspondiente_str = request.POST.get("fecha_correspondiente")
+        if fecha_correspondiente_str:
+            try:
+                sobre.fecha_correspondiente = datetime.strptime(fecha_correspondiente_str, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+
+        sobre.creado_por = request.user
+        sobre.save()
+
+        # Ahora sí validar y guardar los formsets
         if all([
             formset_lineas.is_valid(),
             formset_pagos.is_valid(),
@@ -1260,14 +1302,7 @@ def editar_sobre_diario(request):
             formset_pagos.save()
             formset_gastos.save()
 
-            # Actualizar campos adicionales del sobre
-            if "kilometraje_camion" in request.POST:
-                try:
-                    sobre.kilometraje_camion = int(request.POST["kilometraje_camion"])
-                except (ValueError, TypeError):
-                    sobre.kilometraje_camion = 0
-
-            sobre.creado_por = request.user  # Quién modificó por última vez
+            # Recalcular totales del sobre
             sobre.save()
 
             # Si se presionó el botón "Cerrar"
@@ -1287,11 +1322,11 @@ def editar_sobre_diario(request):
                     return redirect('lista_sobres_diarios')
             else:
                 messages.success(request, "Cambios guardados correctamente (borrador).")
-                # Redirigir a la misma URL conservando los parámetros GET
+                # Redirigir conservando parámetros
                 if es_bodega:
-                    return redirect(f"{reverse('editar_sobre_diario')}?bodega=1")
+                    return redirect(f"{reverse('editar_sobre_diario')}?bodega=1&sobre_id={sobre.id}")
                 else:
-                    return redirect(f"{reverse('editar_sobre_diario')}?camionero={camionero_id}")
+                    return redirect(f"{reverse('editar_sobre_diario')}?camionero={camionero_id}&sobre_id={sobre.id}")
 
         else:
             messages.error(request, "Hay errores en el formulario. Revise los campos marcados.")
@@ -1302,12 +1337,78 @@ def editar_sobre_diario(request):
         'formset_lineas': formset_lineas,
         'formset_pagos': formset_pagos,
         'formset_gastos': formset_gastos,
-        'hoy': hoy,
+        'hoy': timezone.now().date(),
         'titulo': titulo,
         'es_bodega': es_bodega,
     }
 
     return render(request, 'sobres.html', context)
+
+
+# ══════════════════════════════════════════════════════════════
+# AGREGAR ESTA NUEVA FUNCIÓN (OPCIONAL - SOLO SI QUIERES CREAR SOBRES MANUALES)
+# ══════════════════════════════════════════════════════════════
+
+@login_required
+def crear_sobre_nuevo(request):
+    """
+    Vista para crear un nuevo sobre manualmente con fecha específica.
+    OPCIONAL - Solo si necesitas crear sobres post-cierre.
+    """
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
+        messages.error(request, "Acceso no permitido.")
+        return redirect('index')
+
+    if request.method == "POST":
+        es_bodega = request.POST.get('tipo') == 'bodega'
+        camionero_id = request.POST.get('camionero')
+        fecha_correspondiente_str = request.POST.get('fecha_correspondiente')
+
+        if not fecha_correspondiente_str:
+            messages.error(request, "Debe especificar una fecha para el sobre.")
+            return redirect('lista_sobres_diarios')
+
+        try:
+            fecha_correspondiente = datetime.strptime(fecha_correspondiente_str, "%Y-%m-%d").date()
+        except ValueError:
+            messages.error(request, "Fecha inválida.")
+            return redirect('lista_sobres_diarios')
+
+        if es_bodega:
+            tipo_sobre = 'bodega'
+            trabajador = None
+        elif camionero_id:
+            tipo_sobre = 'camion'
+            trabajador = get_object_or_404(Usuario, id=camionero_id, rol='camionero')
+        else:
+            messages.error(request, "Debe seleccionar un tipo de sobre válido.")
+            return redirect('lista_sobres_diarios')
+
+        # Crear el sobre
+        sobre = SobreDiario.objects.create(
+            fecha=timezone.now().date(),
+            fecha_correspondiente=fecha_correspondiente,
+            tipo=tipo_sobre,
+            trabajador=trabajador,
+            creado_por=request.user,
+        )
+
+        messages.success(request, f"Sobre creado para la fecha {fecha_correspondiente.strftime('%d/%m/%Y')}.")
+        
+        # Redirigir a editar ese sobre
+        if es_bodega:
+            return redirect(f"{reverse('editar_sobre_diario')}?bodega=1&sobre_id={sobre.id}")
+        else:
+            return redirect(f"{reverse('editar_sobre_diario')}?camionero={camionero_id}&sobre_id={sobre.id}")
+
+    # Formulario
+    hoy = timezone.now().date()
+    camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+
+    return render(request, 'crear_sobre.html', {
+        'hoy': hoy,
+        'camioneros': camioneros,
+    })
 @login_required
 def historial_sobres(request):
 
