@@ -19,7 +19,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count, F, Q, Sum
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 
 # Librerías de terceros
 import openpyxl
@@ -52,6 +52,27 @@ from .models import (
 # ──────────────────────────────────────────────────────────────
 # 2. FUNCIONES AUXILIARES (Utils)
 # ──────────────────────────────────────────────────────────────
+
+def now_chile():
+    """
+    Retorna la hora actual en zona horaria de Chile (America/Santiago).
+    Maneja automáticamente horario de verano/invierno.
+    Usar esta función en lugar de timezone.now() para timestamps de usuario.
+    """
+    tz_chile = ZoneInfo('America/Santiago')
+    return timezone.now().astimezone(tz_chile)
+
+
+def today_chile():
+    """
+    Retorna la fecha actual en zona horaria de Chile.
+    Evita el problema de timezone.now().date() que devuelve fecha UTC.
+    Usar esta función en lugar de timezone.now().date() para fechas de usuario.
+    """
+    return now_chile().date()
+
+
+
 def parse_fecha_rango(fechas_str):
     """
     Convierte un string de rango 'YYYY-MM-DD to YYYY-MM-DD' en objetos datetime aware.
@@ -109,7 +130,10 @@ def get_display_name(user):
 # ──────────────────────────────────────────────────────────────
 def index(request):
     """Página de inicio / Dashboard principal."""
-    return render(request, "index.html")
+    context = {
+        'hora_servidor': now_chile().isoformat(),  # ← Usando tu función local
+    }
+    return render(request, "index.html", context)
 
 
 def login_view(request):
@@ -371,7 +395,7 @@ def transaccional_pedido(request):
             # Lógica de negocio según rol
             pedido.origen = "local" if es_bodeguero else "telefono"
             pedido.estado = "entregado" if es_bodeguero else "pendiente"
-            pedido.fecha = timezone.now()
+            pedido.fecha = now_chile()
             pedido.save()
 
             # Guardar detalles del pedido
@@ -1050,77 +1074,269 @@ def exportar_pedidos_excel(queryset, rango_fechas):
         ws.column_dimensions[col].width = width
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    filename = f"pedidos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    timestamp = now_chile().strftime('%Y%m%d_%H%M')
+    filename = f"pedidos_{timestamp}.xlsx"
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     wb.save(response)
     return response
 
 
+
+
 @login_required
 def reporte_ventas(request):
     """
-    Dashboard de ventas para Jefes y Admins.
-    Muestra métricas clave, top productos y top sectores en un rango de fechas.
+    Dashboard de ventas completo y moderno.
+    Métricas, gráficos, análisis por período, top productos, rendimiento por trabajador.
     """
     resp = require_roles(request, ["jefe", "admin"], "index", "Solo jefes y administradores pueden acceder a los reportes.")
     if resp:
         return resp
 
+    # ═══════════════════════════════════════════════════════════
+    # 1. PROCESAR FILTROS
+    # ═══════════════════════════════════════════════════════════
+    
+    # Rango de fechas
     fechas_str = request.GET.get("fechas", "").strip()
+    fecha_inicio, fecha_fin, fechas_display, desde_str, hasta_str = parse_fecha_rango(fechas_str)
     
-    # Determinar rango de fechas
-    fecha_inicio, fecha_fin, fechas_display, _, _ = parse_fecha_rango(fechas_str)
-    if fechas_str and not fecha_inicio:
-        messages.warning(request, "Rango de fechas inválido. Se muestra el mes actual.")
-    
+    # Si no hay rango, mostrar mes actual
     if not fecha_inicio or not fecha_fin:
-        hoy = timezone.now().date()
+        hoy = today_chile()
         primer_dia = date(hoy.year, hoy.month, 1)
         ultimo_dia = date(hoy.year, hoy.month, monthrange(hoy.year, hoy.month)[1])
         fecha_inicio = timezone.make_aware(datetime.combine(primer_dia, datetime.min.time()))
         fecha_fin = timezone.make_aware(datetime.combine(ultimo_dia, datetime.max.time()))
-        fechas_display = f"1 al {ultimo_dia.day} de {hoy.strftime('%B %Y')}"
-
-    # Datos base
+        fechas_display = f"{hoy.strftime('%B %Y')}"
+        desde_str = primer_dia.strftime("%Y-%m-%d")
+        hasta_str = ultimo_dia.strftime("%Y-%m-%d")
+    
+    # Otros filtros
+    filtro_origen = request.GET.get("origen", "")
+    filtro_metodo = request.GET.get("metodo_pago", "")
+    filtro_sector = request.GET.get("sector", "").strip()
+    filtro_registrador = request.GET.get("registrador", "")
+    
+    # ═══════════════════════════════════════════════════════════
+    # 2. CONSULTA BASE
+    # ═══════════════════════════════════════════════════════════
+    
     pedidos = Pedido.objects.filter(
         estado="entregado",
         fecha__gte=fecha_inicio,
         fecha__lte=fecha_fin
-    ).prefetch_related('detalles__balon')
-
-    # Métricas
+    ).select_related('registrador', 'entregador').prefetch_related('detalles__balon')
+    
+    # Aplicar filtros
+    if filtro_origen:
+        pedidos = pedidos.filter(origen=filtro_origen)
+    if filtro_metodo:
+        pedidos = pedidos.filter(metodo_pago=filtro_metodo)
+    if filtro_sector:
+        pedidos = pedidos.filter(sector__icontains=filtro_sector)
+    if filtro_registrador:
+        pedidos = pedidos.filter(registrador_id=filtro_registrador)
+    
+    # ═══════════════════════════════════════════════════════════
+    # 3. MÉTRICAS PRINCIPALES
+    # ═══════════════════════════════════════════════════════════
+    
     total_ventas = pedidos.aggregate(total=Sum('monto_total'))['total'] or 0
     total_ganancias = pedidos.aggregate(total=Sum('ganancia_total'))['total'] or 0
     total_pedidos = pedidos.count()
     promedio_pedido = total_ventas / total_pedidos if total_pedidos > 0 else 0
-
-    # Datos para gráficas/tablas
-    por_balon = DetallePedido.objects.filter(pedido__in=pedidos).values(
-        'balon__nombre'
+    
+    # Margen promedio
+    margen_promedio = (total_ganancias / total_ventas * 100) if total_ventas > 0 else 0
+    
+    # ═══════════════════════════════════════════════════════════
+    # 4. ANÁLISIS POR BALÓN
+    # ═══════════════════════════════════════════════════════════
+    
+    por_balon = DetallePedido.objects.filter(
+        pedido__in=pedidos
+    ).values(
+        'balon__nombre',
+        'balon__peso_neto_gas'
     ).annotate(
-        total_vendido=Sum(F('cantidad') * F('precio_venta_unitario')),
-        kilos_vendidos=Sum(F('cantidad') * F('balon__peso_neto_gas'))
-    ).order_by('-kilos_vendidos')[:5]
-
-    sectores = pedidos.values('sector').annotate(
+        unidades_vendidas=Sum('cantidad'),
+        kilos_vendidos=Sum(F('cantidad') * F('balon__peso_neto_gas')),
+        monto_vendido=Sum(F('cantidad') * F('precio_venta_unitario')),
+        ganancia_total=Sum(F('cantidad') * (F('precio_venta_unitario') - F('precio_compra_unitario')))
+    ).order_by('-monto_vendido')
+    
+    # ═══════════════════════════════════════════════════════════
+    # 5. ANÁLISIS POR ORIGEN
+    # ═══════════════════════════════════════════════════════════
+    
+    por_origen = pedidos.values('origen').annotate(
+        cantidad=Count('id'),
+        total_vendido=Sum('monto_total'),
+        total_ganancia=Sum('ganancia_total')
+    ).order_by('-total_vendido')
+    
+    # ═══════════════════════════════════════════════════════════
+    # 6. ANÁLISIS POR MÉTODO DE PAGO
+    # ═══════════════════════════════════════════════════════════
+    
+    por_metodo = pedidos.values('metodo_pago').annotate(
+        cantidad=Count('id'),
         total_vendido=Sum('monto_total')
-    ).order_by('-total_vendido')[:5]
-
+    ).order_by('-total_vendido')
+    
+    # ═══════════════════════════════════════════════════════════
+    # 7. TOP SECTORES
+    # ═══════════════════════════════════════════════════════════
+    
+    top_sectores = pedidos.exclude(
+        Q(sector='') | Q(sector__isnull=True)
+    ).values('sector').annotate(
+        cantidad_pedidos=Count('id'),
+        total_vendido=Sum('monto_total')
+    ).order_by('-total_vendido')[:10]
+    
+    # ═══════════════════════════════════════════════════════════
+    # 8. RENDIMIENTO POR TRABAJADOR
+    # ═══════════════════════════════════════════════════════════
+    
+    # Registradores (quienes toman pedidos)
+    por_registrador = pedidos.values(
+        'registrador__id',
+        'registrador__first_name',
+        'registrador__last_name',
+        'registrador__username'
+    ).annotate(
+        cantidad_pedidos=Count('id'),
+        total_vendido=Sum('monto_total'),
+        total_ganancia=Sum('ganancia_total')
+    ).order_by('-total_vendido')
+    
+    # Entregadores (camioneros)
+    por_entregador = pedidos.filter(
+        entregador__isnull=False
+    ).values(
+        'entregador__id',
+        'entregador__first_name',
+        'entregador__last_name',
+        'entregador__username'
+    ).annotate(
+        cantidad_entregas=Count('id'),
+        total_entregado=Sum('monto_total')
+    ).order_by('-total_entregado')
+    
+    # ═══════════════════════════════════════════════════════════
+    # 9. ANÁLISIS TEMPORAL (ventas por día)
+    # ═══════════════════════════════════════════════════════════
+    
+    tz_chile = ZoneInfo('America/Santiago')
+    ventas_por_dia = {}
+    
+    for pedido in pedidos:
+        fecha_local = pedido.fecha.astimezone(tz_chile).date()
+        fecha_str = fecha_local.strftime('%Y-%m-%d')
+        
+        if fecha_str not in ventas_por_dia:
+            ventas_por_dia[fecha_str] = {
+                'fecha': fecha_local,
+                'pedidos': 0,
+                'monto': 0,
+                'ganancia': 0
+            }
+        
+        ventas_por_dia[fecha_str]['pedidos'] += 1
+        ventas_por_dia[fecha_str]['monto'] += float(pedido.monto_total or 0)
+        ventas_por_dia[fecha_str]['ganancia'] += float(pedido.ganancia_total or 0)
+    
+    # Ordenar por fecha
+    ventas_por_dia_lista = sorted(ventas_por_dia.values(), key=lambda x: x['fecha'])
+    
+    # ═══════════════════════════════════════════════════════════
+    # 10. PREPARAR DATOS PARA GRÁFICOS
+    # ═══════════════════════════════════════════════════════════
+    
+    # Gráfico de barras: Balones (top 8)
+    chart_balones_labels = [item['balon__nombre'] for item in por_balon[:8]]
+    chart_balones_unidades = [int(item['unidades_vendidas']) for item in por_balon[:8]]
+    chart_balones_kilos = [float(item['kilos_vendidos']) for item in por_balon[:8]]
+    chart_balones_monto = [float(item['monto_vendido']) for item in por_balon[:8]]
+    
+    # Gráfico pie: Origen
+    chart_origen_labels = [dict(Pedido.ORIGENES).get(item['origen'], item['origen']) for item in por_origen]
+    chart_origen_data = [float(item['total_vendido']) for item in por_origen]
+    
+    # Gráfico pie: Método de pago
+    metodos_dict = dict([("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("transferencia", "Transferencia")])
+    chart_metodo_labels = [metodos_dict.get(item['metodo_pago'], item['metodo_pago']) for item in por_metodo]
+    chart_metodo_data = [float(item['total_vendido']) for item in por_metodo]
+    
+    # Gráfico de línea: Ventas diarias
+    chart_dias_labels = [item['fecha'].strftime('%d/%m') for item in ventas_por_dia_lista]
+    chart_dias_ventas = [item['monto'] for item in ventas_por_dia_lista]
+    chart_dias_ganancias = [item['ganancia'] for item in ventas_por_dia_lista]
+    
+    # ═══════════════════════════════════════════════════════════
+    # 11. LISTA DE TRABAJADORES PARA FILTRO
+    # ═══════════════════════════════════════════════════════════
+    
+    trabajadores = Usuario.objects.filter(
+        is_active=True,
+        rol__in=['telefonista', 'bodeguero', 'jefe', 'admin']
+    ).order_by('first_name', 'last_name')
+    
+    # ═══════════════════════════════════════════════════════════
+    # 12. CONTEXT
+    # ═══════════════════════════════════════════════════════════
+    
     context = {
-        "por_balon": por_balon,
-        "total_pedidos": total_pedidos,
-        "total_ventas": total_ventas,
-        "total_ganancias": total_ganancias,
-        "promedio_pedido": promedio_pedido,
-        "tipos_gas_labels": [item['balon__nombre'] for item in por_balon],
-        "tipos_gas_data": [float(item['total_vendido']) for item in por_balon],
-        "sectores_labels": [item['sector'] or "Sin sector" for item in sectores],
-        "sectores_data": [float(item['total_vendido']) for item in sectores],
-        "rango_actual": fechas_display,
+        # Métricas principales
+        'total_ventas': total_ventas,
+        'total_ganancias': total_ganancias,
+        'total_pedidos': total_pedidos,
+        'promedio_pedido': promedio_pedido,
+        'margen_promedio': margen_promedio,
+        
+        # Tablas de análisis
+        'por_balon': por_balon,
+        'por_origen': por_origen,
+        'por_metodo': por_metodo,
+        'top_sectores': top_sectores,
+        'por_registrador': por_registrador,
+        'por_entregador': por_entregador,
+        'ventas_por_dia': ventas_por_dia_lista,
+        
+        # Datos para gráficos
+        'chart_balones_labels': chart_balones_labels,
+        'chart_balones_unidades': chart_balones_unidades,
+        'chart_balones_kilos': chart_balones_kilos,
+        'chart_balones_monto': chart_balones_monto,
+        
+        'chart_origen_labels': chart_origen_labels,
+        'chart_origen_data': chart_origen_data,
+        
+        'chart_metodo_labels': chart_metodo_labels,
+        'chart_metodo_data': chart_metodo_data,
+        
+        'chart_dias_labels': chart_dias_labels,
+        'chart_dias_ventas': chart_dias_ventas,
+        'chart_dias_ganancias': chart_dias_ganancias,
+        
+        # Filtros
+        'rango_actual': fechas_display,
+        'desde_str': desde_str,
+        'hasta_str': hasta_str,
+        'filtro_origen': filtro_origen,
+        'filtro_metodo': filtro_metodo,
+        'filtro_sector': filtro_sector,
+        'filtro_registrador': filtro_registrador,
+        
+        # Choices para filtros
+        'origen_choices': Pedido.ORIGENES,
+        'metodo_choices': [("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("transferencia", "Transferencia")],
+        'trabajadores': trabajadores,
     }
-
+    
     return render(request, "reporte_ventas.html", context)
-
 
 @login_required
 def detalle_pedido(request, pedido_id):
@@ -1161,7 +1377,7 @@ def lista_sobres_diarios(request):
         messages.error(request, "Acceso no permitido.")
         return redirect('index')
 
-    hoy = timezone.now().date()
+    hoy = today_chile()
     camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
 
     return render(request, 'lista_sobres.html', {
@@ -1206,7 +1422,7 @@ def editar_sobre_diario(request):
         creado = False
     else:
         # Buscar el sobre del día o crear uno nuevo
-        hoy = timezone.now().date()
+        hoy = today_chile()
         sobre, creado = SobreDiario.objects.get_or_create(
             fecha=hoy,
             tipo=tipo_sobre,
@@ -1337,7 +1553,7 @@ def editar_sobre_diario(request):
         'formset_lineas': formset_lineas,
         'formset_pagos': formset_pagos,
         'formset_gastos': formset_gastos,
-        'hoy': timezone.now().date(),
+        'hoy': today_chile(),
         'titulo': titulo,
         'es_bodega': es_bodega,
     }
@@ -1386,7 +1602,7 @@ def crear_sobre_nuevo(request):
 
         # Crear el sobre
         sobre = SobreDiario.objects.create(
-            fecha=timezone.now().date(),
+            fecha=today_chile(),
             fecha_correspondiente=fecha_correspondiente,
             tipo=tipo_sobre,
             trabajador=trabajador,
@@ -1402,7 +1618,7 @@ def crear_sobre_nuevo(request):
             return redirect(f"{reverse('editar_sobre_diario')}?camionero={camionero_id}&sobre_id={sobre.id}")
 
     # Formulario
-    hoy = timezone.now().date()
+    hoy = today_chile()
     camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
 
     return render(request, 'crear_sobre.html', {
@@ -1436,7 +1652,7 @@ def historial_sobres(request):
         'total_no_efectivo': total_no_efectivo,
         'total_gastos': total_gastos,
         'total_neto': total_neto,
-        'hoy': timezone.now().date(),
+        'hoy': today_chile(),
     }
 
     return render(request, 'historial_sobres.html', context)
