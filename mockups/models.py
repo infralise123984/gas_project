@@ -248,16 +248,20 @@ class DetallePedido(models.Model):
         ordering = ["balon__peso_neto_gas"]
 
 class SobreDiario(models.Model):
-    """
-    Declaración diaria ("sobre") de ventas/entregas por trabajador.
-    Se genera típicamente al final del día para camioneros o bodeguero.
-    Permite ajuste manual respecto a lo calculado por pedidos.
-    """
-    fecha = models.DateField(default=timezone.now, verbose_name="Fecha del sobre")
+    # Fechas
+    fecha = models.DateTimeField(default=timezone.now, verbose_name="Fecha de creación")
+    fecha_correspondiente = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha a la que corresponde"
+    )
+    
+    # Relaciones
     creado_por = models.ForeignKey(
         Usuario,
         on_delete=models.SET_NULL,
         null=True,
+        blank=True,
         related_name="sobres_creados",
         verbose_name="Creado por (bodeguero/jefe)"
     )
@@ -270,6 +274,8 @@ class SobreDiario(models.Model):
         blank=True,
         verbose_name="Trabajador (camionero o bodeguero)"
     )
+    
+    # Tipo y timestamps
     tipo = models.CharField(
         max_length=20,
         choices=[('camion', 'Camión'), ('bodega', 'Bodega/local')],
@@ -279,17 +285,18 @@ class SobreDiario(models.Model):
     creado_el = models.DateTimeField(auto_now_add=True)
     actualizado_el = models.DateTimeField(auto_now=True)
     
+    # Montos
     monto_calculado_app = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Monto según pedidos en app")
     monto_declarado = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Monto declarado/ajustado")
     diferencia = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Diferencia (ajuste)")
     nota = models.TextField(blank=True, verbose_name="Motivo del ajuste en esta línea")
     
-    # Campos de cierre y auditoría (agregados como acordamos)
+    # Cierre
     cerrado = models.BooleanField(default=False, verbose_name="Sobre cerrado/finalizado")
     declarado_el = models.DateTimeField(null=True, blank=True, verbose_name="Fecha y hora de declaración/cierre")
     nota_cierre = models.TextField(blank=True, verbose_name="Nota al cerrar el sobre")
     
-    # Kilometraje corregido
+    # Kilometraje
     kilometraje_camion = models.PositiveIntegerField(
         default=0,
         blank=True,
@@ -300,27 +307,27 @@ class SobreDiario(models.Model):
     class Meta:
         verbose_name = "Sobre diario"
         verbose_name_plural = "Sobres diarios"
-        unique_together = ['fecha', 'trabajador', 'tipo']
-        ordering = ['-fecha', 'trabajador__username']
+        # unique_together = ['fecha_correspondiente', 'trabajador', 'tipo']
+        ordering = ['-fecha_correspondiente', '-fecha']
 
     def __str__(self):
         if self.tipo == 'bodega':
-            return f"Sobre Bodega - {self.fecha.strftime('%d/%m/%Y')}"
+            return f"Sobre Bodega - {self.fecha_correspondiente.strftime('%d/%m/%Y')}"
         else:
             trabajador_nombre = self.trabajador.get_full_name() if self.trabajador else "Sin trabajador"
-            return f"Sobre {self.fecha.strftime('%d/%m/%Y')} - {trabajador_nombre} ({self.get_tipo_display()})"
+            return f"Sobre {self.fecha_correspondiente.strftime('%d/%m/%Y')} - {trabajador_nombre} ({self.get_tipo_display()})"
 
     def calcular_desde_pedidos(self):
         """Suma cantidades y montos desde pedidos del día para este trabajador"""
         if self.tipo == 'camion':
             pedidos = Pedido.objects.filter(
-                fecha__date=self.fecha,
+                fecha__date=self.fecha_correspondiente,
                 entregador=self.trabajador,
                 estado='entregado'
             )
         else:
             pedidos = Pedido.objects.filter(
-                fecha__date=self.fecha,
+                fecha__date=self.fecha_correspondiente,
                 registrador=self.trabajador,
                 origen='local',
                 estado='entregado'
