@@ -31,7 +31,6 @@ urlpatterns = [
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('crear_usuario/', views.crear_usuario, name='crear_usuario'),
-
     # ────────────────────────────────────────────────
     # Registro y edición de pedidos (transaccional)
     # ────────────────────────────────────────────────

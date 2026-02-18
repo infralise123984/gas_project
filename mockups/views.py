@@ -5,6 +5,7 @@
 # ──────────────────────────────────────────────────────────────
 # Django core y utilidades
 from datetime import date, datetime
+from json import dumps
 from calendar import monthrange
 from django.utils import timezone
 from zoneinfo import ZoneInfo
@@ -19,7 +20,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count, F, Q, Sum
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 
 # Librerías de terceros
 import openpyxl
@@ -52,38 +53,77 @@ from .models import (
 # ──────────────────────────────────────────────────────────────
 # 2. FUNCIONES AUXILIARES (Utils)
 # ──────────────────────────────────────────────────────────────
+
+def now_chile():
+    """
+    Retorna la hora actual en zona horaria de Chile (America/Santiago).
+    Maneja automáticamente horario de verano/invierno.
+    Usar esta función en lugar de timezone.now() para timestamps de usuario.
+    """
+    tz_chile = ZoneInfo('America/Santiago')
+    return timezone.now().astimezone(tz_chile)
+
+
+def today_chile():
+    """
+    Retorna la fecha actual en zona horaria de Chile.
+    Evita el problema de timezone.now().date() que devuelve fecha UTC.
+    Usar esta función en lugar de timezone.now().date() para fechas de usuario.
+    """
+    return now_chile().date()
+
+
 def parse_fecha_rango(fechas_str):
     """
-    Convierte un string de rango 'YYYY-MM-DD to YYYY-MM-DD' en objetos datetime aware.
+    Convierte un string de fecha o rango en objetos date simples.
+    Soporta múltiples formatos de separador:
+      - "2026-02-01 to 2026-02-18" (inglés)
+      - "2026-02-01 a 2026-02-18"  (español - Flatpickr locale es)
+      - "2026-02-01 - 2026-02-18"  (guión)
+      - "2026-02-01"               (fecha única)
+    
     Retorna: (fecha_inicio, fecha_fin, display_str, desde_str, hasta_str)
-    Si falla, retorna valores vacíos/None.
+    donde fecha_inicio y fecha_fin son objetos date (no datetime).
+    Si falla, retorna None, None, "", "", ""
     """
-    if not fechas_str:
+    if not fechas_str or not fechas_str.strip():
         return None, None, "", "", ""
     
+    # Decodificar URL: + → espacio
     fechas_clean = fechas_str.replace("+", " ").strip()
-    if " to " not in fechas_clean:
-        return None, None, "", "", ""
+    
+    # Detectar separador de rango (orden importa: probar " to " y " a " antes de " - ")
+    separador = None
+    for sep in [" to ", " a ", " - ", ",", " -", "- "]:
+        if sep in fechas_clean:
+            separador = sep
+            break
     
     try:
-        desde_str, hasta_str = fechas_clean.split(" to ", 1)
-        desde_str = desde_str.strip()
-        hasta_str = hasta_str.strip()
-        
-        # Convertir strings a objetos datetime naive
-        desde = datetime.strptime(desde_str, "%Y-%m-%d")
-        hasta = datetime.strptime(hasta_str, "%Y-%m-%d")
-        
-        # Hacerlos aware (zona horaria configurada en Django)
-        fecha_inicio = timezone.make_aware(desde.replace(hour=0, minute=0, second=0, microsecond=0))
-        fecha_fin = timezone.make_aware(hasta.replace(hour=23, minute=59, second=59, microsecond=999999))
-        
-        fecha_display = f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
-        return fecha_inicio, fecha_fin, fecha_display, desde_str, hasta_str
-    except ValueError:
-        return None, None, "", "", ""
-
-
+        if separador:
+            # Es un rango: dividir por el separador detectado
+            desde_str, hasta_str = fechas_clean.split(separador, 1)
+            desde_str = desde_str.strip()
+            hasta_str = hasta_str.strip()
+            
+            # Parsear a date simple (sin hora)
+            fecha_inicio = datetime.strptime(desde_str, "%Y-%m-%d").date()
+            fecha_fin = datetime.strptime(hasta_str, "%Y-%m-%d").date()
+            
+            fecha_display = f"{fecha_inicio.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}"
+            return fecha_inicio, fecha_fin, fecha_display, desde_str, hasta_str
+            
+        else:
+            # Es una sola fecha
+            fecha_inicio = datetime.strptime(fechas_clean, "%Y-%m-%d").date()
+            fecha_fin = fecha_inicio
+            
+            fecha_display = fecha_inicio.strftime('%d/%m/%Y')
+            return fecha_inicio, fecha_fin, fecha_display, fechas_clean, fechas_clean
+            
+    except (ValueError, IndexError, AttributeError):
+        return None, None, "", "", ""  
+    
 def require_roles(request, roles, redirect_to="index", message="No tienes permiso para acceder a esta sección."):
     """
     Middleware a nivel de vista. 
@@ -109,7 +149,10 @@ def get_display_name(user):
 # ──────────────────────────────────────────────────────────────
 def index(request):
     """Página de inicio / Dashboard principal."""
-    return render(request, "index.html")
+    context = {
+        'hora_servidor': now_chile().isoformat(),  # ← Usando tu función local
+    }
+    return render(request, "index.html", context)
 
 
 def login_view(request):
@@ -371,7 +414,7 @@ def transaccional_pedido(request):
             # Lógica de negocio según rol
             pedido.origen = "local" if es_bodeguero else "telefono"
             pedido.estado = "entregado" if es_bodeguero else "pendiente"
-            pedido.fecha = timezone.now()
+            pedido.fecha = now_chile()
             pedido.save()
 
             # Guardar detalles del pedido
@@ -1050,7 +1093,8 @@ def exportar_pedidos_excel(queryset, rango_fechas):
         ws.column_dimensions[col].width = width
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    filename = f"pedidos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    timestamp = now_chile().strftime('%Y%m%d_%H%M')
+    filename = f"pedidos_{timestamp}.xlsx"
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     wb.save(response)
     return response
@@ -1058,67 +1102,268 @@ def exportar_pedidos_excel(queryset, rango_fechas):
 
 @login_required
 def reporte_ventas(request):
-    """
-    Dashboard de ventas para Jefes y Admins.
-    Muestra métricas clave, top productos y top sectores en un rango de fechas.
-    """
-    resp = require_roles(request, ["jefe", "admin"], "index", "Solo jefes y administradores pueden acceder a los reportes.")
+    """Dashboard de ventas completo y moderno."""
+    resp = require_roles(request, ["jefe", "admin"], "index",
+                         "Solo jefes y administradores pueden acceder a los reportes.")
     if resp:
         return resp
+    
+    # ═══════════════════════════════════════════════════════════
+    # 1. PROCESAR FILTROS
+    # ═══════════════════════════════════════════════════════════
+    tz_chile = ZoneInfo('America/Santiago')
 
     fechas_str = request.GET.get("fechas", "").strip()
-    
-    # Determinar rango de fechas
-    fecha_inicio, fecha_fin, fechas_display, _, _ = parse_fecha_rango(fechas_str)
-    if fechas_str and not fecha_inicio:
-        messages.warning(request, "Rango de fechas inválido. Se muestra el mes actual.")
-    
-    if not fecha_inicio or not fecha_fin:
-        hoy = timezone.now().date()
-        primer_dia = date(hoy.year, hoy.month, 1)
-        ultimo_dia = date(hoy.year, hoy.month, monthrange(hoy.year, hoy.month)[1])
-        fecha_inicio = timezone.make_aware(datetime.combine(primer_dia, datetime.min.time()))
-        fecha_fin = timezone.make_aware(datetime.combine(ultimo_dia, datetime.max.time()))
-        fechas_display = f"1 al {ultimo_dia.day} de {hoy.strftime('%B %Y')}"
+    fecha_inicio, fecha_fin, fechas_display, desde_str, hasta_str = parse_fecha_rango(fechas_str)
 
-    # Datos base
+    # Si no hay rango, mostrar mes actual
+    if not fecha_inicio or not fecha_fin:
+        hoy = today_chile()
+        fecha_inicio = date(hoy.year, hoy.month, 1)
+        fecha_fin = date(hoy.year, hoy.month, monthrange(hoy.year, hoy.month)[1])
+        fechas_display = hoy.strftime('%B %Y')
+        desde_str = fecha_inicio.strftime("%Y-%m-%d")
+        hasta_str = fecha_fin.strftime("%Y-%m-%d")
+
+    # Construir datetime aware en hora Chile.
+    # Esto evita depender de las tablas de timezone de MySQL
+    # (el lookup __date con USE_TZ=True y MySQL falla si no estan instaladas).
+    dt_inicio = datetime(fecha_inicio.year, fecha_inicio.month, fecha_inicio.day,
+                         0, 0, 0, tzinfo=tz_chile)
+    dt_fin    = datetime(fecha_fin.year, fecha_fin.month, fecha_fin.day,
+                         23, 59, 59, 999999, tzinfo=tz_chile)
+
+    # Otros filtros
+    filtro_origen = request.GET.get("origen", "")
+    filtro_metodo = request.GET.get("metodo_pago", "")
+    filtro_sector = request.GET.get("sector", "").strip()
+    filtro_registrador = request.GET.get("registrador", "")
+    
+    # ═══════════════════════════════════════════════════════════
+    # 2. CONSULTA BASE — rango de datetime aware en hora Chile
+    # ═══════════════════════════════════════════════════════════
     pedidos = Pedido.objects.filter(
         estado="entregado",
-        fecha__gte=fecha_inicio,
-        fecha__lte=fecha_fin
-    ).prefetch_related('detalles__balon')
-
-    # Métricas
+        fecha__gte=dt_inicio,
+        fecha__lte=dt_fin,
+    ).select_related('registrador', 'entregador').prefetch_related('detalles__balon')
+    
+    # Aplicar filtros
+    if filtro_origen:
+        pedidos = pedidos.filter(origen=filtro_origen)
+    if filtro_metodo:
+        pedidos = pedidos.filter(metodo_pago=filtro_metodo)
+    if filtro_sector:
+        pedidos = pedidos.filter(sector__icontains=filtro_sector)
+    if filtro_registrador:
+        pedidos = pedidos.filter(registrador_id=filtro_registrador)
+    
+    # ═══════════════════════════════════════════════════════════
+    # 3. MÉTRICAS PRINCIPALES
+    # ═══════════════════════════════════════════════════════════
+    
     total_ventas = pedidos.aggregate(total=Sum('monto_total'))['total'] or 0
     total_ganancias = pedidos.aggregate(total=Sum('ganancia_total'))['total'] or 0
     total_pedidos = pedidos.count()
     promedio_pedido = total_ventas / total_pedidos if total_pedidos > 0 else 0
-
-    # Datos para gráficas/tablas
-    por_balon = DetallePedido.objects.filter(pedido__in=pedidos).values(
-        'balon__nombre'
+    
+    # Margen promedio
+    margen_promedio = (total_ganancias / total_ventas * 100) if total_ventas > 0 else 0
+    
+    # ═══════════════════════════════════════════════════════════
+    # 4. ANÁLISIS POR BALÓN
+    # ═══════════════════════════════════════════════════════════
+    
+    por_balon = DetallePedido.objects.filter(
+        pedido__in=pedidos
+    ).values(
+        'balon__nombre',
+        'balon__peso_neto_gas'
     ).annotate(
-        total_vendido=Sum(F('cantidad') * F('precio_venta_unitario')),
-        kilos_vendidos=Sum(F('cantidad') * F('balon__peso_neto_gas'))
-    ).order_by('-kilos_vendidos')[:5]
-
-    sectores = pedidos.values('sector').annotate(
+        unidades_vendidas=Sum('cantidad'),
+        kilos_vendidos=Sum(F('cantidad') * F('balon__peso_neto_gas')),
+        monto_vendido=Sum(F('cantidad') * F('precio_venta_unitario')),
+        ganancia_total=Sum(F('cantidad') * (F('precio_venta_unitario') - F('precio_compra_unitario')))
+    ).order_by('-monto_vendido')
+    
+    # ═══════════════════════════════════════════════════════════
+    # 5. ANÁLISIS POR ORIGEN
+    # ═══════════════════════════════════════════════════════════
+    
+    por_origen = pedidos.values('origen').annotate(
+        cantidad=Count('id'),
+        total_vendido=Sum('monto_total'),
+        total_ganancia=Sum('ganancia_total')
+    ).order_by('-total_vendido')
+    
+    # ═══════════════════════════════════════════════════════════
+    # 6. ANÁLISIS POR MÉTODO DE PAGO
+    # ═══════════════════════════════════════════════════════════
+    
+    por_metodo = pedidos.values('metodo_pago').annotate(
+        cantidad=Count('id'),
         total_vendido=Sum('monto_total')
-    ).order_by('-total_vendido')[:5]
-
+    ).order_by('-total_vendido')
+    
+    # ═══════════════════════════════════════════════════════════
+    # 7. TOP SECTORES
+    # ═══════════════════════════════════════════════════════════
+    
+    top_sectores = pedidos.exclude(
+        Q(sector='') | Q(sector__isnull=True)
+    ).values('sector').annotate(
+        cantidad_pedidos=Count('id'),
+        total_vendido=Sum('monto_total')
+    ).order_by('-total_vendido')[:10]
+    
+    # ═══════════════════════════════════════════════════════════
+    # 8. RENDIMIENTO POR TRABAJADOR
+    # ═══════════════════════════════════════════════════════════
+    
+    # Registradores (quienes toman pedidos)
+    por_registrador = pedidos.values(
+        'registrador__id',
+        'registrador__first_name',
+        'registrador__last_name',
+        'registrador__username'
+    ).annotate(
+        cantidad_pedidos=Count('id'),
+        total_vendido=Sum('monto_total'),
+        total_ganancia=Sum('ganancia_total')
+    ).order_by('-total_vendido')
+    
+    # Entregadores (camioneros)
+    por_entregador = pedidos.filter(
+        entregador__isnull=False
+    ).values(
+        'entregador__id',
+        'entregador__first_name',
+        'entregador__last_name',
+        'entregador__username'
+    ).annotate(
+        cantidad_entregas=Count('id'),
+        total_entregado=Sum('monto_total')
+    ).order_by('-total_entregado')
+    
+    # ═══════════════════════════════════════════════════════════
+    # 9. ANÁLISIS TEMPORAL (ventas por día)
+    # ═══════════════════════════════════════════════════════════
+    
+    # tz_chile ya definida en la seccion 1
+    ventas_por_dia = {}
+    
+    for pedido in pedidos:
+        # Convertir datetime UTC almacenado → fecha en hora Chile
+        fecha_local = pedido.fecha.astimezone(tz_chile).date()
+        fecha_str = fecha_local.strftime('%Y-%m-%d')
+        
+        if fecha_str not in ventas_por_dia:
+            ventas_por_dia[fecha_str] = {
+                'fecha': fecha_local,
+                'pedidos': 0,
+                'monto': 0,
+                'ganancia': 0
+            }
+        
+        ventas_por_dia[fecha_str]['pedidos'] += 1
+        ventas_por_dia[fecha_str]['monto'] += float(pedido.monto_total or 0)
+        ventas_por_dia[fecha_str]['ganancia'] += float(pedido.ganancia_total or 0)
+    
+    # Ordenar por fecha
+    ventas_por_dia_lista = sorted(ventas_por_dia.values(), key=lambda x: x['fecha'])
+    
+    # ═══════════════════════════════════════════════════════════
+    # 10. PREPARAR DATOS PARA GRÁFICOS (USAR json.dumps PARA JSON SEGURO)
+    # ═══════════════════════════════════════════════════════════
+    
+    # Gráfico de barras: Balones (top 8)
+    chart_balones_labels = dumps([item['balon__nombre'] for item in por_balon[:8]])
+    chart_balones_unidades = dumps([int(item['unidades_vendidas']) for item in por_balon[:8]])
+    chart_balones_kilos = dumps([float(item['kilos_vendidos']) for item in por_balon[:8]])
+    chart_balones_monto = dumps([float(item['monto_vendido']) for item in por_balon[:8]])
+    
+    # Gráfico pie: Origen
+    chart_origen_labels = dumps([dict(Pedido.ORIGENES).get(item['origen'], item['origen']) for item in por_origen])
+    chart_origen_data = dumps([float(item['total_vendido']) for item in por_origen])
+    
+    # Gráfico pie: Método de pago
+    metodos_dict = dict([("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("transferencia", "Transferencia")])
+    chart_metodo_labels = dumps([metodos_dict.get(item['metodo_pago'], item['metodo_pago']) for item in por_metodo])
+    chart_metodo_data = dumps([float(item['total_vendido']) for item in por_metodo])
+    
+    # Gráfico de línea: Ventas diarias
+    chart_dias_labels = dumps([item['fecha'].strftime('%d/%m') for item in ventas_por_dia_lista])
+    chart_dias_ventas = dumps([item['monto'] for item in ventas_por_dia_lista])
+    chart_dias_ganancias = dumps([item['ganancia'] for item in ventas_por_dia_lista])
+    
+    # Agregar para sectores (si el template lo usa)
+    chart_sectores_labels = dumps([item['sector'] for item in top_sectores])
+    chart_sectores_data = dumps([float(item['total_vendido']) for item in top_sectores])
+    
+    # ═══════════════════════════════════════════════════════════
+    # 11. LISTA DE TRABAJADORES PARA FILTRO
+    # ═══════════════════════════════════════════════════════════
+    
+    trabajadores = Usuario.objects.filter(
+        is_active=True,
+        rol__in=['telefonista', 'bodeguero', 'jefe', 'admin']
+    ).order_by('first_name', 'last_name')
+    
+    # ═══════════════════════════════════════════════════════════
+    # 12. CONTEXT
+    # ═══════════════════════════════════════════════════════════
+    
     context = {
-        "por_balon": por_balon,
-        "total_pedidos": total_pedidos,
-        "total_ventas": total_ventas,
-        "total_ganancias": total_ganancias,
-        "promedio_pedido": promedio_pedido,
-        "tipos_gas_labels": [item['balon__nombre'] for item in por_balon],
-        "tipos_gas_data": [float(item['total_vendido']) for item in por_balon],
-        "sectores_labels": [item['sector'] or "Sin sector" for item in sectores],
-        "sectores_data": [float(item['total_vendido']) for item in sectores],
-        "rango_actual": fechas_display,
+        # Métricas principales
+        'total_ventas': total_ventas,
+        'total_ganancias': total_ganancias,
+        'total_pedidos': total_pedidos,
+        'promedio_pedido': promedio_pedido,
+        'margen_promedio': margen_promedio,
+        
+        # Tablas de análisis
+        'por_balon': por_balon,
+        'por_origen': por_origen,
+        'por_metodo': por_metodo,
+        'top_sectores': top_sectores,
+        'por_registrador': por_registrador,
+        'por_entregador': por_entregador,
+        'ventas_por_dia': ventas_por_dia_lista,
+        
+        # Datos para gráficos (ahora como JSON seguro)
+        'chart_balones_labels': chart_balones_labels,
+        'chart_balones_unidades': chart_balones_unidades,
+        'chart_balones_kilos': chart_balones_kilos,
+        'chart_balones_monto': chart_balones_monto,
+        
+        'chart_origen_labels': chart_origen_labels,
+        'chart_origen_data': chart_origen_data,
+        
+        'chart_metodo_labels': chart_metodo_labels,
+        'chart_metodo_data': chart_metodo_data,
+        
+        'chart_dias_labels': chart_dias_labels,
+        'chart_dias_ventas': chart_dias_ventas,
+        'chart_dias_ganancias': chart_dias_ganancias,
+        
+        'chart_sectores_labels': chart_sectores_labels,
+        'chart_sectores_data': chart_sectores_data,
+        
+        # Filtros
+        'rango_actual': fechas_display,
+        'desde_str': desde_str,
+        'hasta_str': hasta_str,
+        'filtro_origen': filtro_origen,
+        'filtro_metodo': filtro_metodo,
+        'filtro_sector': filtro_sector,
+        'filtro_registrador': filtro_registrador,
+        
+        # Choices para filtros
+        'origen_choices': Pedido.ORIGENES,
+        'metodo_choices': [("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("transferencia", "Transferencia")],
+        'trabajadores': trabajadores,
     }
-
+    
     return render(request, "reporte_ventas.html", context)
 
 
@@ -1161,7 +1406,7 @@ def lista_sobres_diarios(request):
         messages.error(request, "Acceso no permitido.")
         return redirect('index')
 
-    hoy = timezone.now().date()
+    hoy = today_chile()
     camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
 
     return render(request, 'lista_sobres.html', {
@@ -1169,13 +1414,24 @@ def lista_sobres_diarios(request):
         'camioneros': camioneros,
     })
 
+# CAMBIOS MÍNIMOS EN views.py - SOLO LO NECESARIO
+
+# ══════════════════════════════════════════════════════════════
+# REEMPLAZAR LA FUNCIÓN editar_sobre_diario() COMPLETA
+# ══════════════════════════════════════════════════════════════
+
 @login_required
 def editar_sobre_diario(request):
+    """
+    Vista para editar/crear un sobre diario.
+    CORREGIDO: Guarda el sobre ANTES de validar formsets para evitar el bug.
+    """
     usuario = request.user
 
     # Determinar si es bodega o camionero específico
     es_bodega = request.GET.get('bodega') == '1'
     camionero_id = request.GET.get('camionero')
+    sobre_id = request.GET.get('sobre_id')  # Para editar un sobre existente específico
 
     if es_bodega:
         tipo_sobre = 'bodega'
@@ -1189,31 +1445,39 @@ def editar_sobre_diario(request):
         messages.error(request, "Debe seleccionar bodega o un camionero.")
         return redirect('lista_sobres_diarios')
 
-    # Obtener o crear el sobre del día
-    hoy = timezone.now().date()
-    sobre, creado = SobreDiario.objects.get_or_create(
-        fecha=hoy,
-        tipo=tipo_sobre,
-        trabajador=trabajador,
-        defaults={
-            'creado_por': usuario,
-        }
-    )
+    # Si viene sobre_id, cargar ese sobre específico
+    if sobre_id:
+        sobre = get_object_or_404(SobreDiario, id=sobre_id)
+        creado = False
+    else:
+        # Buscar el sobre del día o crear uno nuevo
+        hoy = today_chile()
+        sobre, creado = SobreDiario.objects.get_or_create(
+            fecha=hoy,
+            tipo=tipo_sobre,
+            trabajador=trabajador,
+            defaults={
+                'creado_por': usuario,
+                'fecha_correspondiente': hoy,  # Nuevo campo
+            }
+        )
 
     # Si es nuevo, inicializamos las líneas de balones
     if creado:
         balones_activos = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
+        fecha_para_calcular = sobre.fecha_correspondiente or sobre.fecha
+        
         for balon in balones_activos:
             # Calcular cantidad real según pedidos del día
             if tipo_sobre == 'bodega':
                 qs_pedidos = Pedido.objects.filter(
-                    fecha__date=hoy,
+                    fecha__date=fecha_para_calcular,
                     origen='local',
                     estado='entregado'
                 )
             else:
                 qs_pedidos = Pedido.objects.filter(
-                    fecha__date=hoy,
+                    fecha__date=fecha_para_calcular,
                     estado='entregado',
                     entregador=trabajador
                 )
@@ -1224,7 +1488,7 @@ def editar_sobre_diario(request):
                 sobre=sobre,
                 balon=balon,
                 cantidad_calculada=qty_calc,
-                cantidad_declarada=qty_calc,  # Valor inicial = calculado
+                cantidad_declarada=qty_calc,
                 precio_venta_unitario=(
                     balon.precio_local if tipo_sobre == 'bodega' else balon.precio_domicilio
                 )
@@ -1250,6 +1514,29 @@ def editar_sobre_diario(request):
     )
 
     if request.method == "POST":
+        # ✅ CORRECCIÓN PRINCIPAL: Guardar el sobre PRIMERO para que tenga pk
+        if not sobre.pk:
+            sobre.save()
+        
+        # Actualizar campos adicionales del sobre
+        if "kilometraje_camion" in request.POST:
+            try:
+                sobre.kilometraje_camion = int(request.POST["kilometraje_camion"])
+            except (ValueError, TypeError):
+                sobre.kilometraje_camion = 0
+        
+        # Si se especifica fecha correspondiente
+        fecha_correspondiente_str = request.POST.get("fecha_correspondiente")
+        if fecha_correspondiente_str:
+            try:
+                sobre.fecha_correspondiente = datetime.strptime(fecha_correspondiente_str, "%Y-%m-%d").date()
+            except ValueError:
+                pass
+
+        sobre.creado_por = request.user
+        sobre.save()
+
+        # Ahora sí validar y guardar los formsets
         if all([
             formset_lineas.is_valid(),
             formset_pagos.is_valid(),
@@ -1260,14 +1547,7 @@ def editar_sobre_diario(request):
             formset_pagos.save()
             formset_gastos.save()
 
-            # Actualizar campos adicionales del sobre
-            if "kilometraje_camion" in request.POST:
-                try:
-                    sobre.kilometraje_camion = int(request.POST["kilometraje_camion"])
-                except (ValueError, TypeError):
-                    sobre.kilometraje_camion = 0
-
-            sobre.creado_por = request.user  # Quién modificó por última vez
+            # Recalcular totales del sobre
             sobre.save()
 
             # Si se presionó el botón "Cerrar"
@@ -1287,11 +1567,11 @@ def editar_sobre_diario(request):
                     return redirect('lista_sobres_diarios')
             else:
                 messages.success(request, "Cambios guardados correctamente (borrador).")
-                # Redirigir a la misma URL conservando los parámetros GET
+                # Redirigir conservando parámetros
                 if es_bodega:
-                    return redirect(f"{reverse('editar_sobre_diario')}?bodega=1")
+                    return redirect(f"{reverse('editar_sobre_diario')}?bodega=1&sobre_id={sobre.id}")
                 else:
-                    return redirect(f"{reverse('editar_sobre_diario')}?camionero={camionero_id}")
+                    return redirect(f"{reverse('editar_sobre_diario')}?camionero={camionero_id}&sobre_id={sobre.id}")
 
         else:
             messages.error(request, "Hay errores en el formulario. Revise los campos marcados.")
@@ -1302,12 +1582,78 @@ def editar_sobre_diario(request):
         'formset_lineas': formset_lineas,
         'formset_pagos': formset_pagos,
         'formset_gastos': formset_gastos,
-        'hoy': hoy,
+        'hoy': today_chile(),
         'titulo': titulo,
         'es_bodega': es_bodega,
     }
 
     return render(request, 'sobres.html', context)
+
+
+# ══════════════════════════════════════════════════════════════
+# AGREGAR ESTA NUEVA FUNCIÓN (OPCIONAL - SOLO SI QUIERES CREAR SOBRES MANUALES)
+# ══════════════════════════════════════════════════════════════
+
+@login_required
+def crear_sobre_nuevo(request):
+    """
+    Vista para crear un nuevo sobre manualmente con fecha específica.
+    OPCIONAL - Solo si necesitas crear sobres post-cierre.
+    """
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
+        messages.error(request, "Acceso no permitido.")
+        return redirect('index')
+
+    if request.method == "POST":
+        es_bodega = request.POST.get('tipo') == 'bodega'
+        camionero_id = request.POST.get('camionero')
+        fecha_correspondiente_str = request.POST.get('fecha_correspondiente')
+
+        if not fecha_correspondiente_str:
+            messages.error(request, "Debe especificar una fecha para el sobre.")
+            return redirect('lista_sobres_diarios')
+
+        try:
+            fecha_correspondiente = datetime.strptime(fecha_correspondiente_str, "%Y-%m-%d").date()
+        except ValueError:
+            messages.error(request, "Fecha inválida.")
+            return redirect('lista_sobres_diarios')
+
+        if es_bodega:
+            tipo_sobre = 'bodega'
+            trabajador = None
+        elif camionero_id:
+            tipo_sobre = 'camion'
+            trabajador = get_object_or_404(Usuario, id=camionero_id, rol='camionero')
+        else:
+            messages.error(request, "Debe seleccionar un tipo de sobre válido.")
+            return redirect('lista_sobres_diarios')
+
+        # Crear el sobre
+        sobre = SobreDiario.objects.create(
+            fecha=today_chile(),
+            fecha_correspondiente=fecha_correspondiente,
+            tipo=tipo_sobre,
+            trabajador=trabajador,
+            creado_por=request.user,
+        )
+
+        messages.success(request, f"Sobre creado para la fecha {fecha_correspondiente.strftime('%d/%m/%Y')}.")
+        
+        # Redirigir a editar ese sobre
+        if es_bodega:
+            return redirect(f"{reverse('editar_sobre_diario')}?bodega=1&sobre_id={sobre.id}")
+        else:
+            return redirect(f"{reverse('editar_sobre_diario')}?camionero={camionero_id}&sobre_id={sobre.id}")
+
+    # Formulario
+    hoy = today_chile()
+    camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+
+    return render(request, 'crear_sobre.html', {
+        'hoy': hoy,
+        'camioneros': camioneros,
+    })
 @login_required
 def historial_sobres(request):
 
@@ -1335,7 +1681,7 @@ def historial_sobres(request):
         'total_no_efectivo': total_no_efectivo,
         'total_gastos': total_gastos,
         'total_neto': total_neto,
-        'hoy': timezone.now().date(),
+        'hoy': today_chile(),
     }
 
     return render(request, 'historial_sobres.html', context)
