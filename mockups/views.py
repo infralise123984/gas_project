@@ -5,6 +5,7 @@
 # ──────────────────────────────────────────────────────────────
 # Django core y utilidades
 from datetime import date, datetime
+from json import dumps
 from calendar import monthrange
 from django.utils import timezone
 from zoneinfo import ZoneInfo
@@ -72,39 +73,57 @@ def today_chile():
     return now_chile().date()
 
 
-
 def parse_fecha_rango(fechas_str):
     """
-    Convierte un string de rango 'YYYY-MM-DD to YYYY-MM-DD' en objetos datetime aware.
+    Convierte un string de fecha o rango en objetos date simples.
+    Soporta múltiples formatos de separador:
+      - "2026-02-01 to 2026-02-18" (inglés)
+      - "2026-02-01 a 2026-02-18"  (español - Flatpickr locale es)
+      - "2026-02-01 - 2026-02-18"  (guión)
+      - "2026-02-01"               (fecha única)
+    
     Retorna: (fecha_inicio, fecha_fin, display_str, desde_str, hasta_str)
-    Si falla, retorna valores vacíos/None.
+    donde fecha_inicio y fecha_fin son objetos date (no datetime).
+    Si falla, retorna None, None, "", "", ""
     """
-    if not fechas_str:
+    if not fechas_str or not fechas_str.strip():
         return None, None, "", "", ""
     
+    # Decodificar URL: + → espacio
     fechas_clean = fechas_str.replace("+", " ").strip()
-    if " to " not in fechas_clean:
-        return None, None, "", "", ""
+    
+    # Detectar separador de rango (orden importa: probar " to " y " a " antes de " - ")
+    separador = None
+    for sep in [" to ", " a ", " - ", ",", " -", "- "]:
+        if sep in fechas_clean:
+            separador = sep
+            break
     
     try:
-        desde_str, hasta_str = fechas_clean.split(" to ", 1)
-        desde_str = desde_str.strip()
-        hasta_str = hasta_str.strip()
-        
-        # Convertir strings a objetos datetime naive
-        desde = datetime.strptime(desde_str, "%Y-%m-%d")
-        hasta = datetime.strptime(hasta_str, "%Y-%m-%d")
-        
-        # Hacerlos aware (zona horaria configurada en Django)
-        fecha_inicio = timezone.make_aware(desde.replace(hour=0, minute=0, second=0, microsecond=0))
-        fecha_fin = timezone.make_aware(hasta.replace(hour=23, minute=59, second=59, microsecond=999999))
-        
-        fecha_display = f"{desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
-        return fecha_inicio, fecha_fin, fecha_display, desde_str, hasta_str
-    except ValueError:
-        return None, None, "", "", ""
-
-
+        if separador:
+            # Es un rango: dividir por el separador detectado
+            desde_str, hasta_str = fechas_clean.split(separador, 1)
+            desde_str = desde_str.strip()
+            hasta_str = hasta_str.strip()
+            
+            # Parsear a date simple (sin hora)
+            fecha_inicio = datetime.strptime(desde_str, "%Y-%m-%d").date()
+            fecha_fin = datetime.strptime(hasta_str, "%Y-%m-%d").date()
+            
+            fecha_display = f"{fecha_inicio.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}"
+            return fecha_inicio, fecha_fin, fecha_display, desde_str, hasta_str
+            
+        else:
+            # Es una sola fecha
+            fecha_inicio = datetime.strptime(fechas_clean, "%Y-%m-%d").date()
+            fecha_fin = fecha_inicio
+            
+            fecha_display = fecha_inicio.strftime('%d/%m/%Y')
+            return fecha_inicio, fecha_fin, fecha_display, fechas_clean, fechas_clean
+            
+    except (ValueError, IndexError, AttributeError):
+        return None, None, "", "", ""  
+    
 def require_roles(request, roles, redirect_to="index", message="No tienes permiso para acceder a esta sección."):
     """
     Middleware a nivel de vista. 
@@ -1081,37 +1100,39 @@ def exportar_pedidos_excel(queryset, rango_fechas):
     return response
 
 
-
-
 @login_required
 def reporte_ventas(request):
-    """
-    Dashboard de ventas completo y moderno.
-    Métricas, gráficos, análisis por período, top productos, rendimiento por trabajador.
-    """
-    resp = require_roles(request, ["jefe", "admin"], "index", "Solo jefes y administradores pueden acceder a los reportes.")
+    """Dashboard de ventas completo y moderno."""
+    resp = require_roles(request, ["jefe", "admin"], "index",
+                         "Solo jefes y administradores pueden acceder a los reportes.")
     if resp:
         return resp
-
+    
     # ═══════════════════════════════════════════════════════════
     # 1. PROCESAR FILTROS
     # ═══════════════════════════════════════════════════════════
-    
-    # Rango de fechas
+    tz_chile = ZoneInfo('America/Santiago')
+
     fechas_str = request.GET.get("fechas", "").strip()
     fecha_inicio, fecha_fin, fechas_display, desde_str, hasta_str = parse_fecha_rango(fechas_str)
-    
+
     # Si no hay rango, mostrar mes actual
     if not fecha_inicio or not fecha_fin:
         hoy = today_chile()
-        primer_dia = date(hoy.year, hoy.month, 1)
-        ultimo_dia = date(hoy.year, hoy.month, monthrange(hoy.year, hoy.month)[1])
-        fecha_inicio = timezone.make_aware(datetime.combine(primer_dia, datetime.min.time()))
-        fecha_fin = timezone.make_aware(datetime.combine(ultimo_dia, datetime.max.time()))
-        fechas_display = f"{hoy.strftime('%B %Y')}"
-        desde_str = primer_dia.strftime("%Y-%m-%d")
-        hasta_str = ultimo_dia.strftime("%Y-%m-%d")
-    
+        fecha_inicio = date(hoy.year, hoy.month, 1)
+        fecha_fin = date(hoy.year, hoy.month, monthrange(hoy.year, hoy.month)[1])
+        fechas_display = hoy.strftime('%B %Y')
+        desde_str = fecha_inicio.strftime("%Y-%m-%d")
+        hasta_str = fecha_fin.strftime("%Y-%m-%d")
+
+    # Construir datetime aware en hora Chile.
+    # Esto evita depender de las tablas de timezone de MySQL
+    # (el lookup __date con USE_TZ=True y MySQL falla si no estan instaladas).
+    dt_inicio = datetime(fecha_inicio.year, fecha_inicio.month, fecha_inicio.day,
+                         0, 0, 0, tzinfo=tz_chile)
+    dt_fin    = datetime(fecha_fin.year, fecha_fin.month, fecha_fin.day,
+                         23, 59, 59, 999999, tzinfo=tz_chile)
+
     # Otros filtros
     filtro_origen = request.GET.get("origen", "")
     filtro_metodo = request.GET.get("metodo_pago", "")
@@ -1119,13 +1140,12 @@ def reporte_ventas(request):
     filtro_registrador = request.GET.get("registrador", "")
     
     # ═══════════════════════════════════════════════════════════
-    # 2. CONSULTA BASE
+    # 2. CONSULTA BASE — rango de datetime aware en hora Chile
     # ═══════════════════════════════════════════════════════════
-    
     pedidos = Pedido.objects.filter(
         estado="entregado",
-        fecha__gte=fecha_inicio,
-        fecha__lte=fecha_fin
+        fecha__gte=dt_inicio,
+        fecha__lte=dt_fin,
     ).select_related('registrador', 'entregador').prefetch_related('detalles__balon')
     
     # Aplicar filtros
@@ -1229,10 +1249,11 @@ def reporte_ventas(request):
     # 9. ANÁLISIS TEMPORAL (ventas por día)
     # ═══════════════════════════════════════════════════════════
     
-    tz_chile = ZoneInfo('America/Santiago')
+    # tz_chile ya definida en la seccion 1
     ventas_por_dia = {}
     
     for pedido in pedidos:
+        # Convertir datetime UTC almacenado → fecha en hora Chile
         fecha_local = pedido.fecha.astimezone(tz_chile).date()
         fecha_str = fecha_local.strftime('%Y-%m-%d')
         
@@ -1252,28 +1273,32 @@ def reporte_ventas(request):
     ventas_por_dia_lista = sorted(ventas_por_dia.values(), key=lambda x: x['fecha'])
     
     # ═══════════════════════════════════════════════════════════
-    # 10. PREPARAR DATOS PARA GRÁFICOS
+    # 10. PREPARAR DATOS PARA GRÁFICOS (USAR json.dumps PARA JSON SEGURO)
     # ═══════════════════════════════════════════════════════════
     
     # Gráfico de barras: Balones (top 8)
-    chart_balones_labels = [item['balon__nombre'] for item in por_balon[:8]]
-    chart_balones_unidades = [int(item['unidades_vendidas']) for item in por_balon[:8]]
-    chart_balones_kilos = [float(item['kilos_vendidos']) for item in por_balon[:8]]
-    chart_balones_monto = [float(item['monto_vendido']) for item in por_balon[:8]]
+    chart_balones_labels = dumps([item['balon__nombre'] for item in por_balon[:8]])
+    chart_balones_unidades = dumps([int(item['unidades_vendidas']) for item in por_balon[:8]])
+    chart_balones_kilos = dumps([float(item['kilos_vendidos']) for item in por_balon[:8]])
+    chart_balones_monto = dumps([float(item['monto_vendido']) for item in por_balon[:8]])
     
     # Gráfico pie: Origen
-    chart_origen_labels = [dict(Pedido.ORIGENES).get(item['origen'], item['origen']) for item in por_origen]
-    chart_origen_data = [float(item['total_vendido']) for item in por_origen]
+    chart_origen_labels = dumps([dict(Pedido.ORIGENES).get(item['origen'], item['origen']) for item in por_origen])
+    chart_origen_data = dumps([float(item['total_vendido']) for item in por_origen])
     
     # Gráfico pie: Método de pago
     metodos_dict = dict([("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("transferencia", "Transferencia")])
-    chart_metodo_labels = [metodos_dict.get(item['metodo_pago'], item['metodo_pago']) for item in por_metodo]
-    chart_metodo_data = [float(item['total_vendido']) for item in por_metodo]
+    chart_metodo_labels = dumps([metodos_dict.get(item['metodo_pago'], item['metodo_pago']) for item in por_metodo])
+    chart_metodo_data = dumps([float(item['total_vendido']) for item in por_metodo])
     
     # Gráfico de línea: Ventas diarias
-    chart_dias_labels = [item['fecha'].strftime('%d/%m') for item in ventas_por_dia_lista]
-    chart_dias_ventas = [item['monto'] for item in ventas_por_dia_lista]
-    chart_dias_ganancias = [item['ganancia'] for item in ventas_por_dia_lista]
+    chart_dias_labels = dumps([item['fecha'].strftime('%d/%m') for item in ventas_por_dia_lista])
+    chart_dias_ventas = dumps([item['monto'] for item in ventas_por_dia_lista])
+    chart_dias_ganancias = dumps([item['ganancia'] for item in ventas_por_dia_lista])
+    
+    # Agregar para sectores (si el template lo usa)
+    chart_sectores_labels = dumps([item['sector'] for item in top_sectores])
+    chart_sectores_data = dumps([float(item['total_vendido']) for item in top_sectores])
     
     # ═══════════════════════════════════════════════════════════
     # 11. LISTA DE TRABAJADORES PARA FILTRO
@@ -1305,7 +1330,7 @@ def reporte_ventas(request):
         'por_entregador': por_entregador,
         'ventas_por_dia': ventas_por_dia_lista,
         
-        # Datos para gráficos
+        # Datos para gráficos (ahora como JSON seguro)
         'chart_balones_labels': chart_balones_labels,
         'chart_balones_unidades': chart_balones_unidades,
         'chart_balones_kilos': chart_balones_kilos,
@@ -1320,6 +1345,9 @@ def reporte_ventas(request):
         'chart_dias_labels': chart_dias_labels,
         'chart_dias_ventas': chart_dias_ventas,
         'chart_dias_ganancias': chart_dias_ganancias,
+        
+        'chart_sectores_labels': chart_sectores_labels,
+        'chart_sectores_data': chart_sectores_data,
         
         # Filtros
         'rango_actual': fechas_display,
@@ -1337,6 +1365,7 @@ def reporte_ventas(request):
     }
     
     return render(request, "reporte_ventas.html", context)
+
 
 @login_required
 def detalle_pedido(request, pedido_id):
