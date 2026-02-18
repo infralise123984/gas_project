@@ -3,23 +3,8 @@ from django import forms
 from django.forms import inlineformset_factory, BaseInlineFormSet
 from .models import Pedido, DetallePedido, TipoBalon, SobreDiario, LineaSobre, LineaPago, LineaGasto
 
-SECTORES = [
-    ("", "— Seleccionar sector —"),
-    ("Población Dintrans", "Población Dintrans"),
-    ("Machalí Alto", "Machalí Alto"),
-    ("Gultro", "Gultro"),
-    ("Villa Los Tilos", "Villa Los Tilos"),
-    ("Centro Rancagua", "Centro Rancagua"),
-    ("Baquedano", "Baquedano"),
-    ("La Granja", "La Granja"),
-    ("Rancagua Norte", "Rancagua Norte"),
-    ("Villa Teniente", "Villa Teniente"),
-    ("Requínoa", "Requínoa"),
-    ("Graneros", "Graneros"),
-    ("Mostazal", "Mostazal"),
-    ("Codegua", "Codegua"),
-    ("Otro", "Otro (especificar en dirección)"),
-]
+# Sectores definidos en Pedido.SECTORES (fuente única de verdad)
+SECTORES = [("", "— Seleccionar sector —")] + Pedido.SECTORES
 
 
 class DetallePedidoForm(forms.ModelForm):

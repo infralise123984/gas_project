@@ -1154,7 +1154,7 @@ def reporte_ventas(request):
     if filtro_metodo:
         pedidos = pedidos.filter(metodo_pago=filtro_metodo)
     if filtro_sector:
-        pedidos = pedidos.filter(sector__icontains=filtro_sector)
+        pedidos = pedidos.filter(sector=filtro_sector)
     if filtro_registrador:
         pedidos = pedidos.filter(registrador_id=filtro_registrador)
     
@@ -1362,6 +1362,7 @@ def reporte_ventas(request):
         'origen_choices': Pedido.ORIGENES,
         'metodo_choices': [("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("transferencia", "Transferencia")],
         'trabajadores': trabajadores,
+        'sectores_choices': Pedido.SECTORES,
     }
     
     return render(request, "reporte_ventas.html", context)
