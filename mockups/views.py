@@ -1125,9 +1125,6 @@ def reporte_ventas(request):
         desde_str = fecha_inicio.strftime("%Y-%m-%d")
         hasta_str = fecha_fin.strftime("%Y-%m-%d")
 
-    # Construir datetime aware en hora Chile.
-    # Esto evita depender de las tablas de timezone de MySQL
-    # (el lookup __date con USE_TZ=True y MySQL falla si no estan instaladas).
     dt_inicio = datetime(fecha_inicio.year, fecha_inicio.month, fecha_inicio.day,
                          0, 0, 0, tzinfo=tz_chile)
     dt_fin    = datetime(fecha_fin.year, fecha_fin.month, fecha_fin.day,
@@ -1140,7 +1137,7 @@ def reporte_ventas(request):
     filtro_registrador = request.GET.get("registrador", "")
     
     # ═══════════════════════════════════════════════════════════
-    # 2. CONSULTA BASE — rango de datetime aware en hora Chile
+    # 2. CONSULTA BASE
     # ═══════════════════════════════════════════════════════════
     pedidos = Pedido.objects.filter(
         estado="entregado",
@@ -1148,7 +1145,6 @@ def reporte_ventas(request):
         fecha__lte=dt_fin,
     ).select_related('registrador', 'entregador').prefetch_related('detalles__balon')
     
-    # Aplicar filtros
     if filtro_origen:
         pedidos = pedidos.filter(origen=filtro_origen)
     if filtro_metodo:
@@ -1166,8 +1162,6 @@ def reporte_ventas(request):
     total_ganancias = pedidos.aggregate(total=Sum('ganancia_total'))['total'] or 0
     total_pedidos = pedidos.count()
     promedio_pedido = total_ventas / total_pedidos if total_pedidos > 0 else 0
-    
-    # Margen promedio
     margen_promedio = (total_ganancias / total_ventas * 100) if total_ventas > 0 else 0
     
     # ═══════════════════════════════════════════════════════════
@@ -1217,43 +1211,149 @@ def reporte_ventas(request):
     ).order_by('-total_vendido')[:10]
     
     # ═══════════════════════════════════════════════════════════
-    # 8. RENDIMIENTO POR TRABAJADOR
+    # 8. RENDIMIENTO CONSOLIDADO POR TRABAJADOR
+    #
+    # Lógica:
+    #  - Camioneros propietarios de venta: pedidos donde registrador=usuario
+    #    y origen IN ('tarreo', 'venta_extra') → son ventas propias del camionero
+    #  - Camioneros como entregadores: pedidos donde entregador=usuario
+    #    y origen IN ('telefono', 'local') → pedidos telefónicos que ellos entregaron
+    #  - Telefonistas/otros registradores: pedidos donde registrador=usuario
+    #    y origen IN ('telefono', 'local') → pedidos que ellos tomaron
+    #
+    # Se construye un dict consolidado por usuario_id para luego presentarlo.
     # ═══════════════════════════════════════════════════════════
-    
-    # Registradores (quienes toman pedidos)
-    por_registrador = pedidos.values(
-        'registrador__id',
-        'registrador__first_name',
-        'registrador__last_name',
-        'registrador__username'
-    ).annotate(
-        cantidad_pedidos=Count('id'),
-        total_vendido=Sum('monto_total'),
-        total_ganancia=Sum('ganancia_total')
-    ).order_by('-total_vendido')
-    
-    # Entregadores (camioneros)
-    por_entregador = pedidos.filter(
-        entregador__isnull=False
-    ).values(
-        'entregador__id',
-        'entregador__first_name',
-        'entregador__last_name',
-        'entregador__username'
-    ).annotate(
-        cantidad_entregas=Count('id'),
-        total_entregado=Sum('monto_total')
-    ).order_by('-total_entregado')
-    
+
+    # -- 8a. Ventas propias de camioneros (tarreo / venta_extra que ellos registraron)
+    ventas_propias_camionero = (
+        pedidos
+        .filter(origen__in=['tarreo', 'venta_extra'])
+        .values(
+            'registrador__id',
+            'registrador__first_name',
+            'registrador__last_name',
+            'registrador__username',
+            'registrador__rol',
+            'origen',
+        )
+        .annotate(
+            cantidad=Count('id'),
+            total_vendido=Sum('monto_total'),
+            total_ganancia=Sum('ganancia_total'),
+        )
+    )
+
+    # -- 8b. Pedidos entregados por camionero (origen teléfono/local, registrados por otro)
+    entregas_camionero = (
+        pedidos
+        .filter(entregador__isnull=False)
+        .exclude(origen__in=['tarreo', 'venta_extra'])
+        .values(
+            'entregador__id',
+            'entregador__first_name',
+            'entregador__last_name',
+            'entregador__username',
+            'entregador__rol',
+        )
+        .annotate(
+            cantidad_entregas=Count('id'),
+            total_entregado=Sum('monto_total'),
+        )
+    )
+
+    # -- 8c. Pedidos registrados por telefonistas/otros (origen teléfono/local)
+    ventas_registrador = (
+        pedidos
+        .filter(origen__in=['telefono', 'local'])
+        .values(
+            'registrador__id',
+            'registrador__first_name',
+            'registrador__last_name',
+            'registrador__username',
+            'registrador__rol',
+        )
+        .annotate(
+            cantidad=Count('id'),
+            total_vendido=Sum('monto_total'),
+            total_ganancia=Sum('ganancia_total'),
+        )
+    )
+
+    # -- Consolidar en un dict { usuario_id: { ...stats } }
+    rendimiento_trabajadores = {}
+
+    def _get_o_crear(uid, fname, lname, uname, rol):
+        if uid not in rendimiento_trabajadores:
+            nombre = f"{fname} {lname}".strip() or uname
+            rendimiento_trabajadores[uid] = {
+                'id': uid,
+                'nombre': nombre,
+                'rol': rol,
+                # ventas propias (tarreo / venta_extra)
+                'ventas_tarreo': 0,
+                'monto_tarreo': 0,
+                'ventas_extra': 0,
+                'monto_extra': 0,
+                # pedidos telefónicos/local que registró
+                'pedidos_registrados': 0,
+                'monto_registrado': 0,
+                'ganancia_registrada': 0,
+                # pedidos telefónicos/local que entregó
+                'pedidos_entregados': 0,
+                'monto_entregado': 0,
+            }
+        return rendimiento_trabajadores[uid]
+
+    for row in ventas_propias_camionero:
+        uid = row['registrador__id']
+        if uid is None:
+            continue
+        w = _get_o_crear(uid, row['registrador__first_name'], row['registrador__last_name'],
+                         row['registrador__username'], row['registrador__rol'])
+        if row['origen'] == 'tarreo':
+            w['ventas_tarreo'] += row['cantidad']
+            w['monto_tarreo'] += float(row['total_vendido'] or 0)
+        elif row['origen'] == 'venta_extra':
+            w['ventas_extra'] += row['cantidad']
+            w['monto_extra'] += float(row['total_vendido'] or 0)
+
+    for row in ventas_registrador:
+        uid = row['registrador__id']
+        if uid is None:
+            continue
+        w = _get_o_crear(uid, row['registrador__first_name'], row['registrador__last_name'],
+                         row['registrador__username'], row['registrador__rol'])
+        w['pedidos_registrados'] += row['cantidad']
+        w['monto_registrado'] += float(row['total_vendido'] or 0)
+        w['ganancia_registrada'] += float(row['total_ganancia'] or 0)
+
+    for row in entregas_camionero:
+        uid = row['entregador__id']
+        if uid is None:
+            continue
+        w = _get_o_crear(uid, row['entregador__first_name'], row['entregador__last_name'],
+                         row['entregador__username'], row['entregador__rol'])
+        w['pedidos_entregados'] += row['cantidad_entregas']
+        w['monto_entregado'] += float(row['total_entregado'] or 0)
+
+    # Calcular totales consolidados y ordenar por monto total desc
+    for w in rendimiento_trabajadores.values():
+        w['total_pedidos'] = w['pedidos_registrados'] + w['pedidos_entregados'] + w['ventas_tarreo'] + w['ventas_extra']
+        w['total_monto'] = w['monto_registrado'] + w['monto_entregado'] + w['monto_tarreo'] + w['monto_extra']
+
+    rendimiento_trabajadores_lista = sorted(
+        rendimiento_trabajadores.values(),
+        key=lambda x: x['total_monto'],
+        reverse=True
+    )
+
     # ═══════════════════════════════════════════════════════════
     # 9. ANÁLISIS TEMPORAL (ventas por día)
     # ═══════════════════════════════════════════════════════════
     
-    # tz_chile ya definida en la seccion 1
     ventas_por_dia = {}
     
     for pedido in pedidos:
-        # Convertir datetime UTC almacenado → fecha en hora Chile
         fecha_local = pedido.fecha.astimezone(tz_chile).date()
         fecha_str = fecha_local.strftime('%Y-%m-%d')
         
@@ -1269,36 +1369,36 @@ def reporte_ventas(request):
         ventas_por_dia[fecha_str]['monto'] += float(pedido.monto_total or 0)
         ventas_por_dia[fecha_str]['ganancia'] += float(pedido.ganancia_total or 0)
     
-    # Ordenar por fecha
     ventas_por_dia_lista = sorted(ventas_por_dia.values(), key=lambda x: x['fecha'])
     
     # ═══════════════════════════════════════════════════════════
-    # 10. PREPARAR DATOS PARA GRÁFICOS (USAR json.dumps PARA JSON SEGURO)
+    # 10. PREPARAR DATOS PARA GRÁFICOS
     # ═══════════════════════════════════════════════════════════
     
-    # Gráfico de barras: Balones (top 8)
     chart_balones_labels = dumps([item['balon__nombre'] for item in por_balon[:8]])
     chart_balones_unidades = dumps([int(item['unidades_vendidas']) for item in por_balon[:8]])
     chart_balones_kilos = dumps([float(item['kilos_vendidos']) for item in por_balon[:8]])
     chart_balones_monto = dumps([float(item['monto_vendido']) for item in por_balon[:8]])
     
-    # Gráfico pie: Origen
     chart_origen_labels = dumps([dict(Pedido.ORIGENES).get(item['origen'], item['origen']) for item in por_origen])
     chart_origen_data = dumps([float(item['total_vendido']) for item in por_origen])
     
-    # Gráfico pie: Método de pago
     metodos_dict = dict([("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("transferencia", "Transferencia")])
     chart_metodo_labels = dumps([metodos_dict.get(item['metodo_pago'], item['metodo_pago']) for item in por_metodo])
     chart_metodo_data = dumps([float(item['total_vendido']) for item in por_metodo])
     
-    # Gráfico de línea: Ventas diarias
     chart_dias_labels = dumps([item['fecha'].strftime('%d/%m') for item in ventas_por_dia_lista])
     chart_dias_ventas = dumps([item['monto'] for item in ventas_por_dia_lista])
     chart_dias_ganancias = dumps([item['ganancia'] for item in ventas_por_dia_lista])
     
-    # Agregar para sectores (si el template lo usa)
     chart_sectores_labels = dumps([item['sector'] for item in top_sectores])
     chart_sectores_data = dumps([float(item['total_vendido']) for item in top_sectores])
+
+    # Gráfico de barras: rendimiento de trabajadores (top 10 por monto total)
+    chart_trabajadores_labels = dumps([w['nombre'] for w in rendimiento_trabajadores_lista[:10]])
+    chart_trabajadores_registrado = dumps([w['monto_registrado'] for w in rendimiento_trabajadores_lista[:10]])
+    chart_trabajadores_entregado = dumps([w['monto_entregado'] for w in rendimiento_trabajadores_lista[:10]])
+    chart_trabajadores_tarreo = dumps([w['monto_tarreo'] + w['monto_extra'] for w in rendimiento_trabajadores_lista[:10]])
     
     # ═══════════════════════════════════════════════════════════
     # 11. LISTA DE TRABAJADORES PARA FILTRO
@@ -1326,11 +1426,12 @@ def reporte_ventas(request):
         'por_origen': por_origen,
         'por_metodo': por_metodo,
         'top_sectores': top_sectores,
-        'por_registrador': por_registrador,
-        'por_entregador': por_entregador,
         'ventas_por_dia': ventas_por_dia_lista,
+
+        # Rendimiento consolidado por trabajador (reemplaza por_registrador y por_entregador)
+        'rendimiento_trabajadores': rendimiento_trabajadores_lista,
         
-        # Datos para gráficos (ahora como JSON seguro)
+        # Datos para gráficos
         'chart_balones_labels': chart_balones_labels,
         'chart_balones_unidades': chart_balones_unidades,
         'chart_balones_kilos': chart_balones_kilos,
@@ -1348,6 +1449,11 @@ def reporte_ventas(request):
         
         'chart_sectores_labels': chart_sectores_labels,
         'chart_sectores_data': chart_sectores_data,
+
+        'chart_trabajadores_labels': chart_trabajadores_labels,
+        'chart_trabajadores_registrado': chart_trabajadores_registrado,
+        'chart_trabajadores_entregado': chart_trabajadores_entregado,
+        'chart_trabajadores_tarreo': chart_trabajadores_tarreo,
         
         # Filtros
         'rango_actual': fechas_display,
@@ -1366,8 +1472,6 @@ def reporte_ventas(request):
     }
     
     return render(request, "reporte_ventas.html", context)
-
-
 @login_required
 def detalle_pedido(request, pedido_id):
     """Vista de detalle individual de un pedido."""
