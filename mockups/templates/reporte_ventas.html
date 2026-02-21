@@ -40,7 +40,7 @@
                 <i class="bi bi-graph-up-arrow me-2"></i>Dashboard de Ventas
             </h1>
             <p class="text-muted mb-0">
-                Análisis completo de rendimiento • <strong>{{ rango_actual }}</strong>
+                Análisis completo de rendimiento<strong>{{ rango_actual }}</strong>
             </p>
         </div>
     </div>
@@ -93,11 +93,12 @@
                     <label class="form-label fw-semibold">
                         <i class="bi bi-geo-alt me-1"></i>Sector
                     </label>
-                    <input type="text" 
-                           name="sector" 
-                           class="form-control" 
-                           value="{{ filtro_sector }}" 
-                           placeholder="Buscar...">
+                    <select name="sector" class="form-select">
+                        <option value="">Todos los sectores</option>
+                        {% for val, txt in sectores_choices %}
+                        <option value="{{ val }}" {% if filtro_sector == val %}selected{% endif %}>{{ txt }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
 
                 <div class="col-lg-3 col-md-6">
@@ -353,47 +354,123 @@
             </div>
         </div>
 
-        <div class="col-lg-6">
+    </div>
+
+    <!-- RENDIMIENTO CONSOLIDADO POR TRABAJADOR -->
+    <div class="row mb-4">
+        <div class="col-12">
             <div class="card shadow-sm border-0">
-                <div class="card-header bg-light">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-semibold">
-                        <i class="bi bi-people me-2"></i>Rendimiento por Registrador
+                        <i class="bi bi-people-fill me-2"></i>Rendimiento por Trabajador
                     </h6>
+                    <small class="text-muted">Ventas propias + entregas consolidadas</small>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-hover table-sm align-middle mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Nombre</th>
-                                    <th class="text-center">Pedidos</th>
-                                    <th class="text-end">Ventas</th>
-                                    <th class="text-end">Ganancia</th>
+                                    <th class="ps-3">#</th>
+                                    <th>Trabajador</th>
+                                    <th class="text-center">Rol</th>
+                                    <th class="text-center" title="Pedidos telefónicos o de local que registró">
+                                        <span class="d-none d-md-inline">Registrados</span>
+                                        <span class="d-inline d-md-none">Reg.</span>
+                                    </th>
+                                    <th class="text-center" title="Pedidos domicilio que entregó el camionero">
+                                        <span class="d-none d-md-inline">Entregas</span>
+                                        <span class="d-inline d-md-none">Entr.</span>
+                                    </th>
+                                    <th class="text-center" title="Ventas de tarreo y ventas adicionales en entrega">
+                                        <span class="d-none d-md-inline">Tarreo / Extra</span>
+                                        <span class="d-inline d-md-none">Tarreo</span>
+                                    </th>
+                                    <th class="text-center">Total ventas</th>
+                                    <th class="text-end pe-3">Monto total</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for item in por_registrador %}
+                                {% for w in rendimiento_trabajadores %}
                                 <tr>
+                                    <td class="ps-3 text-muted">{{ forloop.counter }}</td>
                                     <td>
-                                        <strong>
-                                            {{ item.registrador__first_name }} {{ item.registrador__last_name }}
-                                        </strong>
+                                        <strong>{{ w.nombre }}</strong>
                                     </td>
                                     <td class="text-center">
-                                        <span class="badge bg-primary">{{ item.cantidad_pedidos }}</span>
+                                        {% if w.rol == 'camionero' %}
+                                            <span class="badge bg-warning text-dark">Camionero</span>
+                                        {% elif w.rol == 'telefonista' %}
+                                            <span class="badge bg-info text-dark">Telefonista</span>
+                                        {% elif w.rol == 'bodeguero' %}
+                                            <span class="badge bg-secondary">Bodeguero</span>
+                                        {% elif w.rol == 'jefe' %}
+                                            <span class="badge bg-danger">Jefe</span>
+                                        {% elif w.rol == 'admin' %}
+                                            <span class="badge bg-dark">Admin</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">{{ w.rol }}</span>
+                                        {% endif %}
                                     </td>
-                                    <td class="text-end">${{ item.total_vendido|floatformat:0|intcomma }}</td>
-                                    <td class="text-end text-success">${{ item.total_ganancia|floatformat:0|intcomma }}</td>
+                                    <td class="text-center">
+                                        {% if w.pedidos_registrados > 0 %}
+                                            <span class="badge bg-primary" title="${{ w.monto_registrado|floatformat:0 }}">
+                                                {{ w.pedidos_registrados }}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if w.pedidos_entregados > 0 %}
+                                            <span class="badge bg-success" title="${{ w.monto_entregado|floatformat:0 }}">
+                                                {{ w.pedidos_entregados }}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% with total_tarreo=w.ventas_tarreo|add:w.ventas_extra %}
+                                        {% if total_tarreo > 0 %}
+                                            <span class="badge bg-warning text-dark" title="Tarreo: {{ w.ventas_tarreo }} / Extra: {{ w.ventas_extra }}">
+                                                {{ total_tarreo }}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                        {% endwith %}
+                                    </td>
+                                    <td class="text-center fw-semibold">{{ w.total_pedidos }}</td>
+                                    <td class="text-end fw-bold pe-3">${{ w.total_monto|floatformat:0|intcomma }}</td>
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="4" class="text-center text-muted py-3">
-                                        No hay datos de registradores
+                                    <td colspan="8" class="text-center text-muted py-4">
+                                        No hay datos de trabajadores para el período seleccionado
                                     </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GRÁFICO RENDIMIENTO TRABAJADORES -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="bi bi-bar-chart-fill me-2"></i>Comparativa de ventas por trabajador
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height: 320px;">
+                        <canvas id="chartTrabajadores"></canvas>
                     </div>
                 </div>
             </div>
@@ -528,6 +605,66 @@ if (ctxBalones) {
             },
             scales: {
                 x: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toLocaleString('es-CL');
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+const ctxTrabajadores = document.getElementById('chartTrabajadores');
+if (ctxTrabajadores) {
+    new Chart(ctxTrabajadores, {
+        type: 'bar',
+        data: {
+            labels: {{ chart_trabajadores_labels|safe }},
+            datasets: [
+                {
+                    label: 'Registrado (teléfono / local)',
+                    data: {{ chart_trabajadores_registrado|safe }},
+                    backgroundColor: '#0d6efd',
+                    borderRadius: 4,
+                    stack: 'stack0'
+                },
+                {
+                    label: 'Entregado (domicilio)',
+                    data: {{ chart_trabajadores_entregado|safe }},
+                    backgroundColor: '#198754',
+                    borderRadius: 4,
+                    stack: 'stack0'
+                },
+                {
+                    label: 'Tarreo / Venta extra',
+                    data: {{ chart_trabajadores_tarreo|safe }},
+                    backgroundColor: '#ffc107',
+                    borderRadius: 4,
+                    stack: 'stack0'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': $' +
+                                   context.parsed.y.toLocaleString('es-CL');
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { stacked: true },
+                y: {
+                    stacked: true,
                     beginAtZero: true,
                     ticks: {
                         callback: function(value) {

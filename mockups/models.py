@@ -148,6 +148,23 @@ class Pedido(models.Model):
         ("venta_extra",  "Venta adicional en entrega"),
     ]
 
+    SECTORES = [
+        ("Población Dintrans",  "Población Dintrans"),
+        ("Machalí Alto",        "Machalí Alto"),
+        ("Gultro",              "Gultro"),
+        ("Villa Los Tilos",     "Villa Los Tilos"),
+        ("Centro Rancagua",     "Centro Rancagua"),
+        ("Baquedano",           "Baquedano"),
+        ("La Granja",           "La Granja"),
+        ("Rancagua Norte",      "Rancagua Norte"),
+        ("Villa Teniente",      "Villa Teniente"),
+        ("Requínoa",            "Requínoa"),
+        ("Graneros",            "Graneros"),
+        ("Mostazal",            "Mostazal"),
+        ("Codegua",             "Codegua"),
+        ("Otro",                "Otro"),
+    ]
+
     # Campos de cabecera
     sector              = models.CharField(max_length=100, blank=True, verbose_name="Sector / Población")
     direccion_entrega   = models.CharField(max_length=250, blank=True, verbose_name="Dirección o referencia")
