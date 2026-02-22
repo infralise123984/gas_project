@@ -57,6 +57,7 @@ urlpatterns = [
     # Reportes y gestión administrativa (Jefe / Admin)
     # ────────────────────────────────────────────────
     path('reporte_ventas/', views.reporte_ventas, name='reporte_ventas'),
+    path('reporte/sobres/', views.reporte_sobres, name='reporte_sobres'),
     path('precios/', views.precios_balones, name='precios_balones'),
     path('consultas_pedidos/', views.consultas_pedidos, name='consultas_pedidos'),
     path('historial-precios/', views.historial_precios, name='historial_precios'),

@@ -39,7 +39,7 @@
     </div>
 
     <h4 class="text-center mb-4 fw-bold">
-        Sobres del día <span class="text-primary">{{ fecha_seleccionada|default:hoy|date:"d 'de' F 'de' Y"|title }}</span>
+        Sobres del día <span class="text-primary">{{ fecha_seleccionada|default:hoy|date|title }}</span>
     </h4>
 
     {% if messages %}
