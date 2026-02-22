@@ -152,11 +152,25 @@
                     {% endif %}
                     <!-- Jefe / Admin -->
                     {% if user.rol in "jefe,admin" %}
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'reporte_ventas' %}active{% endif %}"
-                            href="{% url 'reporte_ventas' %}">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'reporte_ventas' or request.resolver_match.url_name == 'reporte_sobres' %}active{% endif %}"
+                           href="#" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-graph-up me-1"></i>Reportes
                         </a>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.url_name == 'reporte_ventas' %}active{% endif %}"
+                                   href="{% url 'reporte_ventas' %}">
+                                    <i class="bi bi-graph-up-arrow me-2 text-primary"></i>Ventas (app)
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.url_name == 'reporte_sobres' %}active{% endif %}"
+                                   href="{% url 'reporte_sobres' %}">
+                                    <i class="bi bi-envelope-paper-fill me-2" style="color:#6f42c1;"></i>Sobres diarios
+                                </a>
+                            </li>
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'precios_balones' %}active{% endif %}"
@@ -248,26 +262,84 @@
 
 {% if user.is_authenticated %}
 <div class="position-fixed bottom-0 end-0 p-4 d-flex flex-column gap-3 align-items-end" style="z-index: 1050;">
-    
-    <!-- Botón TARREO - solo camioneros (arriba) -->
+
+    <!-- MENÚ REPORTES — solo jefe/admin, se expande hacia arriba -->
+    {% if user.rol == "jefe" or user.rol == "admin" %}
+    <div class="d-flex flex-column gap-2 align-items-end" id="hud-reportes" style="display:none !important;">
+        <a href="{% url 'reporte_ventas' %}"
+           class="btn btn-light border shadow-sm d-flex align-items-center gap-2 px-3 py-2 text-nowrap"
+           style="border-radius: 2rem;">
+            <i class="bi bi-graph-up-arrow text-primary"></i>
+            <span class="fw-semibold small">Reporte Ventas</span>
+        </a>
+        <a href="{% url 'reporte_sobres' %}"
+           class="btn btn-light border shadow-sm d-flex align-items-center gap-2 px-3 py-2 text-nowrap"
+           style="border-radius: 2rem;">
+            <i class="bi bi-envelope-paper-fill text-purple" style="color:#6f42c1;"></i>
+            <span class="fw-semibold small">Reporte Sobres</span>
+        </a>
+    </div>
+
+    <!-- Botón disparador del menú de reportes -->
+    <button id="hud-reportes-toggle"
+            class="btn btn-warning btn-lg rounded-circle shadow-lg d-flex align-items-center justify-content-center"
+            style="width: 60px; height: 60px;"
+            title="Reportes"
+            onclick="toggleHudReportes()">
+        <i class="bi bi-bar-chart-fill fs-4" id="hud-reportes-icon"></i>
+    </button>
+    {% endif %}
+
+    <!-- Botón TARREO — solo camioneros -->
     {% if user.rol == "camionero" %}
     <a href="{% url 'tarreo_pedido' %}"
        class="btn btn-success btn-lg rounded-circle shadow-lg d-flex align-items-center justify-content-center"
-       style="width: 70px; height: 70px;"
-       data-bs-toggle="tooltip" data-bs-placement="left" title="Nueva venta tarreo">
-        Tarreo
+       style="width: 60px; height: 60px;"
+       title="Nueva venta tarreo">
+        <i class="bi bi-truck fs-4"></i>
     </a>
     {% endif %}
 
-    <!-- Botón INICIO (siempre abajo) -->
+    <!-- Botón INICIO — siempre visible -->
     <a href="{% url 'index' %}"
        class="btn btn-primary btn-lg rounded-circle shadow-lg d-flex align-items-center justify-content-center"
-       style="width: 70px; height: 70px;"
-       data-bs-toggle="tooltip" data-bs-placement="left" title="Volver al inicio">
-        <i class="bi bi-house-door-fill fs-3"></i>
+       style="width: 60px; height: 60px;"
+       title="Volver al inicio">
+        <i class="bi bi-house-door-fill fs-4"></i>
     </a>
 
 </div>
+
+<script>
+function toggleHudReportes() {
+    const menu  = document.getElementById('hud-reportes');
+    const icon  = document.getElementById('hud-reportes-icon');
+    const btn   = document.getElementById('hud-reportes-toggle');
+    const abierto = menu.style.getPropertyPriority('display') !== 'important';
+
+    if (abierto) {
+        menu.style.setProperty('display', 'none', 'important');
+        icon.className = 'bi bi-bar-chart-fill fs-4';
+        btn.classList.replace('btn-danger', 'btn-warning');
+    } else {
+        menu.style.removeProperty('display');
+        icon.className = 'bi bi-x-lg fs-4';
+        btn.classList.replace('btn-warning', 'btn-danger');
+    }
+}
+
+document.addEventListener('click', function(e) {
+    const menu   = document.getElementById('hud-reportes');
+    const toggle = document.getElementById('hud-reportes-toggle');
+    if (menu && toggle && !menu.contains(e.target) && !toggle.contains(e.target)) {
+        menu.style.setProperty('display', 'none', 'important');
+        document.getElementById('hud-reportes-icon').className = 'bi bi-bar-chart-fill fs-4';
+        if (toggle.classList.contains('btn-danger')) {
+            toggle.classList.replace('btn-danger', 'btn-warning');
+        }
+    }
+});
+</script>
 {% endif %}
     <footer class="bg-light border-top mt-auto py-4">
         <div class="container text-center text-muted small">

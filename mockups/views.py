@@ -1472,6 +1472,270 @@ def reporte_ventas(request):
     }
     
     return render(request, "reporte_ventas.html", context)
+
+@login_required
+def reporte_sobres(request):
+    """
+    Reporte mensual de sobres diarios.
+    Foco: dinero ingresado, kilos vendidos y balones por tipo.
+    Resumen global del mes + tabla detalle + totales separados por tipo (bodega/camión).
+    Solo accesible para jefe y admin.
+    """
+    resp = require_roles(request, ["jefe", "admin"], "index",
+                         "Solo jefes y administradores pueden acceder al reporte de sobres.")
+    if resp:
+        return resp
+
+    # ═══════════════════════════════════════════════════════════
+    # 1. PERÍODO — siempre un mes completo, navegable con ?mes=YYYY-MM
+    # ═══════════════════════════════════════════════════════════
+    hoy = today_chile()
+
+    mes_str = request.GET.get("mes", "").strip()
+    try:
+        if mes_str:
+            anio, mes = int(mes_str[:4]), int(mes_str[5:7])
+        else:
+            anio, mes = hoy.year, hoy.month
+    except (ValueError, IndexError):
+        anio, mes = hoy.year, hoy.month
+
+    fecha_inicio = date(anio, mes, 1)
+    fecha_fin    = date(anio, mes, monthrange(anio, mes)[1])
+    mes_display  = fecha_inicio.strftime('%B %Y').capitalize()
+    mes_actual   = f"{anio:04d}-{mes:02d}"
+
+    mes_anterior  = f"{anio-1:04d}-12" if mes == 1  else f"{anio:04d}-{mes-1:02d}"
+    mes_siguiente = f"{anio+1:04d}-01" if mes == 12 else f"{anio:04d}-{mes+1:02d}"
+    es_mes_actual = (anio == hoy.year and mes == hoy.month)
+
+    # Filtro opcional por camionero
+    filtro_trabajador = request.GET.get("trabajador", "").strip()
+
+    # ═══════════════════════════════════════════════════════════
+    # 2. QUERYSET BASE — solo sobres cerrados del mes
+    # ═══════════════════════════════════════════════════════════
+    sobres_qs = SobreDiario.objects.filter(
+        fecha_correspondiente__gte=fecha_inicio,
+        fecha_correspondiente__lte=fecha_fin,
+        cerrado=True,
+    ).select_related('trabajador').prefetch_related(
+        'lineas__balon', 'pagos', 'gastos'
+    )
+
+    if filtro_trabajador:
+        sobres_qs = sobres_qs.filter(trabajador_id=filtro_trabajador)
+
+    # Evaluar una sola vez y separar por tipo
+    lista_bodega = list(sobres_qs.filter(tipo='bodega').order_by('fecha_correspondiente'))
+    lista_camion = list(sobres_qs.filter(tipo='camion').order_by('fecha_correspondiente'))
+    lista_todos  = lista_bodega + lista_camion
+
+    # ═══════════════════════════════════════════════════════════
+    # 3. FUNCIÓN AUXILIAR — métricas de un grupo de sobres
+    # ═══════════════════════════════════════════════════════════
+    TIPO_PAGO_DISPLAY = {
+        'abono': 'Abono Caja', 'transferencia': 'Transferencia',
+        'visa': 'Visa/POS', 'cheque': 'Cheque',
+        'efectivo': 'Efectivo', 'otro': 'Otro',
+    }
+
+    def calcular_metricas(sobres_lista):
+        total_declarado = 0.0
+        total_kilos     = 0
+        total_balones   = 0
+        total_gastos    = 0.0
+        total_no_ef     = 0.0
+        pagos_por_tipo  = {}
+        balones_dict    = {}
+
+        for s in sobres_lista:
+            total_declarado += float(s.monto_declarado or 0)
+
+            for linea in s.lineas.all():
+                decl  = int(linea.cantidad_declarada or 0)
+                peso  = int(linea.balon.peso_neto_gas or 0)
+                nombre = linea.balon.nombre
+                total_balones += decl
+                total_kilos   += decl * peso
+                if nombre not in balones_dict:
+                    balones_dict[nombre] = {'nombre': nombre, 'peso': peso, 'unidades': 0, 'kilos': 0}
+                balones_dict[nombre]['unidades'] += decl
+                balones_dict[nombre]['kilos']    += decl * peso
+
+            for g in s.gastos.all():
+                total_gastos += float(g.monto or 0)
+
+            for p in s.pagos.all():
+                monto = float(p.monto or 0)
+                total_no_ef += monto
+                label = TIPO_PAGO_DISPLAY.get(p.tipo_pago, p.tipo_pago)
+                pagos_por_tipo[label] = pagos_por_tipo.get(label, 0) + monto
+
+        return {
+            'total_declarado':   total_declarado,
+            'total_kilos':       total_kilos,
+            'total_balones':     total_balones,
+            'total_gastos':      total_gastos,
+            'total_no_ef':       total_no_ef,
+            'efectivo_estimado': total_declarado - total_gastos - total_no_ef,
+            'pagos_por_tipo':    pagos_por_tipo,
+            'balones_lista':     sorted(balones_dict.values(), key=lambda x: x['peso']),
+            'count':             len(sobres_lista),
+        }
+
+    m_bodega = calcular_metricas(lista_bodega)
+    m_camion = calcular_metricas(lista_camion)
+
+    # Totales globales
+    total_declarado   = m_bodega['total_declarado'] + m_camion['total_declarado']
+    total_kilos       = m_bodega['total_kilos']     + m_camion['total_kilos']
+    total_balones     = m_bodega['total_balones']   + m_camion['total_balones']
+    total_gastos      = m_bodega['total_gastos']    + m_camion['total_gastos']
+    total_no_ef       = m_bodega['total_no_ef']     + m_camion['total_no_ef']
+    efectivo_estimado = total_declarado - total_gastos - total_no_ef
+
+    # Pagos globales consolidados
+    pagos_global = {}
+    for d in (m_bodega['pagos_por_tipo'], m_camion['pagos_por_tipo']):
+        for tipo, monto in d.items():
+            pagos_global[tipo] = pagos_global.get(tipo, 0) + monto
+
+    # Balones globales consolidados
+    balones_global_dict = {}
+    for b in m_bodega['balones_lista'] + m_camion['balones_lista']:
+        n = b['nombre']
+        if n not in balones_global_dict:
+            balones_global_dict[n] = {'nombre': n, 'peso': b['peso'], 'unidades': 0, 'kilos': 0}
+        balones_global_dict[n]['unidades'] += b['unidades']
+        balones_global_dict[n]['kilos']    += b['kilos']
+    balones_global_lista = sorted(balones_global_dict.values(), key=lambda x: x['peso'])
+
+    # ═══════════════════════════════════════════════════════════
+    # 4. EVOLUCIÓN DIARIA (para gráfico)
+    # ═══════════════════════════════════════════════════════════
+    dias_dict = {}
+    for s in lista_todos:
+        d = s.fecha_correspondiente
+        if d not in dias_dict:
+            dias_dict[d] = {'fecha': d, 'bodega': 0.0, 'camion': 0.0}
+        monto = float(s.monto_declarado or 0)
+        dias_dict[d]['bodega' if s.tipo == 'bodega' else 'camion'] += monto
+
+    dias_lista = sorted(dias_dict.values(), key=lambda x: x['fecha'])
+
+    # ═══════════════════════════════════════════════════════════
+    # 5. TABLA DETALLE — una fila por sobre
+    # ═══════════════════════════════════════════════════════════
+    sobres_tabla = []
+    for s in sorted(lista_todos, key=lambda x: (x.fecha_correspondiente, x.tipo), reverse=True):
+        kilos_s    = sum(int(l.cantidad_declarada or 0) * int(l.balon.peso_neto_gas or 0) for l in s.lineas.all())
+        balones_s  = sum(int(l.cantidad_declarada or 0) for l in s.lineas.all())
+        gastos_s   = sum(float(g.monto or 0) for g in s.gastos.all())
+        no_ef_s    = sum(float(p.monto or 0) for p in s.pagos.all())
+        declarado  = float(s.monto_declarado or 0)
+
+        nombre_trabajador = 'Bodega' if s.tipo == 'bodega' else (
+            (s.trabajador.get_full_name() or s.trabajador.username) if s.trabajador else '—'
+        )
+
+        sobres_tabla.append({
+            'id':                s.id,
+            'fecha':             s.fecha_correspondiente,
+            'tipo':              s.tipo,
+            'nombre_trabajador': nombre_trabajador,
+            'balones':           balones_s,
+            'kilos':             kilos_s,
+            'declarado':         declarado,
+            'gastos':            gastos_s,
+            'no_efectivo':       no_ef_s,
+            'efectivo_estimado': declarado - gastos_s - no_ef_s,
+            'km':                s.kilometraje_camion or 0,
+        })
+
+    # Subtotales por tipo (para filas de resumen al final de cada grupo)
+    def subtotal(tipo):
+        filas = [f for f in sobres_tabla if f['tipo'] == tipo]
+        if not filas:
+            return None
+        return {
+            'count':             len(filas),
+            'balones':           sum(f['balones']           for f in filas),
+            'kilos':             sum(f['kilos']             for f in filas),
+            'declarado':         sum(f['declarado']         for f in filas),
+            'gastos':            sum(f['gastos']            for f in filas),
+            'no_efectivo':       sum(f['no_efectivo']       for f in filas),
+            'efectivo_estimado': sum(f['efectivo_estimado'] for f in filas),
+            'km':                sum(f['km']                for f in filas),
+        }
+
+    sub_bodega = subtotal('bodega')
+    sub_camion = subtotal('camion')
+
+    # ═══════════════════════════════════════════════════════════
+    # 6. DATOS PARA GRÁFICOS
+    # ═══════════════════════════════════════════════════════════
+    chart_dias_labels    = dumps([d['fecha'].strftime('%d/%m')  for d in dias_lista])
+    chart_dias_bodega    = dumps([d['bodega']                   for d in dias_lista])
+    chart_dias_camion    = dumps([d['camion']                   for d in dias_lista])
+
+    chart_balon_labels   = dumps([b['nombre']   for b in balones_global_lista])
+    chart_balon_unidades = dumps([b['unidades'] for b in balones_global_lista])
+    chart_balon_kilos    = dumps([b['kilos']    for b in balones_global_lista])
+
+    chart_pagos_labels   = dumps(list(pagos_global.keys()))
+    chart_pagos_data     = dumps(list(pagos_global.values()))
+
+    # ═══════════════════════════════════════════════════════════
+    # 7. CONTEXT
+    # ═══════════════════════════════════════════════════════════
+    camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+
+    context = {
+        # Navegación
+        'mes_display':    mes_display,
+        'mes_actual':     mes_actual,
+        'mes_anterior':   mes_anterior,
+        'mes_siguiente':  mes_siguiente,
+        'es_mes_actual':  es_mes_actual,
+
+        # Filtros
+        'filtro_trabajador': filtro_trabajador,
+        'camioneros':        camioneros,
+
+        # Métricas globales
+        'total_declarado':    total_declarado,
+        'total_kilos':        total_kilos,
+        'total_balones':      total_balones,
+        'total_gastos':       total_gastos,
+        'total_no_ef':        total_no_ef,
+        'efectivo_estimado':  efectivo_estimado,
+        'pagos_global':       pagos_global,
+        'balones_global':     balones_global_lista,
+
+        # Métricas por tipo
+        'm_bodega': m_bodega,
+        'm_camion': m_camion,
+
+        # Tabla detalle
+        'sobres_tabla': sobres_tabla,
+        'sub_bodega':   sub_bodega,
+        'sub_camion':   sub_camion,
+
+        # Gráficos
+        'chart_dias_labels':    chart_dias_labels,
+        'chart_dias_bodega':    chart_dias_bodega,
+        'chart_dias_camion':    chart_dias_camion,
+        'chart_balon_labels':   chart_balon_labels,
+        'chart_balon_unidades': chart_balon_unidades,
+        'chart_balon_kilos':    chart_balon_kilos,
+        'chart_pagos_labels':   chart_pagos_labels,
+        'chart_pagos_data':     chart_pagos_data,
+    }
+
+    return render(request, "reporte_sobres.html", context)
+
+
 @login_required
 def detalle_pedido(request, pedido_id):
     """Vista de detalle individual de un pedido."""
@@ -2131,3 +2395,5 @@ def exportar_sobre_excel(request, sobre_id):
 
     wb.save(response)
     return response
+
+
