@@ -1767,39 +1767,49 @@ def lista_sobres_diarios(request):
 @login_required
 def editar_sobre_diario(request):
     """
-    Vista para editar/crear un sobre diario.
-    CORREGIDO: Guarda el sobre ANTES de validar formsets para evitar el bug.
+    Vista para editar un sobre diario.
+    
+    IMPORTANTE: La URL debe ser:
+    - /sobres/editar/?sobre_id=123  (FORMA CORRECTA - carga sobre específico)
+    
+    ANTIGUAS (deprecadas pero soportadas por compatibilidad):
+    - /sobres/editar/?bodega=1&fecha=...  (crea/busca sobre y redirige con sobre_id)
+    - /sobres/editar/?camionero=5&fecha=...  (crea/busca sobre y redirige con sobre_id)
     """
     usuario = request.user
-
-    # Determinar si es bodega o camionero específico
-    es_bodega = request.GET.get('bodega') == '1'
-    camionero_id = request.GET.get('camionero')
-    sobre_id = request.GET.get('sobre_id')  # Para editar un sobre existente específico
-
-    if es_bodega:
-        tipo_sobre = 'bodega'
-        trabajador = None
-        titulo = "Sobre Diario - Bodega"
-    elif camionero_id:
-        tipo_sobre = 'camion'
-        trabajador = get_object_or_404(Usuario, id=camionero_id, rol='camionero')
-        titulo = f"Sobre Diario - {trabajador.get_full_name() or trabajador.username}"
-    else:
-        messages.error(request, "Debe seleccionar bodega o un camionero.")
-        return redirect('sobres_lista')
-
-    # Si viene sobre_id, cargar ese sobre específico
+    sobre_id = request.GET.get('sobre_id')
+    
+    # CASO 1: Si viene sobre_id, cargar directamente ese sobre
     if sobre_id:
         sobre = get_object_or_404(SobreDiario, id=sobre_id)
+        if sobre.tipo == 'bodega':
+            titulo = "Sobre Diario - Bodega"
+        else:
+            titulo = f"Sobre Diario - {sobre.trabajador.get_full_name() or sobre.trabajador.username}"
+        tipo_sobre = sobre.tipo
+        trabajador = sobre.trabajador
         creado = False
+    
+    # CASO 2: Si no viene sobre_id pero viene bodega/camionero (legacy)
+    # → Buscar/crear el sobre del día y redirigir con sobre_id
     else:
+        es_bodega = request.GET.get('bodega') == '1'
+        camionero_id = request.GET.get('camionero')
+        
+        if es_bodega:
+            tipo_sobre = 'bodega'
+            trabajador = None
+            titulo = "Sobre Diario - Bodega"
+        elif camionero_id:
+            tipo_sobre = 'camion'
+            trabajador = get_object_or_404(Usuario, id=camionero_id, rol='camionero')
+            titulo = f"Sobre Diario - {trabajador.get_full_name() or trabajador.username}"
+        else:
+            messages.error(request, "Parámetros inválidos. Use: ?sobre_id=123")
+            return redirect('sobres_lista')
+        
         # Buscar el sobre del día o crear uno nuevo
         hoy = today_chile()
-        
-        # Buscar si ya existe un sobre HOY con estos parámetros
-        # IMPORTANTE: Usar fecha_correspondiente (DateField) NO fecha__date (DateTimeField)
-        # ya que fecha_correspondiente es la fecha lógica del sobre
         sobre = SobreDiario.objects.filter(
             fecha_correspondiente=hoy,
             tipo=tipo_sobre,
@@ -1811,13 +1821,16 @@ def editar_sobre_diario(request):
         else:
             # No existe, crear uno nuevo
             sobre = SobreDiario.objects.create(
-                fecha=now_chile(),  # Usa la función que convierte a zona Chile
+                fecha=now_chile(),
                 tipo=tipo_sobre,
                 trabajador=trabajador,
                 creado_por=usuario,
                 fecha_correspondiente=hoy,
             )
             creado = True
+        
+        # REDIRECT CON sobre_id (forma correcta)
+        return redirect(f"{reverse('sobres_editar')}?sobre_id={sobre.id}")
 
     # ═══════════════════════════════════════════════════════════
     # Crear o actualizar líneas de balones
@@ -1956,11 +1969,8 @@ def editar_sobre_diario(request):
                     return redirect('sobres_lista')
             else:
                 messages.success(request, "Cambios guardados correctamente (borrador).")
-                # Redirigir conservando parámetros
-                if es_bodega:
-                    return redirect(f"{reverse('sobres_editar')}?bodega=1&sobre_id={sobre.id}")
-                else:
-                    return redirect(f"{reverse('sobres_editar')}?camionero={camionero_id}&sobre_id={sobre.id}")
+                # Redirigir al mismo sobre (ya tenemos sobre_id)
+                return redirect(f"{reverse('sobres_editar')}?sobre_id={sobre.id}")
 
         else:
             messages.error(request, "Hay errores en el formulario. Revise los campos marcados.")
@@ -1973,6 +1983,9 @@ def editar_sobre_diario(request):
     # (ej: después de las 20:00 = 8 PM)
     hora_recomendada_cierre = 20  # 8 PM
     mostrar_alerta_cierre = hora_actual >= hora_recomendada_cierre and not sobre.cerrado
+    
+    # Determinar si es bodega (para el template)
+    es_bodega = sobre.tipo == 'bodega'
     
     context = {
         'sobre': sobre,
@@ -2037,14 +2050,10 @@ def crear_sobre_nuevo(request):
             trabajador=trabajador,
             creado_por=request.user,
         )
-
         messages.success(request, f"Sobre creado para la fecha {fecha_correspondiente.strftime('%d/%m/%Y')}.")
         
         # Redirigir a editar ese sobre
-        if es_bodega:
-            return redirect(f"{reverse('sobres_editar')}?bodega=1&sobre_id={sobre.id}")
-        else:
-            return redirect(f"{reverse('sobres_editar')}?camionero={camionero_id}&sobre_id={sobre.id}")
+        return redirect(f"{reverse('sobres_editar')}?sobre_id={sobre.id}")
 
     # Formulario
     hoy = today_chile()
@@ -2093,7 +2102,14 @@ def crear_sobre_post_cierre(request, sobre_id):
             tipo=sobre_anterior.tipo,
             trabajador=sobre_anterior.trabajador,
             creado_por=request.user,
+            cerrado=False,  # IMPORTANTE: Asegurar que el nuevo sobre está ABIERTO
         )
+        
+        # SAFEGUARD: Asegurar que el nuevo sobre está COMPLETAMENTE VACÍO
+        # (aunque no debería tener nada, ya que se acaba de crear)
+        nuevo_sobre.lineas.all().delete()
+        nuevo_sobre.pagos.all().delete()
+        nuevo_sobre.gastos.all().delete()
         
         messages.success(
             request, 
@@ -2101,12 +2117,9 @@ def crear_sobre_post_cierre(request, sobre_id):
             f"El anterior estaba cerrado el {sobre_anterior.declarado_el.strftime('%d/%m/%Y %H:%M')}."
         )
         
-        # Redirigir a editar el nuevo sobre con los mismos parámetros que el anterior
-        if sobre_anterior.tipo == 'bodega':
-            return redirect(f"{reverse('sobres_editar')}?bodega=1&sobre_id={nuevo_sobre.id}")
-        else:
-            camionero_id = sobre_anterior.trabajador.id
-            return redirect(f"{reverse('sobres_editar')}?camionero={camionero_id}&sobre_id={nuevo_sobre.id}")
+        # Redirigir a editar el nuevo sobre
+        # IMPORTANTE: Solo usar sobre_id para evitar que se cargue otro sobre por búsqueda de fecha
+        return redirect(f"{reverse('sobres_editar')}?sobre_id={nuevo_sobre.id}")
     
     # Si no es POST, redirigir al sobre anterior
     return redirect(f"{reverse('sobres_editar')}?sobre_id={sobre_anterior.id}")

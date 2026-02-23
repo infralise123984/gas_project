@@ -80,7 +80,7 @@
                         {% if sobre.declarado_el %}<i class="bi bi-clock ms-2 me-1"></i>{{ sobre.declarado_el|date:"H:i" }}{% endif %}
                     </small>
                 </div>
-                <a href="{% url 'sobres_editar' %}?bodega=1&fecha={{ sobre.fecha_correspondiente|date:'Y-m-d' }}"
+                <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}"
                    class="btn btn-primary btn-sm px-4">
                     <i class="bi bi-pencil-square me-2"></i>Ver / Editar
                 </a>
@@ -114,7 +114,7 @@
                         <span class="badge bg-warning text-dark ms-2">ABIERTO</span>
                         {% endif %}
                     </div>
-                    <a href="{% url 'sobres_editar' %}?camionero={{ camionero.id }}&fecha={{ sobre.fecha_correspondiente|date:'Y-m-d' }}"
+                    <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}"
                        class="btn btn-primary btn-sm px-4">
                         <i class="bi bi-pencil-square me-2"></i>Ver / Editar
                     </a>
