@@ -97,40 +97,40 @@
                     <!-- Telefonista / Bodeguero -->
                     {% if user.rol in "telefonista" %}
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'transaccional_pedido' %}active{% endif %}"
-                            href="{% url 'transaccional_pedido' %}">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'pedidos_crear' %}active{% endif %}"
+                            href="{% url 'pedidos_crear' %}">
                             <i class="bi bi-plus-circle-fill me-1"></i>Nuevo Pedido
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'mis_pedidos_hoy' %}active{% endif %}"
-                            href="{% url 'mis_pedidos_hoy' %}">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'pedidos_mios' %}active{% endif %}"
+                            href="{% url 'pedidos_mios' %}">
                             <i class="bi bi-clock-history me-1"></i>Mis Pedidos Hoy
                         </a>
                     </li>
                     {% endif %}
                     {% if user.rol in "bodeguero" %}
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'transaccional_pedido' %}active{% endif %}"
-                            href="{% url 'transaccional_pedido' %}">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'pedidos_crear' %}active{% endif %}"
+                            href="{% url 'pedidos_crear' %}">
                             <i class="bi bi-plus-circle-fill me-1"></i>Nuevo Pedido
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'mis_pedidos_hoy' %}active{% endif %}"
-                            href="{% url 'mis_pedidos_hoy' %}">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'pedidos_mios' %}active{% endif %}"
+                            href="{% url 'pedidos_mios' %}">
                             <i class="bi bi-clock-history me-1"></i>Mis Pedidos Hoy
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'sobre' %}active{% endif %}"
-                            href="{% url 'lista_sobres_diarios' %}">
+                            href="{% url 'sobres_lista' %}">
                             <i class="bi bi-envelope-plus-fill me-1"></i>Sobres
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'precios_balones' %}active{% endif %}"
-                            href="{% url 'precios_balones' %}">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'precios_lista' %}active{% endif %}"
+                            href="{% url 'precios_lista' %}">
                             <i class="bi bi-currency-dollar me-1"></i>Precios
                         </a>
                     </li>
@@ -138,14 +138,14 @@
                     <!-- Camionero -->
                     {% if user.rol == "camionero" %}
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'camionero_entregas' %}active{% endif %}"
-                            href="{% url 'camionero_entregas' %}">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'entregas_lista' %}active{% endif %}"
+                            href="{% url 'entregas_lista' %}">
                             <i class="bi bi-truck me-1"></i>Entregas Pendientes
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'mis_entregas' %}active{% endif %}"
-                            href="{% url 'mis_entregas' %}">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'entregas_mias' %}active{% endif %}"
+                            href="{% url 'entregas_mias' %}">
                             <i class="bi bi-check-circle me-1"></i>Mis Entregas
                         </a>
                     </li>
@@ -153,34 +153,34 @@
                     <!-- Jefe / Admin -->
                     {% if user.rol in "jefe,admin" %}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'reporte_ventas' or request.resolver_match.url_name == 'reporte_sobres' %}active{% endif %}"
+                        <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'reportes_ventas' or request.resolver_match.url_name == 'reportes_sobres' %}active{% endif %}"
                            href="#" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-graph-up me-1"></i>Reportes
                         </a>
                         <ul class="dropdown-menu">
                             <li>
-                                <a class="dropdown-item {% if request.resolver_match.url_name == 'reporte_ventas' %}active{% endif %}"
-                                   href="{% url 'reporte_ventas' %}">
+                                <a class="dropdown-item {% if request.resolver_match.url_name == 'reportes_ventas' %}active{% endif %}"
+                                   href="{% url 'reportes_ventas' %}">
                                     <i class="bi bi-graph-up-arrow me-2 text-primary"></i>Ventas (app)
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item {% if request.resolver_match.url_name == 'reporte_sobres' %}active{% endif %}"
-                                   href="{% url 'reporte_sobres' %}">
+                                <a class="dropdown-item {% if request.resolver_match.url_name == 'reportes_sobres' %}active{% endif %}"
+                                   href="{% url 'reportes_sobres' %}">
                                     <i class="bi bi-envelope-paper-fill me-2" style="color:#6f42c1;"></i>Sobres diarios
                                 </a>
                             </li>
                         </ul>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'precios_balones' %}active{% endif %}"
-                            href="{% url 'precios_balones' %}">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'precios_lista' %}active{% endif %}"
+                            href="{% url 'precios_lista' %}">
                             <i class="bi bi-currency-dollar me-1"></i>Precios
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'consultas_pedidos' %}active{% endif %}"
-                            href="{% url 'consultas_pedidos' %}">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'pedidos_consulta' %}active{% endif %}"
+                            href="{% url 'pedidos_consulta' %}">
                             <i class="bi bi-search me-1"></i>Consultar Pedidos
                         </a>
                     </li>
@@ -188,7 +188,7 @@
                     <!-- Admin Django -->
                     {% if user.is_superuser %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'crear_usuario' %}">
+                        <a class="nav-link" href="{% url 'auth_crear_usuario' %}">
                             <i class="bi bi-person-plus"></i>Crear Usuario
                         </a>
                     </li>
@@ -213,14 +213,14 @@
                             </span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item text-danger" href="{% url 'logout' %}">
+                            <li><a class="dropdown-item text-danger" href="{% url 'auth_logout' %}">
                                     <i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión
                                 </a></li>
                         </ul>
                     </li>
                     {% else %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'login' %}">
+                        <a class="nav-link" href="{% url 'auth_login' %}">
                             <i class="bi bi-box-arrow-in-right me-1"></i>Iniciar sesión
                         </a>
                     </li>
@@ -266,13 +266,13 @@
     <!-- MENÚ REPORTES — solo jefe/admin, se expande hacia arriba -->
     {% if user.rol == "jefe" or user.rol == "admin" %}
     <div class="d-flex flex-column gap-2 align-items-end" id="hud-reportes" style="display:none !important;">
-        <a href="{% url 'reporte_ventas' %}"
+        <a href="{% url 'reportes_ventas' %}"
            class="btn btn-light border shadow-sm d-flex align-items-center gap-2 px-3 py-2 text-nowrap"
            style="border-radius: 2rem;">
             <i class="bi bi-graph-up-arrow text-primary"></i>
             <span class="fw-semibold small">Reporte Ventas</span>
         </a>
-        <a href="{% url 'reporte_sobres' %}"
+        <a href="{% url 'reportes_sobres' %}"
            class="btn btn-light border shadow-sm d-flex align-items-center gap-2 px-3 py-2 text-nowrap"
            style="border-radius: 2rem;">
             <i class="bi bi-envelope-paper-fill text-purple" style="color:#6f42c1;"></i>
@@ -292,7 +292,7 @@
 
     <!-- Botón TARREO — solo camioneros -->
     {% if user.rol == "camionero" %}
-    <a href="{% url 'tarreo_pedido' %}"
+    <a href="{% url 'entregas_tarreo' %}"
        class="btn btn-success btn-lg rounded-circle shadow-lg d-flex align-items-center justify-content-center"
        style="width: 60px; height: 60px;"
        title="Nueva venta tarreo">

@@ -183,7 +183,7 @@ def logout_view(request):
     """Cierra la sesión del usuario."""
     logout(request)
     messages.success(request, "Has cerrado sesión correctamente")
-    return redirect("login")
+    return redirect("auth_login")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -232,7 +232,7 @@ def crear_usuario(request):
             user.is_active = True
             user.save()
             messages.success(request, f"Usuario '{user.get_full_name() or user.username}' creado correctamente con rol {user.get_rol_display()}.")
-            return redirect("reporte_ventas")
+            return redirect("reportes_ventas")
 
     return render(request, "crear_usuario.html", {"roles_choices": roles_choices})
 
@@ -314,7 +314,7 @@ def precios_balones(request):
         else:
             messages.info(request, "No se detectaron cambios válidos.")
 
-        return redirect("precios_balones")
+        return redirect("precios_lista")
 
     # GET → mostrar formulario
     return render(request, "precios_balones.html", {"balones": balones})
@@ -489,18 +489,18 @@ def editar_pedido(request, pedido_id):
     if user_rol == 'telefonista':
         if pedido.registrador != request.user:
             messages.error(request, "Como telefonista solo puedes editar los pedidos que tú registraste.")
-            return redirect('mis_pedidos_hoy')
+            return redirect('pedidos_mios')
 
     elif user_rol == 'camionero':
         if pedido.entregador != request.user or pedido.estado != 'en_ruta':
             messages.error(request, "Como camionero solo puedes editar pedidos que estén en tu ruta actual (estado 'en ruta').")
-            return redirect('camionero_entregas')
+            return redirect('entregas_lista')
 
     elif user_rol == 'bodeguero':
         # Puede editar propios o de telefonistas
         if pedido.registrador != request.user and pedido.registrador.rol != 'telefonista':
             messages.error(request, "Como bodeguero solo puedes editar tus pedidos o los registrados por telefonistas.")
-            return redirect('mis_pedidos_hoy')
+            return redirect('pedidos_mios')
 
     # Jefe y admin pueden editar cualquier pedido → no hay restricción adicional aquí
 
@@ -512,7 +512,7 @@ def editar_pedido(request, pedido_id):
             messages.error(request, "No se puede editar un pedido que fue cancelado.")
         else:
             messages.error(request, f"No se puede editar un pedido en estado '{pedido.get_estado_display()}'.")
-        return redirect('detalle_pedido', pedido_id=pedido.id)
+        return redirect('pedidos_detalle', pedido_id=pedido.id)
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # Procesamiento del formulario
@@ -579,11 +579,11 @@ def editar_pedido(request, pedido_id):
             # Recalcular totales
             pedido.calcular_totales()
             if request.user.rol in ['telefonista', 'bodeguero']:
-                return redirect('mis_pedidos_hoy') 
+                return redirect('pedidos_mios') 
             elif request.user.rol == 'camionero':
-                return redirect('mis_entregas')  
+                return redirect('entregas_mias')  
             else:
-                return redirect('reporte_ventas') 
+                return redirect('reportes_ventas') 
 
         else:
             messages.error(request, "Por favor corrige los errores en el formulario.")
@@ -775,7 +775,7 @@ def camionero_tomar_pedido(request, pedido_id):
     except Pedido.DoesNotExist:
         messages.error(request, "El pedido ya no está disponible o ya fue tomado.")
 
-    return redirect("camionero_entregas")
+    return redirect("entregas_lista")
 
 
 @login_required
@@ -794,7 +794,7 @@ def camionero_marcar_entregado(request, pedido_id):
         )
     except Pedido.DoesNotExist:
         messages.error(request, "El pedido no existe, no está en ruta o no te pertenece.")
-        return redirect("camionero_entregas")
+        return redirect("entregas_lista")
 
     estado_anterior = pedido.estado
     pedido.estado = "entregado"
@@ -808,7 +808,7 @@ def camionero_marcar_entregado(request, pedido_id):
         fecha_cambio=timezone.now(),
     )
     messages.success(request, f"¡Pedido #{pedido.id} marcado como ENTREGADO exitosamente!")
-    return redirect("camionero_entregas")
+    return redirect("entregas_lista")
 
 
 @login_required
@@ -840,7 +840,7 @@ def camionero_cancelar_entrega(request, pedido_id):
     except Pedido.DoesNotExist:
         messages.error(request, "El pedido no está en ruta o no te pertenece.")
 
-    return redirect("camionero_entregas")
+    return redirect("entregas_lista")
 
 
 @login_required
@@ -919,7 +919,7 @@ def tarreo_pedido(request):
         )
 
         messages.success(request, f"¡Venta tarreo #{pedido.id} guardada correctamente con {detalles_guardados} producto(s)! Total: ${total_monto:,}")
-        return redirect('mis_entregas')  # o 'camionero_entregas'
+        return redirect('entregas_mias')  # o 'entregas_lista'
 
     # GET
     return render(request, 'tarreo.html', {
@@ -1113,17 +1113,44 @@ def reporte_ventas(request):
     # ═══════════════════════════════════════════════════════════
     tz_chile = ZoneInfo('America/Santiago')
 
-    fechas_str = request.GET.get("fechas", "").strip()
-    fecha_inicio, fecha_fin, fechas_display, desde_str, hasta_str = parse_fecha_rango(fechas_str)
-
-    # Si no hay rango, mostrar mes actual
-    if not fecha_inicio or not fecha_fin:
-        hoy = today_chile()
-        fecha_inicio = date(hoy.year, hoy.month, 1)
-        fecha_fin = date(hoy.year, hoy.month, monthrange(hoy.year, hoy.month)[1])
-        fechas_display = hoy.strftime('%B %Y')
-        desde_str = fecha_inicio.strftime("%Y-%m-%d")
-        hasta_str = fecha_fin.strftime("%Y-%m-%d")
+    # Navegación por mes
+    hoy = today_chile()
+    mes_param = request.GET.get("mes", "").strip()
+    
+    try:
+        if mes_param:
+            mes_parts = mes_param.split("-")
+            año = int(mes_parts[0])
+            mes = int(mes_parts[1])
+        else:
+            año = hoy.year
+            mes = hoy.month
+    except (ValueError, IndexError):
+        año = hoy.year
+        mes = hoy.month
+    
+    # Calcular fechas del mes
+    fecha_inicio = date(año, mes, 1)
+    fecha_fin = date(año, mes, monthrange(año, mes)[1])
+    mes_display = fecha_inicio.strftime('%B %Y').capitalize()
+    
+    # Mes anterior y siguiente
+    if mes == 1:
+        mes_anterior = date(año - 1, 12, 1).strftime('%Y-%m')
+    else:
+        mes_anterior = date(año, mes - 1, 1).strftime('%Y-%m')
+    
+    if mes == 12:
+        mes_siguiente = date(año + 1, 1, 1).strftime('%Y-%m')
+    else:
+        mes_siguiente = date(año, mes + 1, 1).strftime('%Y-%m')
+    
+    mes_actual = date(año, mes, 1).strftime('%Y-%m')
+    es_mes_actual = (año == hoy.year and mes == hoy.month)
+    
+    # Base para comparar fechas
+    desde_str = fecha_inicio.strftime("%Y-%m-%d")
+    hasta_str = fecha_fin.strftime("%Y-%m-%d")
 
     dt_inicio = datetime(fecha_inicio.year, fecha_inicio.month, fecha_inicio.day,
                          0, 0, 0, tzinfo=tz_chile)
@@ -1135,6 +1162,7 @@ def reporte_ventas(request):
     filtro_metodo = request.GET.get("metodo_pago", "")
     filtro_sector = request.GET.get("sector", "").strip()
     filtro_registrador = request.GET.get("registrador", "")
+    filtro_trabajador = request.GET.get("trabajador", "")  # Para filtrar por camionero
     
     # ═══════════════════════════════════════════════════════════
     # 2. CONSULTA BASE
@@ -1153,6 +1181,9 @@ def reporte_ventas(request):
         pedidos = pedidos.filter(sector=filtro_sector)
     if filtro_registrador:
         pedidos = pedidos.filter(registrador_id=filtro_registrador)
+    if filtro_trabajador:
+        # Filtrar por camionero/entregador
+        pedidos = pedidos.filter(entregador_id=filtro_trabajador)
     
     # ═══════════════════════════════════════════════════════════
     # 3. MÉTRICAS PRINCIPALES
@@ -1163,6 +1194,13 @@ def reporte_ventas(request):
     total_pedidos = pedidos.count()
     promedio_pedido = total_ventas / total_pedidos if total_pedidos > 0 else 0
     margen_promedio = (total_ganancias / total_ventas * 100) if total_ventas > 0 else 0
+    
+    # Calcular total de kilos vendidos
+    total_kilos = DetallePedido.objects.filter(
+        pedido__in=pedidos
+    ).aggregate(
+        total=Sum(F('cantidad') * F('balon__peso_neto_gas'))
+    )['total'] or 0
     
     # ═══════════════════════════════════════════════════════════
     # 4. ANÁLISIS POR BALÓN
@@ -1211,139 +1249,73 @@ def reporte_ventas(request):
     ).order_by('-total_vendido')[:10]
     
     # ═══════════════════════════════════════════════════════════
-    # 8. RENDIMIENTO CONSOLIDADO POR TRABAJADOR
+    # 8. RENDIMIENTO CONSOLIDADO POR TRABAJADOR (EN KILOS)
     #
-    # Lógica:
-    #  - Camioneros propietarios de venta: pedidos donde registrador=usuario
-    #    y origen IN ('tarreo', 'venta_extra') → son ventas propias del camionero
-    #  - Camioneros como entregadores: pedidos donde entregador=usuario
-    #    y origen IN ('telefono', 'local') → pedidos telefónicos que ellos entregaron
-    #  - Telefonistas/otros registradores: pedidos donde registrador=usuario
-    #    y origen IN ('telefono', 'local') → pedidos que ellos tomaron
-    #
-    # Se construye un dict consolidado por usuario_id para luego presentarlo.
+    # Calcula kilos vendidos por cada trabajador, desglosado por tipo:
+    #  - Kilos registrados (telefonista/bodeguero)
+    #  - Kilos entregados (camionero en domicilios)
+    #  - Kilos tarreo/extra (camionero en tarreo)
     # ═══════════════════════════════════════════════════════════
-
-    # -- 8a. Ventas propias de camioneros (tarreo / venta_extra que ellos registraron)
-    ventas_propias_camionero = (
-        pedidos
-        .filter(origen__in=['tarreo', 'venta_extra'])
-        .values(
-            'registrador__id',
-            'registrador__first_name',
-            'registrador__last_name',
-            'registrador__username',
-            'registrador__rol',
-            'origen',
-        )
-        .annotate(
-            cantidad=Count('id'),
-            total_vendido=Sum('monto_total'),
-            total_ganancia=Sum('ganancia_total'),
-        )
-    )
-
-    # -- 8b. Pedidos entregados por camionero (origen teléfono/local, registrados por otro)
-    entregas_camionero = (
-        pedidos
-        .filter(entregador__isnull=False)
-        .exclude(origen__in=['tarreo', 'venta_extra'])
-        .values(
-            'entregador__id',
-            'entregador__first_name',
-            'entregador__last_name',
-            'entregador__username',
-            'entregador__rol',
-        )
-        .annotate(
-            cantidad_entregas=Count('id'),
-            total_entregado=Sum('monto_total'),
-        )
-    )
-
-    # -- 8c. Pedidos registrados por telefonistas/otros (origen teléfono/local)
-    ventas_registrador = (
-        pedidos
-        .filter(origen__in=['telefono', 'local'])
-        .values(
-            'registrador__id',
-            'registrador__first_name',
-            'registrador__last_name',
-            'registrador__username',
-            'registrador__rol',
-        )
-        .annotate(
-            cantidad=Count('id'),
-            total_vendido=Sum('monto_total'),
-            total_ganancia=Sum('ganancia_total'),
-        )
-    )
-
-    # -- Consolidar en un dict { usuario_id: { ...stats } }
+    
     rendimiento_trabajadores = {}
-
-    def _get_o_crear(uid, fname, lname, uname, rol):
-        if uid not in rendimiento_trabajadores:
-            nombre = f"{fname} {lname}".strip() or uname
-            rendimiento_trabajadores[uid] = {
-                'id': uid,
-                'nombre': nombre,
-                'rol': rol,
-                # ventas propias (tarreo / venta_extra)
-                'ventas_tarreo': 0,
-                'monto_tarreo': 0,
-                'ventas_extra': 0,
-                'monto_extra': 0,
-                # pedidos telefónicos/local que registró
-                'pedidos_registrados': 0,
-                'monto_registrado': 0,
-                'ganancia_registrada': 0,
-                # pedidos telefónicos/local que entregó
-                'pedidos_entregados': 0,
-                'monto_entregado': 0,
-            }
-        return rendimiento_trabajadores[uid]
-
-    for row in ventas_propias_camionero:
-        uid = row['registrador__id']
-        if uid is None:
-            continue
-        w = _get_o_crear(uid, row['registrador__first_name'], row['registrador__last_name'],
-                         row['registrador__username'], row['registrador__rol'])
-        if row['origen'] == 'tarreo':
-            w['ventas_tarreo'] += row['cantidad']
-            w['monto_tarreo'] += float(row['total_vendido'] or 0)
-        elif row['origen'] == 'venta_extra':
-            w['ventas_extra'] += row['cantidad']
-            w['monto_extra'] += float(row['total_vendido'] or 0)
-
-    for row in ventas_registrador:
-        uid = row['registrador__id']
-        if uid is None:
-            continue
-        w = _get_o_crear(uid, row['registrador__first_name'], row['registrador__last_name'],
-                         row['registrador__username'], row['registrador__rol'])
-        w['pedidos_registrados'] += row['cantidad']
-        w['monto_registrado'] += float(row['total_vendido'] or 0)
-        w['ganancia_registrada'] += float(row['total_ganancia'] or 0)
-
-    for row in entregas_camionero:
-        uid = row['entregador__id']
-        if uid is None:
-            continue
-        w = _get_o_crear(uid, row['entregador__first_name'], row['entregador__last_name'],
-                         row['entregador__username'], row['entregador__rol'])
-        w['pedidos_entregados'] += row['cantidad_entregas']
-        w['monto_entregado'] += float(row['total_entregado'] or 0)
-
-    # Calcular totales consolidados y ordenar por monto total desc
-    for w in rendimiento_trabajadores.values():
-        w['total_pedidos'] = w['pedidos_registrados'] + w['pedidos_entregados'] + w['ventas_tarreo'] + w['ventas_extra']
-        w['total_monto'] = w['monto_registrado'] + w['monto_entregado'] + w['monto_tarreo'] + w['monto_extra']
-
+    
+    for pedido in pedidos:
+        # Calcular kilos del pedido
+        kilos_pedido = sum(
+            float(det.cantidad) * float(det.balon.peso_neto_gas or 0)
+            for det in pedido.detalles.all()
+        )
+        
+        # --- Opción 1: Registrador (telefonista/bodeguero) ---
+        if pedido.registrador_id:
+            registrador = pedido.registrador
+            if registrador.id not in rendimiento_trabajadores:
+                rendimiento_trabajadores[registrador.id] = {
+                    'id': registrador.id,
+                    'nombre_trabajador': registrador.get_full_name() or registrador.username,
+                    'rol': registrador.rol,
+                    'kilos_registrados': 0,
+                    'kilos_entregados': 0,
+                    'kilos_tarreo': 0,
+                    'total_pedidos': 0,
+                    'total_kilos': 0,
+                }
+            
+            # Distinto destino según origen
+            if pedido.origen in ['telefono', 'local']:
+                rendimiento_trabajadores[registrador.id]['kilos_registrados'] += kilos_pedido
+            elif pedido.origen in ['tarreo', 'venta_extra']:
+                # Si es tarreo/extra, el registrador es el dueño de la venta
+                rendimiento_trabajadores[registrador.id]['kilos_tarreo'] += kilos_pedido
+        
+        # --- Opción 2: Entregador (camionero) ---
+        if pedido.entregador_id and pedido.origen not in ['tarreo', 'venta_extra']:
+            entregador = pedido.entregador
+            if entregador.id not in rendimiento_trabajadores:
+                rendimiento_trabajadores[entregador.id] = {
+                    'id': entregador.id,
+                    'nombre_trabajador': entregador.get_full_name() or entregador.username,
+                    'rol': entregador.rol,
+                    'kilos_registrados': 0,
+                    'kilos_entregados': 0,
+                    'kilos_tarreo': 0,
+                    'total_pedidos': 0,
+                    'total_kilos': 0,
+                }
+            
+            rendimiento_trabajadores[entregador.id]['kilos_entregados'] += kilos_pedido
+    
+    # Consolidar y contar pedidos
+    for uid, w in rendimiento_trabajadores.items():
+        # Contar cuántos pedidos participó
+        pedidos_registrador = pedidos.filter(registrador_id=uid).count() if uid else 0
+        pedidos_entregador = pedidos.filter(entregador_id=uid).count() if uid else 0
+        w['total_pedidos'] = pedidos_registrador + pedidos_entregador
+        w['total_kilos'] = w['kilos_registrados'] + w['kilos_entregados'] + w['kilos_tarreo']
+    
     rendimiento_trabajadores_lista = sorted(
         rendimiento_trabajadores.values(),
-        key=lambda x: x['total_monto'],
+        key=lambda x: x['total_kilos'],
         reverse=True
     )
 
@@ -1394,11 +1366,11 @@ def reporte_ventas(request):
     chart_sectores_labels = dumps([item['sector'] for item in top_sectores])
     chart_sectores_data = dumps([float(item['total_vendido']) for item in top_sectores])
 
-    # Gráfico de barras: rendimiento de trabajadores (top 10 por monto total)
-    chart_trabajadores_labels = dumps([w['nombre'] for w in rendimiento_trabajadores_lista[:10]])
-    chart_trabajadores_registrado = dumps([w['monto_registrado'] for w in rendimiento_trabajadores_lista[:10]])
-    chart_trabajadores_entregado = dumps([w['monto_entregado'] for w in rendimiento_trabajadores_lista[:10]])
-    chart_trabajadores_tarreo = dumps([w['monto_tarreo'] + w['monto_extra'] for w in rendimiento_trabajadores_lista[:10]])
+    # Gráfico de barras: rendimiento de trabajadores por kilos
+    chart_trabajadores_labels = dumps([w['nombre_trabajador'] for w in rendimiento_trabajadores_lista[:10]])
+    chart_trabajadores_registrado = dumps([float(w['kilos_registrados']) for w in rendimiento_trabajadores_lista[:10]])
+    chart_trabajadores_entregado = dumps([float(w['kilos_entregados']) for w in rendimiento_trabajadores_lista[:10]])
+    chart_trabajadores_tarreo = dumps([float(w['kilos_tarreo']) for w in rendimiento_trabajadores_lista[:10]])
     
     # ═══════════════════════════════════════════════════════════
     # 11. LISTA DE TRABAJADORES PARA FILTRO
@@ -1418,6 +1390,7 @@ def reporte_ventas(request):
         'total_ventas': total_ventas,
         'total_ganancias': total_ganancias,
         'total_pedidos': total_pedidos,
+        'total_kilos': total_kilos,
         'promedio_pedido': promedio_pedido,
         'margen_promedio': margen_promedio,
         
@@ -1428,7 +1401,7 @@ def reporte_ventas(request):
         'top_sectores': top_sectores,
         'ventas_por_dia': ventas_por_dia_lista,
 
-        # Rendimiento consolidado por trabajador (reemplaza por_registrador y por_entregador)
+        # Rendimiento consolidado por trabajador
         'rendimiento_trabajadores': rendimiento_trabajadores_lista,
         
         # Datos para gráficos
@@ -1455,20 +1428,26 @@ def reporte_ventas(request):
         'chart_trabajadores_entregado': chart_trabajadores_entregado,
         'chart_trabajadores_tarreo': chart_trabajadores_tarreo,
         
+        # Navegación de mes
+        'mes_display': mes_display,
+        'mes_anterior': mes_anterior,
+        'mes_siguiente': mes_siguiente,
+        'mes_actual': mes_actual,
+        'es_mes_actual': es_mes_actual,
+        
         # Filtros
-        'rango_actual': fechas_display,
-        'desde_str': desde_str,
-        'hasta_str': hasta_str,
         'filtro_origen': filtro_origen,
         'filtro_metodo': filtro_metodo,
         'filtro_sector': filtro_sector,
         'filtro_registrador': filtro_registrador,
+        'filtro_trabajador': filtro_trabajador,
         
         # Choices para filtros
         'origen_choices': Pedido.ORIGENES,
         'metodo_choices': [("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("transferencia", "Transferencia")],
         'trabajadores': trabajadores,
         'sectores_choices': Pedido.SECTORES,
+        'camioneros': Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name'),
     }
     
     return render(request, "reporte_ventas.html", context)
@@ -1754,7 +1733,7 @@ def detalle_pedido(request, pedido_id):
 
     except Pedido.DoesNotExist:
         messages.error(request, "El pedido solicitado no existe.")
-        return redirect("consultas_pedidos" if request.user.rol in ["jefe", "admin"] else "index")
+        return redirect("pedidos_consulta" if request.user.rol in ["jefe", "admin"] else "index")
 
     context = {
         "pedido": pedido,
@@ -1808,7 +1787,7 @@ def editar_sobre_diario(request):
         titulo = f"Sobre Diario - {trabajador.get_full_name() or trabajador.username}"
     else:
         messages.error(request, "Debe seleccionar bodega o un camionero.")
-        return redirect('lista_sobres_diarios')
+        return redirect('sobres_lista')
 
     # Si viene sobre_id, cargar ese sobre específico
     if sobre_id:
@@ -1964,14 +1943,14 @@ def editar_sobre_diario(request):
                         f"Sobre cerrado correctamente el {sobre.declarado_el.strftime('%d/%m/%Y %H:%M')}. "
                         f"Kilometraje: {sobre.kilometraje_camion} km."
                     )
-                    return redirect('lista_sobres_diarios')
+                    return redirect('sobres_lista')
             else:
                 messages.success(request, "Cambios guardados correctamente (borrador).")
                 # Redirigir conservando parámetros
                 if es_bodega:
-                    return redirect(f"{reverse('editar_sobre_diario')}?bodega=1&sobre_id={sobre.id}")
+                    return redirect(f"{reverse('sobres_editar')}?bodega=1&sobre_id={sobre.id}")
                 else:
-                    return redirect(f"{reverse('editar_sobre_diario')}?camionero={camionero_id}&sobre_id={sobre.id}")
+                    return redirect(f"{reverse('sobres_editar')}?camionero={camionero_id}&sobre_id={sobre.id}")
 
         else:
             messages.error(request, "Hay errores en el formulario. Revise los campos marcados.")
@@ -2022,13 +2001,13 @@ def crear_sobre_nuevo(request):
 
         if not fecha_correspondiente_str:
             messages.error(request, "Debe especificar una fecha para el sobre.")
-            return redirect('lista_sobres_diarios')
+            return redirect('sobres_lista')
 
         try:
             fecha_correspondiente = datetime.strptime(fecha_correspondiente_str, "%Y-%m-%d").date()
         except ValueError:
             messages.error(request, "Fecha inválida.")
-            return redirect('lista_sobres_diarios')
+            return redirect('sobres_lista')
 
         if es_bodega:
             tipo_sobre = 'bodega'
@@ -2038,7 +2017,7 @@ def crear_sobre_nuevo(request):
             trabajador = get_object_or_404(Usuario, id=camionero_id, rol='camionero')
         else:
             messages.error(request, "Debe seleccionar un tipo de sobre válido.")
-            return redirect('lista_sobres_diarios')
+            return redirect('sobres_lista')
 
         # Crear el sobre
         sobre = SobreDiario.objects.create(
@@ -2053,9 +2032,9 @@ def crear_sobre_nuevo(request):
         
         # Redirigir a editar ese sobre
         if es_bodega:
-            return redirect(f"{reverse('editar_sobre_diario')}?bodega=1&sobre_id={sobre.id}")
+            return redirect(f"{reverse('sobres_editar')}?bodega=1&sobre_id={sobre.id}")
         else:
-            return redirect(f"{reverse('editar_sobre_diario')}?camionero={camionero_id}&sobre_id={sobre.id}")
+            return redirect(f"{reverse('sobres_editar')}?camionero={camionero_id}&sobre_id={sobre.id}")
 
     # Formulario
     hoy = today_chile()

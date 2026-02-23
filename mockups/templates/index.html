@@ -39,14 +39,14 @@
                 <!-- Camionero: Entregas pendientes + Historial entregas -->
                 {% if user.rol == "camionero" %}
                 <div class="col-12 col-md-8">
-                    <a href="{% url 'camionero_entregas' %}" 
+                    <a href="{% url 'entregas_lista' %}" 
                        class="btn btn-primary btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
                         <i class="bi bi-truck fs-1"></i>
                         <span class="fs-4 fw-semibold">Entregas Pendientes</span>
                     </a>
                 </div>
                 <div class="col-12 col-md-8">
-                    <a href="{% url 'mis_entregas' %}" 
+                    <a href="{% url 'entregas_mias' %}" 
                        class="btn btn-outline-secondary btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
                         <i class="bi bi-check-circle fs-1"></i>
                         <span class="fs-4 fw-semibold">Mis Entregas</span>
@@ -57,14 +57,14 @@
                 <!-- Telefonista / Bodeguero: Nuevo Pedido + Pedidos Hoy -->
                 {% if user.rol in "telefonista,bodeguero" %}
                 <div class="col-12 col-md-8">
-                    <a href="{% url 'transaccional_pedido' %}" 
+                    <a href="{% url 'pedidos_crear' %}" 
                        class="btn btn-success btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
                         <i class="bi bi-plus-circle-fill fs-1"></i>
                         <span class="fs-4 fw-semibold">Tomar Nuevo Pedido</span>
                     </a>
                 </div>
                 <div class="col-12 col-md-8">
-                    <a href="{% url 'mis_pedidos_hoy' %}" 
+                    <a href="{% url 'pedidos_mios' %}" 
                        class="btn btn-outline-secondary btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
                         <i class="bi bi-clock-history fs-1"></i>
                         <span class="fs-4 fw-semibold">Mis Pedidos Hoy</span>
@@ -75,28 +75,28 @@
                 <!-- Jefe / Admin: Reportes, Precios, Historial Pedidos -->
                 {% if user.rol in "jefe,admin" %}
                 <div class="col-12 col-md-8">
-                    <a href="{% url 'reporte_ventas' %}" 
+                    <a href="{% url 'reportes_ventas' %}" 
                        class="btn btn-info btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
                         <i class="bi bi-graph-up fs-1"></i>
                         <span class="fs-4 fw-semibold">Ver Reportes y Ventas app</span>
                     </a>
                 </div>
                 <div class="col-12 col-md-8">
-                    <a href="{% url 'reporte_sobres' %}" 
+                    <a href="{% url 'reportes_sobres' %}" 
                        class="btn btn-danger btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
                         <i class="bi bi-graph-up fs-1"></i>
                         <span class="fs-4 fw-semibold">Reportes de Sobres</span>
                     </a>
                 </div>
                 <div class="col-12 col-md-8">
-                    <a href="{% url 'precios_balones' %}" 
+                    <a href="{% url 'precios_lista' %}" 
                        class="btn btn-warning btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
                         <i class="bi bi-currency-dollar fs-1"></i>
                         <span class="fs-4 fw-semibold">Gestionar Precios</span>
                     </a>
                 </div>
                 <div class="col-12 col-md-8">
-                    <a href="{% url 'consultas_pedidos' %}" 
+                    <a href="{% url 'pedidos_consulta' %}" 
                        class="btn btn-outline-secondary btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
                         <i class="bi bi-search fs-1"></i>
                         <span class="fs-4 fw-semibold">Consultar Pedidos</span>
@@ -110,7 +110,7 @@
 
             <div class="row justify-content-center">
                 <div class="col-12 col-sm-10 col-md-8">
-                    <a href="{% url 'login' %}" 
+                    <a href="{% url 'auth_login' %}" 
                        class="btn btn-primary btn-lg w-100 py-5 shadow rounded-4 d-flex flex-column align-items-center gap-3">
                         <i class="bi bi-box-arrow-in-right fs-1"></i>
                         <span class="fs-4 fw-bold">Iniciar sesión</span>
