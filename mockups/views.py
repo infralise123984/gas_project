@@ -1818,10 +1818,11 @@ def editar_sobre_diario(request):
         # Buscar el sobre del día o crear uno nuevo
         hoy = today_chile()
         
-        # Buscar si ya existe un sobre hoy con estos parámetros
-        # Usar __date porque fecha es DateTimeField
+        # Buscar si ya existe un sobre HOY con estos parámetros
+        # IMPORTANTE: Usar fecha_correspondiente (DateField) NO fecha__date (DateTimeField)
+        # ya que fecha_correspondiente es la fecha lógica del sobre
         sobre = SobreDiario.objects.filter(
-            fecha__date=hoy,
+            fecha_correspondiente=hoy,
             tipo=tipo_sobre,
             trabajador=trabajador
         ).first()
@@ -1976,6 +1977,14 @@ def editar_sobre_diario(request):
             messages.error(request, "Hay errores en el formulario. Revise los campos marcados.")
 
     # Contexto para el template
+    ahora_chile = now_chile()
+    hora_actual = ahora_chile.hour
+    
+    # ⏰ Determinar si mostrar alerta de "hora recomendada para cerrar"
+    # (ej: después de las 20:00 = 8 PM)
+    hora_recomendada_cierre = 20  # 8 PM
+    mostrar_alerta_cierre = hora_actual >= hora_recomendada_cierre and not sobre.cerrado
+    
     context = {
         'sobre': sobre,
         'formset_lineas': formset_lineas,
@@ -1984,6 +1993,9 @@ def editar_sobre_diario(request):
         'hoy': today_chile(),
         'titulo': titulo,
         'es_bodega': es_bodega,
+        'mostrar_alerta_cierre': mostrar_alerta_cierre,
+        'hora_recomendada_cierre': f"{hora_recomendada_cierre}:00",
+        'hora_actual': f"{hora_actual}:{ahora_chile.minute:02d}",
     }
 
     return render(request, 'sobres.html', context)
@@ -2055,32 +2067,54 @@ def crear_sobre_nuevo(request):
     })
 @login_required
 def historial_sobres(request):
-
-
-    # Sobres cerrados, más recientes primero
-    sobres = SobreDiario.objects.filter(cerrado=True).order_by('-fecha')
-
-    # Totales usando campos que SÍ existen
-    agregados = sobres.aggregate(
-        total_declarado=Sum('monto_declarado'),
-        total_gastos=Sum('gastos__monto'),
-        total_no_efectivo=Sum('pagos__monto'),
-    )
-
-    total_declarado   = agregados['total_declarado']   or 0
-    total_gastos      = agregados['total_gastos']      or 0
-    total_no_efectivo = agregados['total_no_efectivo'] or 0
-
-    # Neto = declarado + no efectivo - gastos
-    total_neto = total_declarado + total_no_efectivo - total_gastos
-
+    """
+    Historial de sobres diarios con filtro por fecha.
+    Muestra sobres abiertos y cerrados, agrupados por tipo (bodega/camionero).
+    """
+    # Parsear fecha del GET (por defecto hoy)
+    fecha_str = request.GET.get('fecha', '')
+    
+    if fecha_str:
+        try:
+            fecha_seleccionada = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except ValueError:
+            fecha_seleccionada = today_chile()
+    else:
+        fecha_seleccionada = today_chile()
+    
+    # Rango de fecha_correspondiente (principio a fin del día)
+    tz_chile = ZoneInfo('America/Santiago')
+    inicio_dia = timezone.make_aware(datetime.combine(fecha_seleccionada, time.min), tz_chile)
+    fin_dia = timezone.make_aware(datetime.combine(fecha_seleccionada, time.max), tz_chile)
+    
+    # Filtrar sobres por fecha_correspondiente (la fecha lógica del sobre, no cuando se creó)
+    todos_sobres = SobreDiario.objects.filter(
+        fecha_correspondiente=fecha_seleccionada
+    ).select_related('trabajador', 'creado_por').prefetch_related('lineas')
+    
+    # Agrupar: Bodega vs Camioneros
+    sobres_bodega = todos_sobres.filter(tipo='bodega').order_by('-cerrado', '-fecha')
+    
+    # Para camioneros: agrupar por trabajador
+    sobres_camionero = todos_sobres.filter(tipo='camionero').order_by('trabajador__first_name', '-cerrado', '-fecha')
+    
+    # Crear diccionario {camionero: [sobres]}
+    sobres_por_camionero = {}
+    for sobre in sobres_camionero:
+        camionero = sobre.trabajador
+        if camionero not in sobres_por_camionero:
+            sobres_por_camionero[camionero] = []
+        sobres_por_camionero[camionero].append(sobre)
+    
+    # Camioneros activos para crear nuevos sobres
+    camioneros_activos = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+    
     context = {
-        'sobres': sobres,
-        'total_declarado': total_declarado,
-        'total_no_efectivo': total_no_efectivo,
-        'total_gastos': total_gastos,
-        'total_neto': total_neto,
+        'fecha_seleccionada': fecha_seleccionada,
         'hoy': today_chile(),
+        'sobres_bodega': sobres_bodega,
+        'sobres_por_camionero': sobres_por_camionero,
+        'camioneros_activos': camioneros_activos,
     }
 
     return render(request, 'historial_sobres.html', context)
