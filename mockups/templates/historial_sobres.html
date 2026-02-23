@@ -8,11 +8,16 @@
 
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
         <h2 class="text-primary fw-bold mb-0">
-            <i class="bi bi-journal-text me-2"></i>Sobres Diarios
+            <i class="bi bi-history me-2"></i>Historial de Sobres
         </h2>
-        <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-secondary">
-            <i class="bi bi-graph-up me-2"></i>Volver a Reportes
-        </a>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'sobres_lista' %}" class="btn btn-primary">
+                <i class="bi bi-arrow-left me-2"></i>Hoy
+            </a>
+            <a href="{% url 'reportes_ventas' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-graph-up me-2"></i>Reportes
+            </a>
+        </div>
     </div>
 
     <!-- Selector de fecha -->
@@ -30,7 +35,7 @@
                     <button type="submit" class="btn btn-primary btn-lg flex-fill">
                         <i class="bi bi-search"></i> Ver
                     </button>
-                    <a href="{% url 'lista_sobres_diarios' %}" class="btn btn-outline-secondary btn-lg">
+                    <a href="{% url 'sobres_historial' %}" class="btn btn-outline-secondary btn-lg">
                         <i class="bi bi-arrow-counterclockwise"></i> Hoy
                     </a>
                 </div>
@@ -39,7 +44,7 @@
     </div>
 
     <h4 class="text-center mb-4 fw-bold">
-        Sobres del día <span class="text-primary">{{ fecha_seleccionada|default:hoy|date:"d 'de' F 'de' Y"|title }}</span>
+        Sobres del día <span class="text-primary">{{ fecha_seleccionada|default:hoy|date|title }}</span>
     </h4>
 
     {% if messages %}
@@ -60,7 +65,7 @@
         </h5>
         {% for sobre in sobres_bodega %}
         <div class="card mb-3 shadow-sm {% if sobre.cerrado %}border-success{% else %}border-warning{% endif %}">
-            <div class="card-body d-flex justify-content-between align-items-center py-3">
+            <div class="card-body d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
                 <div>
                     <h5 class="mb-1">
                         Sobre Bodega {{ sobre.fecha_correspondiente|date:"d/m/Y" }}
@@ -71,19 +76,19 @@
                         {% endif %}
                     </h5>
                     <small class="text-muted">
-                        Creado por {{ sobre.creado_por.get_full_name|default:sobre.creado_por.username }}
-                        • {{ sobre.declarado_el|default:"Aún abierto"|date:"H:i" }}
+                        <i class="bi bi-person me-1"></i>{{ sobre.creado_por.get_full_name|default:sobre.creado_por.username }}
+                        {% if sobre.declarado_el %}<i class="bi bi-clock ms-2 me-1"></i>{{ sobre.declarado_el|date:"H:i" }}{% endif %}
                     </small>
                 </div>
-                <a href="{% url 'editar_sobre_diario' %}?bodega=1&fecha={{ sobre.fecha_correspondiente|date:'Y-m-d' }}"
-                   class="btn btn-outline-primary btn-sm px-3">
-                    Ver / Editar
+                <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}"
+                   class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-pencil-square me-2"></i>Ver / Editar
                 </a>
             </div>
         </div>
         {% empty %}
         <div class="alert alert-light text-center py-4">
-            No hay sobres de bodega para esta fecha.
+            <i class="bi bi-inbox me-2"></i>No hay sobres de bodega para esta fecha.
         </div>
         {% endfor %}
     </div>
@@ -95,12 +100,12 @@
         </h5>
         {% for camionero, sobres in sobres_por_camionero.items %}
         <div class="mb-4">
-            <h6 class="fw-semibold mb-2 text-dark">
+            <h6 class="fw-semibold mb-3 text-dark ps-2 border-start border-primary border-3">
                 {{ camionero.get_full_name|default:camionero.username }}
             </h6>
             {% for sobre in sobres %}
             <div class="card mb-2 shadow-sm {% if sobre.cerrado %}border-success{% else %}border-warning{% endif %}">
-                <div class="card-body d-flex justify-content-between align-items-center py-2">
+                <div class="card-body d-flex justify-content-between align-items-center py-2 flex-wrap gap-2">
                     <div>
                         <strong>Sobre {{ sobre.fecha_correspondiente|date:"d/m/Y" }}</strong>
                         {% if sobre.cerrado %}
@@ -109,9 +114,9 @@
                         <span class="badge bg-warning text-dark ms-2">ABIERTO</span>
                         {% endif %}
                     </div>
-                    <a href="{% url 'editar_sobre_diario' %}?camionero={{ camionero.id }}&fecha={{ sobre.fecha_correspondiente|date:'Y-m-d' }}"
-                       class="btn btn-outline-primary btn-sm">
-                        Ver
+                    <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}"
+                       class="btn btn-primary btn-sm px-4">
+                        <i class="bi bi-pencil-square me-2"></i>Ver / Editar
                     </a>
                 </div>
             </div>
@@ -119,31 +124,22 @@
         </div>
         {% empty %}
         <div class="alert alert-light text-center py-4">
-            No hay camioneros con sobres en esta fecha.
+            <i class="bi bi-inbox me-2"></i>No hay camioneros con sobres en esta fecha.
         </div>
         {% endfor %}
     </div>
 
-    <!-- BOTONES PARA CREAR NUEVO SOBRE (siempre visibles) -->
+    <!-- BOTONES PARA CREAR NUEVO SOBRE (acceso opcional) -->
     <div class="text-center mt-5 pt-4 border-top">
         <h5 class="mb-4 text-muted fw-semibold">
-            ¿Necesitas registrar ventas de este día?
+            <i class="bi bi-plus-circle me-2"></i>¿Necesitas registrar un sobre nuevo?
         </h5>
 
-        <div class="d-grid gap-3 d-md-flex justify-content-md-center flex-wrap">
-            <a href="{% url 'editar_sobre_diario' %}?bodega=1&fecha={{ fecha_seleccionada|default:hoy|date:'Y-m-d' }}"
-               class="btn btn-success btn-lg px-5 py-3 shadow">
-                <i class="bi bi-plus-circle-fill me-2 fs-4"></i>
-                Nuevo sobre BODEGA
+        <div class="d-flex flex-wrap justify-content-center gap-3">
+            <a href="{% url 'sobres_lista' %}"
+               class="btn btn-success btn-lg px-5 py-3">
+                <i class="bi bi-arrow-right me-2"></i>Ir a Sobres de Hoy
             </a>
-
-            {% for camionero in camioneros_activos %}
-            <a href="{% url 'editar_sobre_diario' %}?camionero={{ camionero.id }}&fecha={{ fecha_seleccionada|default:hoy|date:'Y-m-d' }}"
-               class="btn btn-outline-success btn-lg px-4 py-3 shadow">
-                <i class="bi bi-truck me-1"></i>
-                Nuevo para {{ camionero.get_full_name|default:camionero.username|truncatewords:2 }}
-            </a>
-            {% endfor %}
         </div>
     </div>
 
