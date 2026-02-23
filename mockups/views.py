@@ -1937,6 +1937,16 @@ def editar_sobre_diario(request):
                     sobre.cerrado = True
                     sobre.declarado_el = timezone.now()
                     sobre.nota_cierre = request.POST.get("nota_cierre", "")
+                    
+                    # Capturar kilometraje del camión (solo para camioneros)
+                    if sobre.tipo != 'bodega':
+                        try:
+                            km = request.POST.get("kilometraje_camion", "").strip()
+                            if km:
+                                sobre.kilometraje_camion = int(km)
+                        except (ValueError, TypeError):
+                            messages.warning(request, "Kilometraje inválido. Se guardará el valor anterior.")
+                    
                     sobre.save()
                     messages.success(
                         request,
@@ -2044,6 +2054,64 @@ def crear_sobre_nuevo(request):
         'hoy': hoy,
         'camioneros': camioneros,
     })
+
+
+@login_required
+def crear_sobre_post_cierre(request, sobre_id):
+    """
+    Crea un nuevo sobre SOLO si el anterior está cerrado.
+    Hereda: tipo, trabajador del sobre anterior.
+    Parámetro POST: fecha_correspondiente (opcional, default = hoy).
+    """
+    # Obtener el sobre anterior
+    sobre_anterior = get_object_or_404(SobreDiario, id=sobre_id)
+    
+    # Validar que el usuario tenga permiso
+    if not (request.user.rol in ['bodeguero', 'jefe', 'admin'] or 
+            (sobre_anterior.trabajador == request.user)):
+        messages.error(request, "No tienes permiso para crear un nuevo sobre.")
+        return redirect('sobres_lista')
+    
+    # Validar que el sobre anterior esté CERRADO
+    if not sobre_anterior.cerrado:
+        messages.error(request, "Solo puedes crear un nuevo sobre después de cerrar el anterior.")
+        return redirect(f"{reverse('sobres_editar')}?sobre_id={sobre_anterior.id}")
+    
+    if request.method == "POST":
+        # Obtener fecha correspondiente del formulario
+        fecha_correspondiente_str = request.POST.get('fecha_correspondiente', '')
+        
+        try:
+            fecha_correspondiente = datetime.strptime(fecha_correspondiente_str, "%Y-%m-%d").date()
+        except ValueError:
+            fecha_correspondiente = today_chile()
+        
+        # Crear el nuevo sobre con los mismos datos del anterior
+        nuevo_sobre = SobreDiario.objects.create(
+            fecha=today_chile(),
+            fecha_correspondiente=fecha_correspondiente,
+            tipo=sobre_anterior.tipo,
+            trabajador=sobre_anterior.trabajador,
+            creado_por=request.user,
+        )
+        
+        messages.success(
+            request, 
+            f"Nuevo sobre creado para {fecha_correspondiente.strftime('%d/%m/%Y')}. "
+            f"El anterior estaba cerrado el {sobre_anterior.declarado_el.strftime('%d/%m/%Y %H:%M')}."
+        )
+        
+        # Redirigir a editar el nuevo sobre con los mismos parámetros que el anterior
+        if sobre_anterior.tipo == 'bodega':
+            return redirect(f"{reverse('sobres_editar')}?bodega=1&sobre_id={nuevo_sobre.id}")
+        else:
+            camionero_id = sobre_anterior.trabajador.id
+            return redirect(f"{reverse('sobres_editar')}?camionero={camionero_id}&sobre_id={nuevo_sobre.id}")
+    
+    # Si no es POST, redirigir al sobre anterior
+    return redirect(f"{reverse('sobres_editar')}?sobre_id={sobre_anterior.id}")
+
+
 @login_required
 def historial_sobres(request):
     """
