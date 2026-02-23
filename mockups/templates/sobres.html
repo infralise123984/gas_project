@@ -385,14 +385,14 @@
                             {% endif %}
                             
                             <!-- Exportar a Excel -->
-                            <a href="{% url 'exportar_sobre_excel' sobre.id %}" 
+                            <a href="{% url 'sobres_exportar' sobre.id %}" 
                                class="btn btn-success btn-lg px-5"
                                target="_blank">
                                 <i class="bi bi-file-earmark-excel me-2"></i>Exportar Excel
                             </a>
                             
                             <!-- Volver a Lista de Sobres -->
-                            <a href="{% url 'lista_sobres_diarios' %}" 
+                            <a href="{% url 'sobres_lista' %}" 
                                class="btn btn-outline-secondary btn-lg px-5">
                                 <i class="bi bi-arrow-left me-2"></i>Volver a Sobres
                             </a>

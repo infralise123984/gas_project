@@ -1,12 +1,9 @@
 {% extends 'base.html' %}
 {% load humanize static %}
 
-{% block title %}Reporte de Ventas - Kim Gas{% endblock %}
+{% block title %}Reporte de Ventas — {{ mes_display }} - Kim Gas{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
 <style>
     .metric-card {
@@ -27,6 +24,7 @@
         font-size: 0.9rem;
         padding: 0.4rem 0.8rem;
     }
+    .nav-mes .btn { min-width: 38px; }
 </style>
 {% endblock %}
 
@@ -40,91 +38,53 @@
                 <i class="bi bi-graph-up-arrow me-2"></i>Dashboard de Ventas
             </h1>
             <p class="text-muted mb-0">
-                Análisis completo de rendimiento<strong>{{ rango_actual }}</strong>
+                Análisis del mes de <strong>{{ mes_display }}</strong>
             </p>
         </div>
     </div>
 
     <!-- FILTROS -->
+    <!-- NAVEGACIÓN DE MES + FILTRO CAMIONERO -->
     <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header bg-light">
-            <h5 class="mb-0"><i class="bi bi-funnel me-2"></i>Filtros de Análisis</h5>
-        </div>
-        <div class="card-body">
-            <form method="get" class="row g-3">
-                
-                <div class="col-lg-3 col-md-6">
-                    <label class="form-label fw-semibold">
-                        <i class="bi bi-calendar-range me-1"></i>Período
-                    </label>
-                    <input type="text" 
-                           name="fechas" 
-                           id="rangoFechas" 
-                           class="form-control"
-                           value="{{ desde_str }} to {{ hasta_str }}" 
-                           placeholder="Seleccionar rango">
+        <div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                <!-- Navegación prev / mes / next -->
+                <div class="d-flex align-items-center gap-2 nav-mes">
+                    <a href="?mes={{ mes_anterior }}{% if filtro_trabajador %}&trabajador={{ filtro_trabajador }}{% endif %}"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                    <h5 class="mb-0 fw-bold text-primary px-2">{{ mes_display }}</h5>
+                    <a href="?mes={{ mes_siguiente }}{% if filtro_trabajador %}&trabajador={{ filtro_trabajador }}{% endif %}"
+                       class="btn btn-outline-secondary btn-sm {% if es_mes_actual %}disabled{% endif %}">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                    {% if not es_mes_actual %}
+                    <a href="?{% if filtro_trabajador %}trabajador={{ filtro_trabajador }}{% endif %}"
+                       class="btn btn-outline-primary btn-sm ms-1">Mes actual</a>
+                    {% endif %}
                 </div>
-
-                <div class="col-lg-2 col-md-6">
-                    <label class="form-label fw-semibold">
-                        <i class="bi bi-pin-map me-1"></i>Origen
-                    </label>
-                    <select name="origen" class="form-select">
+                <!-- Filtro camionero -->
+                <form method="get" class="d-flex align-items-center gap-2">
+                    <input type="hidden" name="mes" value="{{ mes_actual }}">
+                    <label class="form-label mb-0 small fw-semibold text-nowrap">Camionero:</label>
+                    <select name="trabajador" class="form-select form-select-sm" style="min-width:180px;"
+                            onchange="this.form.submit()">
                         <option value="">Todos</option>
-                        {% for val, txt in origen_choices %}
-                        <option value="{{ val }}" {% if filtro_origen == val %}selected{% endif %}>{{ txt }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="col-lg-2 col-md-6">
-                    <label class="form-label fw-semibold">
-                        <i class="bi bi-credit-card me-1"></i>Pago
-                    </label>
-                    <select name="metodo_pago" class="form-select">
-                        <option value="">Todos</option>
-                        {% for val, txt in metodo_choices %}
-                        <option value="{{ val }}" {% if filtro_metodo == val %}selected{% endif %}>{{ txt }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="col-lg-2 col-md-6">
-                    <label class="form-label fw-semibold">
-                        <i class="bi bi-geo-alt me-1"></i>Sector
-                    </label>
-                    <select name="sector" class="form-select">
-                        <option value="">Todos los sectores</option>
-                        {% for val, txt in sectores_choices %}
-                        <option value="{{ val }}" {% if filtro_sector == val %}selected{% endif %}>{{ txt }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="col-lg-3 col-md-6">
-                    <label class="form-label fw-semibold">
-                        <i class="bi bi-person me-1"></i>Registrador
-                    </label>
-                    <select name="registrador" class="form-select">
-                        <option value="">Todos</option>
-                        {% for trabajador in trabajadores %}
-                        <option value="{{ trabajador.id }}" 
-                                {% if filtro_registrador|stringformat:"s" == trabajador.id|stringformat:"s" %}selected{% endif %}>
-                            {{ trabajador.get_full_name|default:trabajador.username }}
+                        {% for cam in camioneros %}
+                        <option value="{{ cam.id }}"
+                            {% if filtro_trabajador == cam.id|stringformat:"s" %}selected{% endif %}>
+                            {{ cam.get_full_name|default:cam.username }}
                         </option>
                         {% endfor %}
                     </select>
-                </div>
-
-                <div class="col-12 d-flex gap-2 justify-content-end">
-                    <button type="submit" class="btn btn-primary px-4">
-                        <i class="bi bi-search me-1"></i>Aplicar Filtros
-                    </button>
-                    <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-secondary px-4">
-                        <i class="bi bi-x-circle me-1"></i>Limpiar
+                    {% if filtro_trabajador %}
+                    <a href="?mes={{ mes_actual }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-x-lg"></i>
                     </a>
-                </div>
-            </form>
+                    {% endif %}
+                </form>
+            </div>
         </div>
     </div>
 
@@ -191,13 +151,13 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
-                            <p class="text-muted mb-1 small">Ticket Promedio</p>
+                            <p class="text-muted mb-1 small">Kilos vendidos</p>
                             <h3 class="fw-bold text-warning mb-0">
-                                ${{ promedio_pedido|floatformat:0|intcomma }}
+                                {{ total_kilos|intcomma }} kg
                             </h3>
                         </div>
                         <div class="bg-warning bg-opacity-10 rounded-3 p-3">
-                            <i class="bi bi-calculator text-warning fs-3"></i>
+                            <i class="bi bi-fire text-warning fs-3"></i>
                         </div>
                     </div>
                 </div>
@@ -362,9 +322,9 @@
             <div class="card shadow-sm border-0">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-semibold">
-                        <i class="bi bi-people-fill me-2"></i>Rendimiento por Trabajador
+                        <i class="bi bi-people-fill me-2"></i>Rendimiento por Trabajador (Kilos de gas)
                     </h6>
-                    <small class="text-muted">Ventas propias + entregas consolidadas</small>
+                    <small class="text-muted">Kilos propios + entregas consolidadas</small>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -374,80 +334,29 @@
                                     <th class="ps-3">#</th>
                                     <th>Trabajador</th>
                                     <th class="text-center">Rol</th>
-                                    <th class="text-center" title="Pedidos telefónicos o de local que registró">
-                                        <span class="d-none d-md-inline">Registrados</span>
-                                        <span class="d-inline d-md-none">Reg.</span>
-                                    </th>
-                                    <th class="text-center" title="Pedidos domicilio que entregó el camionero">
-                                        <span class="d-none d-md-inline">Entregas</span>
-                                        <span class="d-inline d-md-none">Entr.</span>
-                                    </th>
-                                    <th class="text-center" title="Ventas de tarreo y ventas adicionales en entrega">
-                                        <span class="d-none d-md-inline">Tarreo / Extra</span>
-                                        <span class="d-inline d-md-none">Tarreo</span>
-                                    </th>
-                                    <th class="text-center">Total ventas</th>
-                                    <th class="text-end pe-3">Monto total</th>
+                                    <th class="text-center">Registrados (kg)</th>
+                                    <th class="text-center">Entregados (kg)</th>
+                                    <th class="text-center">Tarreo / Extra (kg)</th>
+                                    <th class="text-center">Total pedidos</th>
+                                    <th class="text-end pe-3">Total kilos</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for w in rendimiento_trabajadores %}
                                 <tr>
                                     <td class="ps-3 text-muted">{{ forloop.counter }}</td>
-                                    <td>
-                                        <strong>{{ w.nombre }}</strong>
-                                    </td>
-                                    <td class="text-center">
-                                        {% if w.rol == 'camionero' %}
-                                            <span class="badge bg-warning text-dark">Camionero</span>
-                                        {% elif w.rol == 'telefonista' %}
-                                            <span class="badge bg-info text-dark">Telefonista</span>
-                                        {% elif w.rol == 'bodeguero' %}
-                                            <span class="badge bg-secondary">Bodeguero</span>
-                                        {% elif w.rol == 'jefe' %}
-                                            <span class="badge bg-danger">Jefe</span>
-                                        {% elif w.rol == 'admin' %}
-                                            <span class="badge bg-dark">Admin</span>
-                                        {% else %}
-                                            <span class="badge bg-light text-dark">{{ w.rol }}</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-center">
-                                        {% if w.pedidos_registrados > 0 %}
-                                            <span class="badge bg-primary" title="${{ w.monto_registrado|floatformat:0 }}">
-                                                {{ w.pedidos_registrados }}
-                                            </span>
-                                        {% else %}
-                                            <span class="text-muted">—</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-center">
-                                        {% if w.pedidos_entregados > 0 %}
-                                            <span class="badge bg-success" title="${{ w.monto_entregado|floatformat:0 }}">
-                                                {{ w.pedidos_entregados }}
-                                            </span>
-                                        {% else %}
-                                            <span class="text-muted">—</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-center">
-                                        {% with total_tarreo=w.ventas_tarreo|add:w.ventas_extra %}
-                                        {% if total_tarreo > 0 %}
-                                            <span class="badge bg-warning text-dark" title="Tarreo: {{ w.ventas_tarreo }} / Extra: {{ w.ventas_extra }}">
-                                                {{ total_tarreo }}
-                                            </span>
-                                        {% else %}
-                                            <span class="text-muted">—</span>
-                                        {% endif %}
-                                        {% endwith %}
-                                    </td>
+                                    <td><strong>{{ w.nombre_trabajador }}</strong></td>
+                                    <td class="text-center">{{ w.rol }}</td>
+                                    <td class="text-center">{{ w.kilos_registrados|floatformat:0|intcomma }}</td>
+                                    <td class="text-center">{{ w.kilos_entregados|floatformat:0|intcomma }}</td>
+                                    <td class="text-center">{{ w.kilos_tarreo|floatformat:0|intcomma }}</td>
                                     <td class="text-center fw-semibold">{{ w.total_pedidos }}</td>
-                                    <td class="text-end fw-bold pe-3">${{ w.total_monto|floatformat:0|intcomma }}</td>
+                                    <td class="text-end fw-bold pe-3">{{ w.total_kilos|floatformat:0|intcomma }} kg</td>
                                 </tr>
                                 {% empty %}
                                 <tr>
                                     <td colspan="8" class="text-center text-muted py-4">
-                                        No hay datos de trabajadores para el período seleccionado
+                                        No hay datos de trabajadores
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -465,7 +374,7 @@
             <div class="card shadow-sm border-0">
                 <div class="card-header bg-light">
                     <h6 class="mb-0 fw-semibold">
-                        <i class="bi bi-bar-chart-fill me-2"></i>Comparativa de ventas por trabajador
+                        <i class="bi bi-bar-chart-fill me-2"></i>Comparativa de kilos de gas por trabajador
                     </h6>
                 </div>
                 <div class="card-body">
@@ -655,8 +564,8 @@ if (ctxTrabajadores) {
                 tooltip: {
                     callbacks: {
                         label: function(context) {
-                            return context.dataset.label + ': $' +
-                                   context.parsed.y.toLocaleString('es-CL');
+                            return context.dataset.label + ': ' +
+                                   context.parsed.y.toLocaleString('es-CL') + ' kg';
                         }
                     }
                 }
@@ -668,7 +577,7 @@ if (ctxTrabajadores) {
                     beginAtZero: true,
                     ticks: {
                         callback: function(value) {
-                            return '$' + value.toLocaleString('es-CL');
+                            return value + ' kg';
                         }
                     }
                 }
@@ -677,12 +586,6 @@ if (ctxTrabajadores) {
     });
 }
 
-flatpickr("#rangoFechas", {
-    mode: "range",
-    dateFormat: "Y-m-d",
-    locale: "es",
-    maxDate: "today"
-});
 </script>
 
 {% endblock %}
