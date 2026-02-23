@@ -4,7 +4,7 @@
 # 1. IMPORTACIONES
 # ──────────────────────────────────────────────────────────────
 # Django core y utilidades
-from datetime import date, datetime
+from datetime import date, datetime, time
 from json import dumps
 from calendar import monthrange
 from django.utils import timezone
@@ -1785,10 +1785,6 @@ def lista_sobres_diarios(request):
 
 # CAMBIOS MÍNIMOS EN views.py - SOLO LO NECESARIO
 
-# ══════════════════════════════════════════════════════════════
-# REEMPLAZAR LA FUNCIÓN editar_sobre_diario() COMPLETA
-# ══════════════════════════════════════════════════════════════
-
 @login_required
 def editar_sobre_diario(request):
     """
@@ -1821,36 +1817,70 @@ def editar_sobre_diario(request):
     else:
         # Buscar el sobre del día o crear uno nuevo
         hoy = today_chile()
-        sobre, creado = SobreDiario.objects.get_or_create(
-            fecha=hoy,
-            tipo=tipo_sobre,
-            trabajador=trabajador,
-            defaults={
-                'creado_por': usuario,
-                'fecha_correspondiente': hoy,  # Nuevo campo
-            }
-        )
-
-    # Si es nuevo, inicializamos las líneas de balones
-    if creado:
-        balones_activos = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
-        fecha_para_calcular = sobre.fecha_correspondiente or sobre.fecha
         
+        # Buscar si ya existe un sobre hoy con estos parámetros
+        # Usar __date porque fecha es DateTimeField
+        sobre = SobreDiario.objects.filter(
+            fecha__date=hoy,
+            tipo=tipo_sobre,
+            trabajador=trabajador
+        ).first()
+        
+        if sobre:
+            creado = False
+        else:
+            # No existe, crear uno nuevo
+            sobre = SobreDiario.objects.create(
+                fecha=now_chile(),  # Usa la función que convierte a zona Chile
+                tipo=tipo_sobre,
+                trabajador=trabajador,
+                creado_por=usuario,
+                fecha_correspondiente=hoy,
+            )
+            creado = True
+
+    # ═══════════════════════════════════════════════════════════
+    # Crear o actualizar líneas de balones
+    # Se hace siempre: tanto si el sobre es nuevo como si ya existe
+    # ═══════════════════════════════════════════════════════════
+    
+    # Preparar datos para crear líneas (si es necesario)
+    balones_activos = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
+    fecha_para_calcular = sobre.fecha_correspondiente or sobre.fecha.date()
+    tz_chile = ZoneInfo('America/Santiago')
+    tz_utc = ZoneInfo('UTC')
+    
+    # Crear rango de tiempo en zona Chile para búsqueda correcta
+    inicio_dia = datetime.combine(fecha_para_calcular, time.min)
+    inicio_dia = timezone.make_aware(inicio_dia, tz_chile).astimezone(tz_utc)
+    fin_dia = datetime.combine(fecha_para_calcular, time.max)
+    fin_dia = timezone.make_aware(fin_dia, tz_chile).astimezone(tz_utc)
+    
+    # Verificar si el sobre tiene líneas
+    lineas_existentes = sobre.lineas.exists()
+    
+    if not lineas_existentes:
+        # No tiene líneas, crearlas ahora
         for balon in balones_activos:
             # Calcular cantidad real según pedidos del día
             if tipo_sobre == 'bodega':
+                # Para bodega: buscar pedidos locales (venta en local) entregados en la fecha
                 qs_pedidos = Pedido.objects.filter(
-                    fecha__date=fecha_para_calcular,
+                    fecha__gte=inicio_dia,
+                    fecha__lte=fin_dia,
                     origen='local',
                     estado='entregado'
                 )
             else:
+                # Para camión: buscar pedidos entregados por este camionero en la fecha
                 qs_pedidos = Pedido.objects.filter(
-                    fecha__date=fecha_para_calcular,
+                    fecha__gte=inicio_dia,
+                    fecha__lte=fin_dia,
                     estado='entregado',
                     entregador=trabajador
                 )
-
+            
+            # Contar cantidad de este balón en los pedidos
             qty_calc = qs_pedidos.filter(detalles__balon=balon).aggregate(total=Sum('detalles__cantidad'))['total'] or 0
 
             LineaSobre.objects.create(
@@ -1883,7 +1913,7 @@ def editar_sobre_diario(request):
     )
 
     if request.method == "POST":
-        # ✅ CORRECCIÓN PRINCIPAL: Guardar el sobre PRIMERO para que tenga pk
+        
         if not sobre.pk:
             sobre.save()
         
@@ -1960,7 +1990,7 @@ def editar_sobre_diario(request):
 
 
 # ══════════════════════════════════════════════════════════════
-# AGREGAR ESTA NUEVA FUNCIÓN (OPCIONAL - SOLO SI QUIERES CREAR SOBRES MANUALES)
+# 
 # ══════════════════════════════════════════════════════════════
 
 @login_required
