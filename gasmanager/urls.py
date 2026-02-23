@@ -70,4 +70,5 @@ urlpatterns = [
     path('sobres/editar/', views.editar_sobre_diario, name='sobres_editar'),
     path('sobres/historial/', views.historial_sobres, name='sobres_historial'),
     path('sobres/<int:sobre_id>/exportar/', views.exportar_sobre_excel, name='sobres_exportar'),
+    path('sobres/<int:sobre_id>/crear-nuevo/', views.crear_sobre_post_cierre, name='crear_sobre_post_cierre'),
 ]

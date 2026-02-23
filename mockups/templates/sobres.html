@@ -55,6 +55,26 @@
                             Fecha a la que corresponden las ventas (por defecto: hoy)
                         </small>
                     </div>
+
+                    <!-- Kilometraje (solo para camioneros) -->
+                    {% if sobre.tipo != 'bodega' %}
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">
+                            <i class="bi bi-speedometer2 me-2"></i>Kilometraje del Camión
+                        </label>
+                        <input 
+                            type="number" 
+                            name="kilometraje_camion" 
+                            class="form-control"
+                            min="0"
+                            value="{{ sobre.kilometraje_camion|default:'' }}"
+                            placeholder="Ej: 45230"
+                        >
+                        <small class="form-text text-muted">
+                            Lectura del odómetro al cerrar el sobre
+                        </small>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <!-- ⏰ ALERTA DE HORA RECOMENDADA PARA CERRAR -->
@@ -77,6 +97,9 @@
                 <div class="alert alert-info mb-4">
                     <i class="bi bi-calendar-check me-2"></i>
                     <strong>Fecha del sobre:</strong> {{ sobre.fecha_correspondiente|date:"d/m/Y" }}
+                    {% if sobre.tipo != 'bodega' %}
+                        | <i class="bi bi-speedometer2 me-1"></i><strong>Kilometraje:</strong> {{ sobre.kilometraje_camion }} km
+                    {% endif %}
                 </div>
                 {% endif %}
 
@@ -236,7 +259,7 @@
                                         </td>
                                         <td class="align-middle text-end">
                                             {% if sobre.cerrado %}
-                                                <span class="fw-bold">${{ form.instance.monto|floatformat:0 }}</span>
+                                                <span class="fw-bold" data-value="{{ form.instance.monto|unlocalize }}">${{ form.instance.monto|unlocalize|floatformat:0 }}</span>
                                             {% else %}
                                                 {{ form.monto }}
                                             {% endif %}
@@ -298,7 +321,7 @@
                                         </td>
                                         <td class="align-middle text-end">
                                             {% if sobre.cerrado %}
-                                                <span class="fw-bold">${{ form.instance.monto|floatformat:0 }}</span>
+                                                <span class="fw-bold" data-value="{{ form.instance.monto|unlocalize }}">${{ form.instance.monto|unlocalize|floatformat:0 }}</span>
                                             {% else %}
                                                 {{ form.monto }}
                                             {% endif %}
@@ -382,6 +405,11 @@
                                 <i class="bi bi-check-circle-fill me-2"></i>
                                 <strong>Cerrado:</strong> {{ sobre.declarado_el|date:"d/m/Y H:i" }}
                             </div>
+                            
+                            <!-- Crear nuevo sobre -->
+                            <button type="button" class="btn btn-info btn-lg px-5" data-bs-toggle="modal" data-bs-target="#modalCrearNuevoSobre">
+                                <i class="bi bi-plus-circle me-2"></i>Crear Nuevo Sobre
+                            </button>
                             {% endif %}
                             
                             <!-- Exportar a Excel -->
@@ -538,8 +566,9 @@ function updateTotals() {
             // Si es un registro cerrado (span)
             const spanMonto = row.querySelector('td:nth-child(3) span');
             if (spanMonto) {
-                const texto = spanMonto.textContent.replace(/\$/g, '').replace(/\./g, '').trim();
-                const monto = parseFloat(texto) || 0;
+                // Usar data-value (unlocalized) en lugar de parsear texto localizado
+                const dataValue = spanMonto.getAttribute('data-value');
+                const monto = dataValue ? parseFloat(dataValue) : 0;
                 totalPagos += monto;
             }
         }
@@ -559,8 +588,9 @@ function updateTotals() {
             // Si es un registro cerrado (span)
             const spanMonto = row.querySelector('td:nth-child(2) span');
             if (spanMonto) {
-                const texto = spanMonto.textContent.replace(/\$/g, '').replace(/\./g, '').trim();
-                const monto = parseFloat(texto) || 0;
+                // Usar data-value (unlocalized) en lugar de parsear texto localizado
+                const dataValue = spanMonto.getAttribute('data-value');
+                const monto = dataValue ? parseFloat(dataValue) : 0;
                 totalGastos += monto;
             }
         }
@@ -821,4 +851,61 @@ function confirmarCierre() {
     font-size: 0.95rem;
 }
 </style>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- MODAL: CREAR NUEVO SOBRE -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalCrearNuevoSobre" tabindex="-1" aria-labelledby="modalCrearNuevoSobreLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="modalCrearNuevoSobreLabel">
+                    <i class="bi bi-plus-circle me-2"></i>Crear Nuevo Sobre
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{% url 'crear_sobre_post_cierre' sobre.id %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p class="text-muted mb-3">
+                        Se creará un nuevo sobre del mismo tipo 
+                        <strong>
+                            {% if sobre.tipo == 'bodega' %}
+                                Bodega
+                            {% else %}
+                                {{ sobre.trabajador.get_full_name|default:sobre.trabajador.username }}
+                            {% endif %}
+                        </strong>
+                    </p>
+                    
+                    <div class="mb-3">
+                        <label for="fecha_correspondiente_nuevo" class="form-label fw-bold">
+                            <i class="bi bi-calendar-event me-2"></i>Fecha Correspondiente al Nuevo Sobre
+                        </label>
+                        <input 
+                            type="date" 
+                            name="fecha_correspondiente" 
+                            id="fecha_correspondiente_nuevo" 
+                            class="form-control"
+                            value="{{ hoy|date:'Y-m-d' }}"
+                            required
+                        >
+                        <small class="form-text text-muted">
+                            Por defecto es hoy, puedes cambiarla si es necesario (ej: encuadre del día anterior)
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle me-1"></i>Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-info">
+                        <i class="bi bi-check-circle me-1"></i>Crear Sobre
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {% endblock %}  
