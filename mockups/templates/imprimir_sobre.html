@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sobre Diario - {{ sobre.fecha|date:"d/m/Y" }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            line-height: 1.2;
+            color: #000;
+            background: white;
+            padding: 15px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        
+        .header h1 {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .info-line {
+            display: grid;
+            grid-template-columns: auto 1fr auto 1fr auto 1fr;
+            gap: 15px;
+            margin-bottom: 8px;
+            font-size: 11px;
+        }
+        
+        .info-item {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .info-label {
+            font-weight: bold;
+        }
+        
+        .table-container {
+            margin-bottom: 15px;
+        }
+        
+        .table-container.gastos {
+            margin-bottom: 15px;
+            border-left: 4px solid #555;
+            padding-left: 5px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+        }
+        
+        th {
+            background-color: #1a1a1a;
+            color: white;
+            padding: 4px;
+            text-align: center;
+            font-weight: bold;
+            border: 1px solid #000;
+        }
+        
+        td {
+            padding: 3px 4px;
+            border: 1px solid #333;
+            text-align: center;
+        }
+        
+        td.label {
+            background-color: #d9d9d9;
+            font-weight: bold;
+            text-align: left;
+            border: 1px solid #333;
+        }
+        
+        /* Colores para balones - tonos de gris para B&N */
+        td.yellow {
+            background-color: #e6e6e6;
+            border: 1px solid #333;
+        }
+        
+        td.green {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            border: 1px solid #333;
+        }
+        
+        td.red {
+            background-color: #cccccc;
+            font-weight: bold;
+            color: #000;
+            border: 2px solid #000;
+        }
+        
+        td.light-yellow {
+            background-color: #f9f9f9;
+            border: 1px dashed #333;
+        }
+        
+        td.total {
+            background-color: #d9d9d9;
+            font-weight: bold;
+            border: 1px solid #333;
+        }
+        
+        /* Diferenciación visual para Pagos */
+        .table-pagos th {
+            background-color: #1a1a1a;
+        }
+        
+        .table-pagos td.total {
+            background-color: #d9d9d9;
+            border: 2px solid #000;
+        }
+        
+        /* Diferenciación visual para Gastos */
+        .table-gastos th {
+            background-color: #2d2d2d;
+            border-left: 3px solid #000;
+        }
+        
+        .table-gastos td.total {
+            background-color: #bfbfbf;
+            border: 2px dotted #000;
+        }
+        
+        .summary {
+            margin-top: 15px;
+            padding: 8px;
+            border: 2px solid #000;
+            font-size: 11px;
+            background-color: #fafafa;
+        }
+        
+        .summary-row {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+            gap: 10px;
+            margin-bottom: 5px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .summary-row:last-of-type {
+            border-bottom: none;
+        }
+        
+        .summary-label {
+            font-weight: bold;
+        }
+        
+        .summary-value {
+            text-align: right;
+            font-weight: bold;
+        }
+        
+        .diferencia {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 2px solid #000;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .diferencia.perfect {
+            color: #000;
+            background-color: #e6e6e6;
+            padding: 5px;
+        }
+        
+        .diferencia.warning {
+            color: #000;
+            background-color: #d9d9d9;
+            padding: 5px;
+            border-left: 4px solid #000;
+        }
+        
+        .diferencia.error {
+            color: #000;
+            background-color: #bfbfbf;
+            padding: 5px;
+            border-left: 4px solid #000;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #333;
+            font-size: 9px;
+            color: #333;
+        }
+        
+        @media print {
+            body {
+                padding: 5mm;
+            }
+            
+            .no-print {
+                display: none;
+            }
+            
+            /* Asegurar que se imprima en B&N sin problemas */
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>CUENTAS SOBRES - KIM GAS</h1>
+        </div>
+        
+        <div class="info-line">
+            <div class="info-item">
+                <span class="info-label">Responsable:</span>
+                <span>
+                    {% if sobre.tipo == 'bodega' %}
+                        BODEGA
+                    {% else %}
+                        {{ sobre.trabajador.get_full_name|default:sobre.trabajador.username|upper }}
+                    {% endif %}
+                </span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">FECHA:</span>
+                <span>{{ sobre.fecha.day }} {{ sobre.fecha|date:"M"|upper }} {{ sobre.fecha.year }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Creado por:</span>
+                <span>{{ sobre.creado_por.get_full_name|default:sobre.creado_por.username|upper }}</span>
+            </div>
+        </div>
+        
+        <!-- TABLA BALONES -->
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="text-align: left; width: 120px;">TIPO BALÓN</th>
+                        {% for item in lineas_data %}
+                        <th style="width: 60px;">{{ item.linea.balon.peso_neto_gas }} KG</th>
+                        {% endfor %}
+                        <th style="width: 80px;">TOTAL</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Fila: Precio Unitario -->
+                    <tr>
+                        <td class="label">PRECIO UNITARIO</td>
+                        {% for item in lineas_data %}
+                        <td class="yellow">${{ item.linea.precio_venta_unitario|floatformat:0 }}</td>
+                        {% endfor %}
+                        <td class="total"></td>
+                    </tr>
+                    
+                    <!-- Fila: Cantidad Calculada -->
+                    <tr>
+                        <td class="label">CANT. CALCULADA (APP)</td>
+                        {% for item in lineas_data %}
+                        <td>{{ item.linea.cantidad_calculada }}</td>
+                        {% endfor %}
+                        <td class="total">{{ total_cantidad_calc }}</td>
+                    </tr>
+                    
+                    <!-- Fila: Cantidad Declarada -->
+                    <tr>
+                        <td class="label">CANT. DECLARADA (REAL)</td>
+                        {% for item in lineas_data %}
+                        <td 
+                            {% if item.linea.cantidad_declarada == item.linea.cantidad_calculada %}
+                                class="green"
+                            {% else %}
+                                class="light-yellow"
+                            {% endif %}
+                        >
+                            {{ item.linea.cantidad_declarada }}
+                        </td>
+                        {% endfor %}
+                        <td class="total">{{ total_cantidad_decl }}</td>
+                    </tr>
+                    
+                    <!-- Fila: Diferencia -->
+                    <tr>
+                        <td class="label">DIFERENCIA</td>
+                        {% for item in lineas_data %}
+                        <td 
+                            {% if item.diferencia == 0 %}
+                                class="green"
+                            {% elif item.diferencia != 0 %}
+                                class="red"
+                            {% endif %}
+                        >
+                            {{ item.diferencia }}
+                        </td>
+                        {% endfor %}
+                        <td class="total">{{ total_diferencia }}</td>
+                    </tr>
+                    
+                    <!-- Fila: Subtotal Venta -->
+                    <tr>
+                        <td class="label">SUBTOTAL VENTA</td>
+                        {% for item in lineas_data %}
+                        <td class="yellow">${{ item.subtotal|floatformat:0 }}</td>
+                        {% endfor %}
+                        <td class="total">${{ total_venta|floatformat:0 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- TABLA PAGOS -->
+        {% if pagos %}
+        <div class="table-container">
+            <table class="table-pagos">
+                <thead>
+                    <tr>
+                        <th style="text-align: left;">Tipo Pago</th>
+                        <th>Referencia</th>
+                        <th style="width: 100px;">Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pago in pagos %}
+                    <tr>
+                        <td style="text-align: left;">{{ pago.get_tipo_pago_display }}</td>
+                        <td>{{ pago.referencia|default:"-" }}</td>
+                        <td>${{ pago.monto|floatformat:0 }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr>
+                        <td class="total" colspan="2">TOTAL PAGOS:</td>
+                        <td class="total">${{ total_pagos|floatformat:0 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        
+        <!-- TABLA GASTOS -->
+        {% if gastos %}
+        <div class="table-container gastos">
+            <table class="table-gastos">
+                <thead>
+                    <tr>
+                        <th style="text-align: left;">Descripción de Gastos</th>
+                        <th style="width: 100px;">Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for gasto in gastos %}
+                    <tr>
+                        <td style="text-align: left;">{{ gasto.descripcion }}</td>
+                        <td>${{ gasto.monto|floatformat:0 }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr>
+                        <td class="total">TOTAL GASTOS:</td>
+                        <td class="total">${{ total_gastos|floatformat:0 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        
+        <!-- RESUMEN -->
+        <div class="summary">
+            <div class="summary-row">
+                <div class="summary-label">Total Ventas:</div>
+                <div class="summary-value">${{ total_venta|floatformat:0 }}</div>
+            </div>
+            <div class="summary-row">
+                <div class="summary-label">Total Pagos:</div>
+                <div class="summary-value">${{ total_pagos|floatformat:0 }}</div>
+            </div>
+            <div class="summary-row">
+                <div class="summary-label">Total Gastos:</div>
+                <div class="summary-value">${{ total_gastos|floatformat:0 }}</div>
+            </div>
+            <div class="summary-row">
+                <div class="summary-label">Total Contabilizado:</div>
+                <div class="summary-value">${{ total_contabilizado|floatformat:0 }}</div>
+            </div>
+            <div class="diferencia {% if diferencia == 0 %}perfect{% elif diferencia > 0 %}warning{% else %}error{% endif %}">
+                <strong>DIFERENCIA: ${{ diferencia|floatformat:0 }}</strong>
+                {% if diferencia == 0 %}
+                    ✓ Perfecto - Las ventas coinciden
+                {% elif diferencia > 0 %}
+                    ⚠ Falta dinero por entregar
+                {% else %}
+                    ✗ Se entregó más dinero del generado
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="footer">
+            {% if sobre.cerrado %}
+            Cerrado: {{ sobre.declarado_el|date:"d/m/Y H:i" }}
+            {% else %}
+            ABIERTO
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        // Auto-imprimir cuando carga la página
+        window.addEventListener('load', function() {
+            window.print();
+        });
+    </script>
+</body>
+</html>

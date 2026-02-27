@@ -168,7 +168,7 @@ class SobreDiarioAdmin(admin.ModelAdmin):
     )
     list_filter = ('fecha', 'tipo', 'trabajador')
     search_fields = ('trabajador__username', 'creado_por__username')
-    # date_hierarchy = 'fecha'
+    date_hierarchy = 'fecha'
     ordering = ('-fecha',)
     readonly_fields = ('total_declarado', 'total_diferencia')
 

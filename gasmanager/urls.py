@@ -69,6 +69,6 @@ urlpatterns = [
     path('sobres/lista/', views.lista_sobres_diarios, name='sobres_lista'),
     path('sobres/editar/', views.editar_sobre_diario, name='sobres_editar'),
     path('sobres/historial/', views.historial_sobres, name='sobres_historial'),
-    path('sobres/<int:sobre_id>/exportar/', views.exportar_sobre_excel, name='sobres_exportar'),
+    path('sobres/<int:sobre_id>/imprimir/', views.imprimir_sobre_diario, name='sobres_imprimir'),
     path('sobres/<int:sobre_id>/crear-nuevo/', views.crear_sobre_post_cierre, name='crear_sobre_post_cierre'),
 ]
