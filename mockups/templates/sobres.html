@@ -52,7 +52,7 @@
                             value="{{ sobre.fecha_correspondiente|date:'Y-m-d' }}"
                         >
                         <small class="form-text text-muted">
-                            Fecha a la que corresponden las ventas (por defecto: hoy)
+                            Fecha a la que corresponden las ventas
                         </small>
                     </div>
 
@@ -71,7 +71,7 @@
                             placeholder="Ej: 45230"
                         >
                         <small class="form-text text-muted">
-                            Lectura del odómetro al cerrar el sobre
+                            Lectura del odómetro al colocar bencina
                         </small>
                     </div>
                     {% endif %}
@@ -412,11 +412,11 @@
                             </button>
                             {% endif %}
                             
-                            <!-- Exportar a Excel -->
-                            <a href="{% url 'sobres_exportar' sobre.id %}" 
-                               class="btn btn-success btn-lg px-5"
+                            <!-- Imprimir -->
+                            <a href="{% url 'sobres_imprimir' sobre.id %}" 
+                               class="btn btn-primary btn-lg px-5"
                                target="_blank">
-                                <i class="bi bi-file-earmark-excel me-2"></i>Exportar Excel
+                                <i class="bi bi-printer me-2"></i>Imprimir
                             </a>
                             
                             <!-- Volver a Lista de Sobres -->

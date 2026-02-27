@@ -1981,7 +1981,7 @@ def editar_sobre_diario(request):
     
     # ⏰ Determinar si mostrar alerta de "hora recomendada para cerrar"
     # (ej: después de las 20:00 = 8 PM)
-    hora_recomendada_cierre = 20  # 8 PM
+    hora_recomendada_cierre = 18  # 
     mostrar_alerta_cierre = hora_actual >= hora_recomendada_cierre and not sobre.cerrado
     
     # Determinar si es bodega (para el template)
@@ -2178,6 +2178,65 @@ def historial_sobres(request):
     }
 
     return render(request, 'historial_sobres.html', context)
+
+@login_required
+def imprimir_sobre_diario(request, sobre_id):
+    """
+    Genera una página HTML optimizada para impresión del sobre diario.
+    Formato compacto similar a Excel.
+    """
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin', 'camionero']:
+        messages.error(request, "No tienes permiso para imprimir sobres.")
+        return redirect('index')
+
+    sobre = get_object_or_404(SobreDiario, id=sobre_id)
+    lineas = sobre.lineas.all().order_by('balon__peso_neto_gas')
+    pagos = sobre.pagos.all()
+    gastos = sobre.gastos.all()
+
+    # Calcular totales y subtotales por línea
+    lineas_data = []
+    total_venta = 0
+    total_cantidad_calc = 0
+    total_cantidad_decl = 0
+    total_diferencia = 0
+    
+    for linea in lineas:
+        subtotal = linea.cantidad_declarada * linea.precio_venta_unitario
+        diferencia = linea.cantidad_declarada - linea.cantidad_calculada
+        
+        lineas_data.append({
+            'linea': linea,
+            'subtotal': subtotal,
+            'diferencia': diferencia
+        })
+        
+        total_venta += subtotal
+        total_cantidad_calc += linea.cantidad_calculada
+        total_cantidad_decl += linea.cantidad_declarada
+        total_diferencia += diferencia
+    
+    total_pagos = sum(pago.monto for pago in pagos)
+    total_gastos = sum(gasto.monto for gasto in gastos)
+    total_contabilizado = total_pagos + total_gastos
+    diferencia = total_venta - total_contabilizado
+
+    context = {
+        'sobre': sobre,
+        'lineas_data': lineas_data,
+        'pagos': pagos,
+        'gastos': gastos,
+        'total_venta': total_venta,
+        'total_pagos': total_pagos,
+        'total_gastos': total_gastos,
+        'total_contabilizado': total_contabilizado,
+        'diferencia': diferencia,
+        'total_cantidad_calc': total_cantidad_calc,
+        'total_cantidad_decl': total_cantidad_decl,
+        'total_diferencia': total_diferencia,
+    }
+
+    return render(request, 'imprimir_sobre.html', context)
 
 @login_required
 def exportar_sobre_excel(request, sobre_id):
