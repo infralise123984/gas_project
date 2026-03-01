@@ -401,10 +401,11 @@ def historial_precios(request):
 @login_required
 def gestionar_balones_lista(request):
     """
-    Lista todos los tipos de balones con opción de crear, editar y eliminar.
-    Solo para admin y jefe.
+    Lista todos los tipos de balones con opción de crear y editar.
+    Admin y jefe pueden además eliminar.
+    Acceso: admin, jefe, bodeguero.
     """
-    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para gestionar balones.")
+    resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para gestionar balones.")
     if resp:
         return resp
     
@@ -420,7 +421,8 @@ def gestionar_balones_lista(request):
     
     context = {
         'balones': balones,
-        'title': 'Gestión de Balones'
+        'title': 'Gestión de Balones',
+        'puede_eliminar': request.user.rol in ['jefe', 'admin']
     }
     
     return render(request, 'gestionar_balones.html', context)
@@ -430,9 +432,9 @@ def gestionar_balones_lista(request):
 def gestionar_balones_crear(request):
     """
     Crea un nuevo tipo de balón desde la web.
-    Solo para admin y jefe.
+    Acceso: admin, jefe, bodeguero.
     """
-    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para crear balones.")
+    resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para crear balones.")
     if resp:
         return resp
     
@@ -465,9 +467,9 @@ def gestionar_balones_crear(request):
 def gestionar_balones_editar(request, balon_id):
     """
     Edita un tipo de balón existente desde la web.
-    Solo para admin y jefe.
+    Acceso: admin, jefe, bodeguero.
     """
-    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para editar balones.")
+    resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para editar balones.")
     if resp:
         return resp
     

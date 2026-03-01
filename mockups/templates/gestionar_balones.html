@@ -85,9 +85,11 @@
                                             <a href="{% url 'balones_editar' balon.id %}" class="btn btn-outline-primary" title="Editar">
                                                 <i class="bi bi-pencil-square"></i> Editar
                                             </a>
+                                            {% if puede_eliminar %}
                                             <a href="{% url 'balones_eliminar' balon.id %}" class="btn btn-outline-danger" title="Eliminar" onclick="return confirm('¿Estás seguro de que deseas eliminar este balón?\n\nSi tiene ventas registradas, no podrá ser eliminado.');">
                                                 <i class="bi bi-trash"></i> Eliminar
                                             </a>
+                                            {% endif %}
                                         </div>
                                     </td>
                                 </tr>
@@ -116,7 +118,11 @@
                 </p>
                 <p>
                     <i class="bi bi-shield-lock me-1"></i>
-                    Solo administradores y jefes pueden gestionar balones.
+                    {% if puede_eliminar %}
+                        Administradores y jefes pueden crear, editar y eliminar balones.
+                    {% else %}
+                        Bodegueros pueden crear y editar balones (solo jefe/admin pueden eliminar).
+                    {% endif %}
                 </p>
             </div>
 
