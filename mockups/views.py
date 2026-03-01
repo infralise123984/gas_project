@@ -47,8 +47,14 @@ from .models import (
     LineaSobre, 
     SobreDiario,
     HistorialCambioPedido,
-    HistorialPrecioBalon
+    HistorialPrecioBalon,
+    AuditoriaAccion
 )
+
+# Logging de seguridad y auditoría
+import logging
+security_logger = logging.getLogger('security')
+audit_logger = logging.getLogger('audit')
 
 
 # ──────────────────────────────────────────────────────────────
@@ -130,9 +136,22 @@ def require_roles(request, roles, redirect_to="index", message="No tienes permis
     Middleware a nivel de vista. 
     Redirige si el usuario no tiene uno de los roles especificados en la lista 'roles'.
     Retorna None si tiene permiso.
+    Registra intentos de acceso denegado en auditoría.
     """
     if request.user.rol not in roles:
         messages.error(request, message)
+        
+        # Auditoría: Acceso denegado
+        AuditoriaAccion.registrar(
+            request=request,
+            tipo='PERM_DENIED',
+            descripcion=f'Acceso denegado a {request.path}. Rol requerido: {roles}. Rol actual: {request.user.rol}'
+        )
+        security_logger.warning(
+            f"PERM_DENIED | User: {request.user.username} | Path: {request.path} | "
+            f"Required: {roles} | Has: {request.user.rol}"
+        )
+        
         return redirect(redirect_to)
     return None
 
@@ -166,22 +185,58 @@ def login_view(request):
         if request.user.is_authenticated:
             return redirect("index")
         
-        username = request.POST["username"]
-        password = request.POST["password"]
+        username = request.POST.get("username", "")
+        password = request.POST.get("password", "")
         user = authenticate(request, username=username, password=password)
+        
+        # Obtener IP para logging
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
 
         if user is not None:
             login(request, user)
             messages.success(request, f"¡Bienvenido, {user.get_full_name() or user.username}!")
+            
+            # Auditoría: Login exitoso
+            AuditoriaAccion.registrar(
+                request=request,
+                tipo='LOGIN_OK',
+                descripcion=f'Inicio de sesión exitoso para {username}',
+                objeto=user
+            )
+            audit_logger.info(f"LOGIN_OK | User: {username} | IP: {ip}")
+            
             return redirect("index")
         else:
             messages.error(request, "Usuario o contraseña incorrectos")
+            
+            # Auditoría: Login fallido
+            AuditoriaAccion.registrar(
+                request=request,
+                tipo='LOGIN_FAIL',
+                descripcion=f'Intento de login fallido para usuario: {username}'
+            )
+            security_logger.warning(f"LOGIN_FAIL | User: {username} | IP: {ip}")
 
     return render(request, "login.html")
 
 
 def logout_view(request):
     """Cierra la sesión del usuario."""
+    # Guardar datos antes del logout para auditoría
+    username = request.user.username if request.user.is_authenticated else 'Anónimo'
+    user_obj = request.user if request.user.is_authenticated else None
+    
+    # Auditoría: Logout
+    if user_obj:
+        AuditoriaAccion.registrar(
+            request=request,
+            tipo='LOGOUT',
+            descripcion=f'Cierre de sesión para {username}',
+            objeto=user_obj
+        )
+        audit_logger.info(f"LOGOUT | User: {username}")
+    
     logout(request)
     messages.success(request, "Has cerrado sesión correctamente")
     return redirect("auth_login")
@@ -232,6 +287,22 @@ def crear_usuario(request):
             )
             user.is_active = True
             user.save()
+            
+            # Auditoría: Usuario creado
+            AuditoriaAccion.registrar(
+                request=request,
+                tipo='USER_CREATE',
+                descripcion=f'Usuario creado: {username} con rol {rol}',
+                objeto=user,
+                datos_nuevos={
+                    'username': username,
+                    'nombre': f'{first_name} {last_name}',
+                    'rol': rol,
+                    'telefono': telefono
+                }
+            )
+            audit_logger.info(f"USER_CREATE | New: {username} | By: {request.user.username}")
+            
             messages.success(request, f"Usuario '{user.get_full_name() or user.username}' creado correctamente con rol {user.get_rol_display()}.")
             return redirect("reportes_ventas")
 
@@ -298,6 +369,13 @@ def precios_balones(request):
                 # ────────────────────────────────────────────────
                 # GUARDAR HISTORIAL ANTES de aplicar los cambios
                 # ────────────────────────────────────────────────
+                datos_anteriores = {
+                    'precio_compra': int(balon.precio_compra),
+                    'precio_local': int(balon.precio_local),
+                    'precio_domicilio': int(balon.precio_domicilio),
+                    'activo': balon.activo
+                }
+                
                 HistorialPrecioBalon.objects.create(
                     nombre_balon       = balon.nombre,                # snapshot actual (antes del cambio)
                     precio_compra_anterior     = balon.precio_compra,
@@ -315,6 +393,22 @@ def precios_balones(request):
                 balon.activo            = nuevo_activo
                 balon.actualizado_por   = request.user
                 balon.save()
+                
+                # Auditoría: Precio actualizado
+                AuditoriaAccion.registrar(
+                    request=request,
+                    tipo='PRECIO_UPDATE',
+                    descripcion=f'Precio actualizado para {balon.nombre}',
+                    objeto=balon,
+                    datos_anteriores=datos_anteriores,
+                    datos_nuevos={
+                        'precio_compra': nuevo_compra,
+                        'precio_local': nuevo_local,
+                        'precio_domicilio': nuevo_domicilio,
+                        'activo': nuevo_activo
+                    }
+                )
+                audit_logger.info(f"PRECIO_UPDATE | {balon.nombre} | By: {request.user.username}")
 
                 cambios_realizados = True
 
@@ -686,6 +780,24 @@ def transaccional_pedido(request):
                 fecha_cambio=timezone.now(),
             )
             pedido.calcular_totales()
+            
+            # Auditoría: Pedido creado
+            AuditoriaAccion.registrar(
+                request=request,
+                tipo='PEDIDO_CREATE',
+                descripcion=f'Pedido #{pedido.id} creado - {pedido.get_origen_display()}',
+                objeto=pedido,
+                datos_nuevos={
+                    'cliente': pedido.cliente,
+                    'direccion': pedido.direccion,
+                    'origen': pedido.origen,
+                    'estado': pedido.estado,
+                    'total': str(pedido.total_venta),
+                    'detalles': detalles_guardados
+                }
+            )
+            audit_logger.info(f"PEDIDO_CREATE | #{pedido.id} | By: {request.user.username}")
+            
             messages.success(request, f"¡Pedido #{pedido.id} registrado correctamente con {detalles_guardados} producto(s)!")
             return redirect("index")
         else:
@@ -810,6 +922,22 @@ def editar_pedido(request, pedido_id):
                     usuario=request.user,
                     descripcion="; ".join(cambios)
                 )
+                
+                # Auditoría: Pedido modificado
+                AuditoriaAccion.registrar(
+                    request=request,
+                    tipo='PEDIDO_UPDATE',
+                    descripcion=f'Pedido #{pedido.id} modificado: {"; ".join(cambios)}',
+                    objeto=pedido,
+                    datos_anteriores=old_data,
+                    datos_nuevos={
+                        'metodo_pago': pedido.metodo_pago,
+                        'sector': pedido.sector,
+                        'direccion': pedido.direccion_entrega,
+                        'estado': pedido.estado
+                    }
+                )
+                audit_logger.info(f"PEDIDO_UPDATE | #{pedido.id} | By: {request.user.username} | {'; '.join(cambios)}")
 
             # Recalcular totales
             pedido.calcular_totales()
