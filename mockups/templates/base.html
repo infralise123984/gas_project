@@ -185,6 +185,12 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'balones_lista' %}active{% endif %}"
+                            href="{% url 'balones_lista' %}">
+                            <i class="bi bi-droplet-half me-1"></i>Gestionar Balones
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'pedidos_consulta' %}active{% endif %}"
                             href="{% url 'pedidos_consulta' %}">
                             <i class="bi bi-search me-1"></i>Consultar Pedidos
