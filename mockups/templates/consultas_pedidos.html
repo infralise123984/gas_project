@@ -18,45 +18,16 @@
             <i class="bi bi-clipboard-data me-2"></i>Consultar Pedidos
         </h2>
         <div class="d-flex gap-2 flex-wrap">
-            <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-primary">
+            <a href="{% url 'reportes_ventas' %}" class="btn btn-outline-primary">
                 <i class="bi bi-graph-up me-2"></i>Reportes y Gráficos
             </a>
-            <a href="{% url 'precios_balones' %}" class="btn btn-outline-warning">
+            <a href="{% url 'precios_lista' %}" class="btn btn-outline-warning">
                 <i class="bi bi-tags me-2"></i>Precios
             </a>
         </div>
     </div>
 
     <!-- Tarjetas de estadísticas rápidas -->
-    <div class="row g-3 mb-4">
-        <div class="col-md-4 col-sm-6">
-            <div class="card border-primary shadow-sm text-center">
-                <div class="card-body">
-                    <i class="bi bi-box-seam fs-1 text-primary mb-2 d-block"></i>
-                    <h3 class="fw-bold mb-1">{{ estadisticas.total_pedidos }}</h3>
-                    <small class="text-muted">Pedidos encontrados</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 col-sm-6">
-            <div class="card border-success shadow-sm text-center">
-                <div class="card-body">
-                    <i class="bi bi-cash-stack fs-1 text-success mb-2 d-block"></i>
-                    <h3 class="fw-bold mb-1">${{ estadisticas.total_ventas|floatformat:0|intcomma }}</h3>
-                    <small class="text-muted">Monto total ventas</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 col-sm-6">
-            <div class="card border-info shadow-sm text-center">
-                <div class="card-body">
-                    <i class="bi bi-graph-up-arrow fs-1 text-info mb-2 d-block"></i>
-                    <h3 class="fw-bold mb-1">${{ estadisticas.total_ganancias|floatformat:0|intcomma }}</h3>
-                    <small class="text-muted">Ganancia estimada</small>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Filtros -->
     <div class="card shadow-sm mb-4 border-0">
@@ -86,7 +57,7 @@
                     <button type="submit" class="btn btn-primary btn-lg flex-fill">
                         <i class="bi bi-search"></i> Filtrar
                     </button>
-                    <a href="{% url 'consultas_pedidos' %}" class="btn btn-outline-secondary btn-lg">
+                    <a href="{% url 'pedidos_consulta' %}" class="btn btn-outline-secondary btn-lg">
                         Limpiar
                     </a>
                 </div>
@@ -166,7 +137,7 @@
                                 {% endif %}
                             </td>
                             <td class="text-end">
-                                <a href="{% url 'detalle_pedido' pedido.id %}" class="btn btn-sm btn-outline-primary">
+                                <a href="{% url 'pedidos_detalle' pedido.id %}" class="btn btn-sm btn-outline-primary">
                                     <i class="bi bi-eye"></i> Ver
                                 </a>
                             </td>

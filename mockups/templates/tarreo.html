@@ -1,0 +1,284 @@
+{% extends 'base.html' %}
+{% block title %}Venta Tarreo - GasFácil{% endblock %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid px-3 py-4 bg-light" style="max-width: 540px; margin: 0 auto;">
+
+    <!-- Total siempre visible (sticky) -->
+    <div class="text-center mb-4 py-3 bg-white rounded-3 shadow sticky-top" style="top: 56px; z-index: 1000;">
+        <h2 class="fw-bold text-success mb-1" id="totalDisplay">$0</h2>
+        <small class="text-muted">Total venta en curso</small>
+    </div>
+
+    <h4 class="text-center fw-bold text-primary mb-4">
+        Venta Rápida Tarreo
+    </h4>
+
+    {% if messages %}
+    <div class="mb-3">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" id="ventaForm">
+        {% csrf_token %}
+
+        <!-- Método de pago -->
+        <div class="mb-5">
+            <label class="form-label fw-bold text-center d-block fs-5 mb-3">
+                ¿Cómo pagó el cliente?
+            </label>
+            <div class="d-grid gap-2">
+                <button type="button" class="btn btn-outline-primary btn-lg pago-btn py-3 shadow-sm" data-value="efectivo">
+                    <i class="bi bi-cash-stack fs-4 me-2"></i>Efectivo
+                </button>
+                <button type="button" class="btn btn-outline-primary btn-lg pago-btn py-3 shadow-sm" data-value="tarjeta">
+                    <i class="bi bi-credit-card fs-4 me-2"></i>Tarjeta
+                </button>
+            </div>
+            <input type="hidden" name="metodo_pago" id="metodo_pago" required>
+        </div>
+
+        <!-- Balones -->
+        <h5 class="text-center fw-bold mb-4">¿Qué balones lleva?</h5>
+        <div class="row g-3" id="balonesContainer">
+            {% for balon in balones %}
+            <div class="">
+                <div class="balon-card text-center p-3 border rounded shadow-sm bg-white position-relative"
+                     data-id="{{ balon.id }}"
+                     data-precio="{{ balon.precio_domicilio|stringformat:'d' }}">
+
+                    <div class="fs-5 fw-bold mb-1">
+                        {{ balon.nombre }}
+                        {% if balon.tipo_gas == 'catalitico' %}
+                            <span class="badge bg-warning text-dark ms-1">CAT</span>
+                        {% elif balon.tipo_gas == 'aluminio' %}
+                            <span class="badge bg-secondary ms-1">ALU</span>
+                        {% else %}
+                            <span class="badge bg-info text-dark ms-1">NORMAL</span>
+                        {% endif %}
+                    </div>
+                    <div class="small text-success fw-bold mb-2 fs-5">
+                        ${{ balon.precio_domicilio|floatformat:0|intcomma }}
+                    </div>
+
+                    <!-- Contador (estructura original exacta) -->
+                    <div class="contador d-none d-flex justify-content-center align-items-center gap-3 mb-2">
+                        <button type="button" class="btn btn-danger btn-sm rounded-circle minus" style="width:50px; height:50px; font-size:1.5rem;">
+                            <i class="bi bi-dash-lg"></i>
+                        </button>
+                        <span class="fs-4 fw-bold qty">0</span>
+                        <button type="button" class="btn btn-success btn-sm rounded-circle plus" style="width:50px; height:50px; font-size:1.5rem;">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+
+                    <!-- Botón +1 rápido (original) -->
+                    <button type="button" class="btn btn-outline-secondary w-100 add-one py-2">
+                        +1 {{ balon.nombre }}
+                    </button>
+
+                    <!-- Indicador visual fuerte cuando está seleccionado -->
+                    <div class="selected-indicator position-absolute top-0 end-0 m-2 d-none">
+                        <i class="bi bi-check-circle-fill text-success fs-4 shadow"></i>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-12 text-center text-muted py-5">
+                <i class="bi bi-exclamation-circle fs-1 d-block mb-2"></i>
+                No hay balones disponibles para venta
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Dirección opcional (mantengo tu campo) -->
+        <div class="my-4">
+            <label class="form-label fw-bold">Dirección o referencia (opcional)</label>
+            <textarea name="direccion_entrega" class="form-control" rows="2"
+                      placeholder="Ej: casa azul esquina Los Aromos (deja en blanco si es venta directa)">
+            </textarea>
+            <small class="form-text text-muted d-block mt-1">
+                Deja vacío si la entrega es en el mismo lugar (venta en camión).
+            </small>
+        </div>
+
+        <!-- Botón guardar (con sombra y fijo abajo para mejor uso móvil) -->
+        <div class="fixed-bottom bg-white p-3 shadow-lg border-top" style="z-index: 999;">
+            <div class="container-fluid" style="max-width: 540px; margin: 0 auto;">
+                <button type="submit" class="btn btn-success btn-lg w-100 py-4 fs-4 shadow">
+                    <i class="bi bi-check-circle-fill me-2"></i>Guardar Venta
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+// ──────────────────────────────────────────────────────────────
+// Tu JavaScript ORIGINAL sin ningún cambio en la lógica
+// Solo agregamos el resaltado visual y la confirmación al final
+// ──────────────────────────────────────────────────────────────
+let cantidades = {}; // id_balón → cantidad
+
+function actualizarTotal() {
+    let total = 0;
+    
+    document.querySelectorAll('.balon-card').forEach(card => {
+        const id = card.dataset.id;
+        const precioStr = card.dataset.precio;
+        
+        const precioLimpio = precioStr.replace(/[^0-9.]/g, '');
+        const precio = Number(precioLimpio) || 0;
+        
+        const qty = cantidades[id] || 0;
+        total += qty * precio;
+
+        // ──── Mejora visual: resaltar cuando qty > 0 ────
+        const indicator = card.querySelector('.selected-indicator');
+        if (qty > 0) {
+            card.classList.add('border-success', 'border-3', 'shadow');
+            card.classList.remove('border', 'shadow-sm');
+            if (indicator) indicator.classList.remove('d-none');
+        } else {
+            card.classList.remove('border-success', 'border-3', 'shadow');
+            card.classList.add('border', 'shadow-sm');
+            if (indicator) indicator.classList.add('d-none');
+        }
+
+        // Crear/actualizar input hidden (tu lógica original)
+        let input = document.querySelector(`input[name="cantidad_${id}"]`);
+        if (qty > 0) {
+            if (!input) {
+                input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = `cantidad_${id}`;
+                document.getElementById('ventaForm').appendChild(input);
+            }
+            input.value = qty;
+        } else if (input) {
+            input.remove();
+        }
+    });
+    
+    const totalRedondeado = Math.round(total);
+    const totalFormateado = totalRedondeado.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    document.getElementById('totalDisplay').textContent = `$${totalFormateado}`;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // DEBUG: Ver todos los precios al cargar
+    console.log('=== PRECIOS AL CARGAR ===');
+    document.querySelectorAll('.balon-card').forEach(card => {
+        console.log('Balón ID:', card.dataset.id, 'Precio:', card.dataset.precio);
+    });
+    
+    // Selección de método de pago
+    document.querySelectorAll('.pago-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.pago-btn').forEach(b => b.classList.remove('btn-primary', 'active'));
+            btn.classList.add('btn-primary', 'active');
+            document.getElementById('metodo_pago').value = btn.dataset.value;
+        });
+    });
+
+    // Cada tarjeta de balón
+    document.querySelectorAll('.balon-card').forEach(card => {
+        const id = card.dataset.id;
+        const qtySpan = card.querySelector('.qty');
+        const contador = card.querySelector('.contador');
+        const addBtn = card.querySelector('.add-one');
+
+        // +1 rápido
+        addBtn.addEventListener('click', () => {
+            cantidades[id] = (cantidades[id] || 0) + 1;
+            qtySpan.textContent = cantidades[id];
+            contador.classList.remove('d-none');
+            actualizarTotal();
+        });
+
+        // Botón +
+        card.querySelector('.plus')?.addEventListener('click', () => {
+            cantidades[id] = (cantidades[id] || 0) + 1;
+            qtySpan.textContent = cantidades[id];
+            actualizarTotal();
+        });
+
+        // Botón −
+        card.querySelector('.minus')?.addEventListener('click', () => {
+            cantidades[id] = Math.max(0, (cantidades[id] || 0) - 1);
+            qtySpan.textContent = cantidades[id];
+            if (cantidades[id] === 0) {
+                contador.classList.add('d-none');
+            }
+            actualizarTotal();
+        });
+    });
+
+    // Validación + confirmación mejorada (agregado aquí)
+    document.getElementById('ventaForm').addEventListener('submit', e => {
+        const metodo = document.getElementById('metodo_pago').value;
+        if (!metodo) {
+            e.preventDefault();
+            alert('Selecciona cómo pagó el cliente');
+            return;
+        }
+
+        let tieneProductos = false;
+        let resumen = 'Productos:\n';
+        for (let [id, qty] of Object.entries(cantidades)) {
+            if (qty > 0) {
+                tieneProductos = true;
+                const nombre = document.querySelector(`.balon-card[data-id="${id}"] .fs-5.fw-bold`).textContent.trim();
+                resumen += `  • ${qty} × ${nombre}\n`;
+            }
+        }
+
+        if (!tieneProductos) {
+            e.preventDefault();
+            alert('Debe agregar al menos un balón');
+            return;
+        }
+
+        // Confirmación con resumen
+        const confirmMsg = 
+            `¿Guardar esta venta?\n\n` +
+            `Método de pago: ${document.querySelector('.pago-btn.active')?.textContent.trim() || '—'}\n` +
+            `${resumen}\n` +
+            `Total: ${document.getElementById('totalDisplay').textContent}`;
+
+        if (!confirm(confirmMsg)) {
+            e.preventDefault();
+        }
+    });
+});
+</script>
+
+<style>
+    .balon-card {
+        transition: all 0.25s ease;
+        cursor: pointer;
+    }
+    .contador .btn {
+        font-size: 1.6rem;
+        line-height: 1;
+    }
+    .add-one {
+        font-size: 1.1rem;
+    }
+    .sticky-top {
+        background: rgba(255,255,255,0.97);
+        backdrop-filter: blur(6px);
+    }
+    .selected-indicator {
+        transition: all 0.2s ease;
+    }
+</style>
+
+{% endblock %}

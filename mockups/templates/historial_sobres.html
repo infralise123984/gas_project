@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Sobres Diarios - GasFácil{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5 px-3">
+
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
+        <h2 class="text-primary fw-bold mb-0">
+            <i class="bi bi-history me-2"></i>Historial de Sobres
+        </h2>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'sobres_lista' %}" class="btn btn-primary">
+                <i class="bi bi-arrow-left me-2"></i>Hoy
+            </a>
+            <a href="{% url 'reportes_ventas' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-graph-up me-2"></i>Reportes
+            </a>
+        </div>
+    </div>
+
+    <!-- Selector de fecha -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body p-4">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-5 col-lg-4">
+                    <label class="form-label fw-bold">
+                        <i class="bi bi-calendar-event me-1"></i>Fecha de los sobres
+                    </label>
+                    <input type="date" name="fecha" class="form-control form-control-lg"
+                           value="{{ fecha_seleccionada|default:hoy|date:'Y-m-d' }}">
+                </div>
+                <div class="col-md-4 col-lg-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-lg flex-fill">
+                        <i class="bi bi-search"></i> Ver
+                    </button>
+                    <a href="{% url 'sobres_historial' %}" class="btn btn-outline-secondary btn-lg">
+                        <i class="bi bi-arrow-counterclockwise"></i> Hoy
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <h4 class="text-center mb-4 fw-bold">
+        Sobres del día <span class="text-primary">{{ fecha_seleccionada|default:hoy|date|title }}</span>
+    </h4>
+
+    {% if messages %}
+    <div class="mb-4">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- SOBRES DE BODEGA -->
+    <div class="mb-5">
+        <h5 class="fw-bold text-primary mb-3">
+            <i class="bi bi-shop-window me-2"></i>Bodega (ventas locales)
+        </h5>
+        {% for sobre in sobres_bodega %}
+        <div class="card mb-3 shadow-sm {% if sobre.cerrado %}border-success{% else %}border-warning{% endif %}">
+            <div class="card-body d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+                <div>
+                    <h5 class="mb-1">
+                        Sobre Bodega {{ sobre.fecha_correspondiente|date:"d/m/Y" }}
+                        {% if sobre.cerrado %}
+                        <span class="badge bg-success ms-2">CERRADO</span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark ms-2">ABIERTO</span>
+                        {% endif %}
+                    </h5>
+                    <small class="text-muted">
+                        <i class="bi bi-person me-1"></i>{{ sobre.creado_por.get_full_name|default:sobre.creado_por.username }}
+                        {% if sobre.declarado_el %}<i class="bi bi-clock ms-2 me-1"></i>{{ sobre.declarado_el|date:"H:i" }}{% endif %}
+                    </small>
+                </div>
+                <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}"
+                   class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-pencil-square me-2"></i>Ver / Editar
+                </a>
+            </div>
+        </div>
+        {% empty %}
+        <div class="alert alert-light text-center py-4">
+            <i class="bi bi-inbox me-2"></i>No hay sobres de bodega para esta fecha.
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- SOBRES POR CAMIONERO -->
+    <div class="mb-5">
+        <h5 class="fw-bold text-primary mb-3">
+            <i class="bi bi-truck me-2"></i>Camioneros
+        </h5>
+        {% for camionero, sobres in sobres_por_camionero.items %}
+        <div class="mb-4">
+            <h6 class="fw-semibold mb-3 text-dark ps-2 border-start border-primary border-3">
+                {{ camionero.get_full_name|default:camionero.username }}
+            </h6>
+            {% for sobre in sobres %}
+            <div class="card mb-2 shadow-sm {% if sobre.cerrado %}border-success{% else %}border-warning{% endif %}">
+                <div class="card-body d-flex justify-content-between align-items-center py-2 flex-wrap gap-2">
+                    <div>
+                        <strong>Sobre {{ sobre.fecha_correspondiente|date:"d/m/Y" }}</strong>
+                        {% if sobre.cerrado %}
+                        <span class="badge bg-success ms-2">CERRADO</span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark ms-2">ABIERTO</span>
+                        {% endif %}
+                    </div>
+                    <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}"
+                       class="btn btn-primary btn-sm px-4">
+                        <i class="bi bi-pencil-square me-2"></i>Ver / Editar
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% empty %}
+        <div class="alert alert-light text-center py-4">
+            <i class="bi bi-inbox me-2"></i>No hay camioneros con sobres en esta fecha.
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- BOTONES PARA CREAR NUEVO SOBRE (acceso opcional) -->
+    <div class="text-center mt-5 pt-4 border-top">
+        <h5 class="mb-4 text-muted fw-semibold">
+            <i class="bi bi-plus-circle me-2"></i>¿Necesitas registrar un sobre nuevo?
+        </h5>
+
+        <div class="d-flex flex-wrap justify-content-center gap-3">
+            <a href="{% url 'sobres_lista' %}"
+               class="btn btn-success btn-lg px-5 py-3">
+                <i class="bi bi-arrow-right me-2"></i>Ir a Sobres de Hoy
+            </a>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

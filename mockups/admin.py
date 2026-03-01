@@ -19,6 +19,7 @@ class TipoBalonAdmin(admin.ModelAdmin):
     list_display = (
         'nombre',
         'peso_neto_gas',
+        'tipo_gas',
         'precio_compra',
         'precio_local',
         'precio_domicilio',
@@ -26,36 +27,61 @@ class TipoBalonAdmin(admin.ModelAdmin):
         'actualizado_el',
         'actualizado_por'
     )
-    list_filter = ('activo',)
+    list_filter = ('activo', 'tipo_gas')
     search_fields = ('nombre', 'peso_neto_gas')
     list_editable = ('precio_compra', 'precio_local', 'precio_domicilio', 'activo')
     readonly_fields = ('actualizado_el', 'actualizado_por')
-    ordering = ('peso_neto_gas',)
+    ordering = ('-peso_neto_gas', 'tipo_gas')
 
 
 @admin.register(HistorialPrecioBalon)
 class HistorialPrecioBalonAdmin(admin.ModelAdmin):
     list_display = (
-        'tipo_balón',
+        'nombre_balon',                    # ← snapshot del nombre
         'precio_compra_anterior',
         'precio_local_anterior',
         'precio_domicilio_anterior',
         'activo_anterior',
         'fecha_cambio',
-        'actualizado_por'
+        'actualizado_por',
     )
-    list_filter = ('tipo_balón', 'fecha_cambio')
-    search_fields = ('tipo_balón__nombre',)
-    readonly_fields = ('fecha_cambio',)
+    list_filter = (
+        'fecha_cambio',
+        # 'activo_anterior',  # opcional, si quieres filtrar por estado disponible
+    )
+    search_fields = (
+        'nombre_balon',                    # ← buscamos por el nombre snapshot
+        'actualizado_por__username',
+        'actualizado_por__first_name',
+        'actualizado_por__last_name',
+    )
+    readonly_fields = (
+        'nombre_balon',
+        'precio_compra_anterior',
+        'precio_local_anterior',
+        'precio_domicilio_anterior',
+        'activo_anterior',
+        'fecha_cambio',
+        'actualizado_por',
+    )
     ordering = ('-fecha_cambio',)
-
-
+    
+    # No permitir crear/editar/borrar manualmente (es historial automático)
+    def has_add_permission(self, request):
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        return False
+    
 class DetallePedidoInline(admin.TabularInline):
     model = DetallePedido
     extra = 1
     fields = ('balon', 'cantidad', 'precio_venta_unitario', 'precio_compra_unitario', 'subtotal', 'ganancia')
     readonly_fields = ('subtotal', 'ganancia')
-    ordering = ('balon__peso_neto_gas',)
+    ordering = ('-balon__peso_neto_gas', 'balon__tipo_gas')
 
 
 class HistorialEstadoPedidoInline(admin.TabularInline):
@@ -143,7 +169,7 @@ class SobreDiarioAdmin(admin.ModelAdmin):
     )
     list_filter = ('fecha', 'tipo', 'trabajador')
     search_fields = ('trabajador__username', 'creado_por__username')
-    date_hierarchy = 'fecha'
+    # date_hierarchy = 'fecha'
     ordering = ('-fecha',)
     readonly_fields = ('total_declarado', 'total_diferencia')
 

@@ -6,9 +6,14 @@
 {% block content %}
 <div class="container mt-4 mb-5 px-3">
 
-    <h2 class="text-primary fw-bold text-center mb-4">
-        <i class="bi bi-journal-text me-2"></i>Sobres Diarios <b>(WIP)</b>
-    </h2>
+    <div class="d-flex justify-content-between align-items-center mb-4 gap-3 flex-wrap">
+        <h2 class="text-primary fw-bold mb-0">
+            <i class="bi bi-journal-text me-2"></i>Sobres Diarios
+        </h2>
+        <a href="{% url 'sobres_historial' %}" class="btn btn-outline-info btn-sm">
+            <i class="bi bi-history me-2"></i>Ver Historial
+        </a>
+    </div>
 
     <p class="text-center text-muted mb-4">
         Selecciona bodega o un camionero para ver/editar el sobre de hoy ({{ hoy|date:"d/m/Y" }})
@@ -30,7 +35,7 @@
             <h5 class="mb-0">Opciones de cierre del día</h5>
         </div>
         <div class="list-group list-group-flush">
-            <a href="{% url 'editar_sobre_diario' %}?bodega=1" 
+            <a href="{% url 'sobres_editar' %}?bodega=1" 
                class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-4">
                 <div>
                     <h5 class="mb-1 fw-bold"><i class="bi bi-shop-window me-2"></i>Bodega (ventas locales)</h5>
@@ -40,7 +45,7 @@
             </a>
 
             {% for camionero in camioneros %}
-            <a href="{% url 'editar_sobre_diario' %}?camionero={{ camionero.id }}" 
+            <a href="{% url 'sobres_editar' %}?camionero={{ camionero.id }}" 
                class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-4">
                 <div>
                     <h5 class="mb-1 fw-bold">
@@ -61,7 +66,7 @@
     </div>
 
     <div class="text-center mt-5">
-        <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-secondary btn-lg px-5">
+        <a href="{% url 'reportes_ventas' %}" class="btn btn-outline-secondary btn-lg px-5">
             <i class="bi bi-arrow-left me-2"></i>Volver a Reportes
         </a>
     </div>
