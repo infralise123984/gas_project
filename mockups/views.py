@@ -17,7 +17,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 
 # Modelos, consultas y paginación
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, F, Q, Sum, Case, When, Value, IntegerField
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse, JsonResponse
@@ -248,7 +248,15 @@ def precios_balones(request):
     if resp:
         return resp
 
-    balones = TipoBalon.objects.all().order_by("peso_neto_gas")
+    balones = TipoBalon.objects.all().annotate(
+        tipo_orden=Case(
+            When(tipo_gas='normal', then=Value(0)),
+            When(tipo_gas='catalitico', then=Value(1)),
+            When(tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by("tipo_orden", "-peso_neto_gas")
 
     if request.method == "POST":
         cambios_realizados = False
@@ -849,7 +857,15 @@ def tarreo_pedido(request):
         messages.error(request, "Acceso solo para camioneros.")
         return redirect('index')
 
-    balones = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
+    balones = TipoBalon.objects.filter(activo=True).annotate(
+        tipo_orden=Case(
+            When(tipo_gas='normal', then=Value(0)),
+            When(tipo_gas='catalitico', then=Value(1)),
+            When(tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by('tipo_orden', '-peso_neto_gas')
 
     if request.method == 'POST':
         metodo_pago = request.POST.get('metodo_pago')
@@ -1838,7 +1854,15 @@ def editar_sobre_diario(request):
     # ═══════════════════════════════════════════════════════════
     
     # Preparar datos para crear líneas (si es necesario)
-    balones_activos = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
+    balones_activos = TipoBalon.objects.filter(activo=True).annotate(
+        tipo_orden=Case(
+            When(tipo_gas='normal', then=Value(0)),
+            When(tipo_gas='catalitico', then=Value(1)),
+            When(tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by('tipo_orden', '-peso_neto_gas')
     fecha_para_calcular = sobre.fecha_correspondiente or sobre.fecha.date()
     tz_chile = ZoneInfo('America/Santiago')
     tz_utc = ZoneInfo('UTC')
@@ -2190,7 +2214,15 @@ def imprimir_sobre_diario(request, sobre_id):
         return redirect('index')
 
     sobre = get_object_or_404(SobreDiario, id=sobre_id)
-    lineas = sobre.lineas.all().order_by('balon__peso_neto_gas')
+    lineas = sobre.lineas.all().annotate(
+        tipo_orden=Case(
+            When(balon__tipo_gas='normal', then=Value(0)),
+            When(balon__tipo_gas='catalitico', then=Value(1)),
+            When(balon__tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by('tipo_orden', '-balon__peso_neto_gas')
     pagos = sobre.pagos.all()
     gastos = sobre.gastos.all()
 
@@ -2200,10 +2232,12 @@ def imprimir_sobre_diario(request, sobre_id):
     total_cantidad_calc = 0
     total_cantidad_decl = 0
     total_diferencia = 0
+    total_kilos = 0
     
     for linea in lineas:
         subtotal = linea.cantidad_declarada * linea.precio_venta_unitario
         diferencia = linea.cantidad_declarada - linea.cantidad_calculada
+        kilos = linea.cantidad_declarada * linea.balon.peso_neto_gas
         
         lineas_data.append({
             'linea': linea,
@@ -2215,6 +2249,7 @@ def imprimir_sobre_diario(request, sobre_id):
         total_cantidad_calc += linea.cantidad_calculada
         total_cantidad_decl += linea.cantidad_declarada
         total_diferencia += diferencia
+        total_kilos += kilos
     
     total_pagos = sum(pago.monto for pago in pagos)
     total_gastos = sum(gasto.monto for gasto in gastos)
@@ -2234,6 +2269,7 @@ def imprimir_sobre_diario(request, sobre_id):
         'total_cantidad_calc': total_cantidad_calc,
         'total_cantidad_decl': total_cantidad_decl,
         'total_diferencia': total_diferencia,
+        'total_kilos': total_kilos,
     }
 
     return render(request, 'imprimir_sobre.html', context)
@@ -2245,7 +2281,15 @@ def exportar_sobre_excel(request, sobre_id):
         return redirect('index')
 
     sobre = get_object_or_404(SobreDiario, id=sobre_id)
-    lineas = sobre.lineas.all().order_by('balon__peso_neto_gas')
+    lineas = sobre.lineas.all().annotate(
+        tipo_orden=Case(
+            When(balon__tipo_gas='normal', then=Value(0)),
+            When(balon__tipo_gas='catalitico', then=Value(1)),
+            When(balon__tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by('tipo_orden', '-balon__peso_neto_gas')
 
     wb = openpyxl.Workbook()
     ws = wb.active

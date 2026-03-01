@@ -47,7 +47,16 @@
                                 <tbody>
                                     {% for balon in balones %}
                                     <tr {% if not balon.activo %}class="table-secondary opacity-75"{% endif %}>
-                                        <td class="ps-3 fw-semibold">{{ balon.nombre }}</td>
+                                        <td class="ps-3 fw-semibold">
+                                            {{ balon.nombre }}
+                                            {% if balon.tipo_gas == 'catalitico' %}
+                                                <span class="badge bg-warning text-dark ms-1">CAT</span>
+                                            {% elif balon.tipo_gas == 'aluminio' %}
+                                                <span class="badge bg-secondary ms-1">ALU</span>
+                                            {% else %}
+                                                <span class="badge bg-info text-dark ms-1">NORMAL</span>
+                                            {% endif %}
+                                        </td>
                                         <td class="text-center">{{ balon.peso_neto_gas }} kg</td>
 
                                         <!-- Precio Compra -->

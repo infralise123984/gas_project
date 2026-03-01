@@ -98,6 +98,18 @@
             border: 1px solid #333;
         }
         
+        /* Diferenciación para balones catalíticos */
+        th.cat-header {
+            background-color: #ff9800 !important;
+            color: #000 !important;
+            font-weight: bold;
+        }
+        
+        td.cat {
+            background-color: #ffe0b2 !important;
+            border: 2px solid #ff9800 !important;
+        }
+        
         td.green {
             background-color: #f2f2f2;
             font-weight: bold;
@@ -261,7 +273,12 @@
                     <tr>
                         <th style="text-align: left; width: 120px;">TIPO BALÓN</th>
                         {% for item in lineas_data %}
-                        <th style="width: 60px;">{{ item.linea.balon.peso_neto_gas }} KG</th>
+                        <th style="width: 60px;" class="{% if item.linea.balon.tipo_gas == 'catalitico' %}cat-header{% endif %}">
+                            {{ item.linea.balon.peso_neto_gas }} KG
+                            {% if item.linea.balon.tipo_gas == 'catalitico' %}
+                            <br><span style="font-weight: bold; color: #ff9800;">CAT</span>
+                            {% endif %}
+                        </th>
                         {% endfor %}
                         <th style="width: 80px;">TOTAL</th>
                     </tr>
@@ -271,7 +288,7 @@
                     <tr>
                         <td class="label">PRECIO UNITARIO</td>
                         {% for item in lineas_data %}
-                        <td class="yellow">${{ item.linea.precio_venta_unitario|floatformat:0 }}</td>
+                        <td class="yellow{% if item.linea.balon.tipo_gas == 'catalitico' %} cat{% endif %}">${{ item.linea.precio_venta_unitario|floatformat:0 }}</td>
                         {% endfor %}
                         <td class="total"></td>
                     </tr>
@@ -280,7 +297,7 @@
                     <tr>
                         <td class="label">CANT. CALCULADA (APP)</td>
                         {% for item in lineas_data %}
-                        <td>{{ item.linea.cantidad_calculada }}</td>
+                        <td{% if item.linea.balon.tipo_gas == 'catalitico' %} class="cat"{% endif %}>{{ item.linea.cantidad_calculada }}</td>
                         {% endfor %}
                         <td class="total">{{ total_cantidad_calc }}</td>
                     </tr>
@@ -291,7 +308,9 @@
                         {% for item in lineas_data %}
                         <td 
                             {% if item.linea.cantidad_declarada == item.linea.cantidad_calculada %}
-                                class="green"
+                                class="green{% if item.linea.balon.tipo_gas == 'catalitico' %} cat{% endif %}"
+                            {% elif item.linea.balon.tipo_gas == 'catalitico' %}
+                                class="light-yellow cat"
                             {% else %}
                                 class="light-yellow"
                             {% endif %}
@@ -308,9 +327,9 @@
                         {% for item in lineas_data %}
                         <td 
                             {% if item.diferencia == 0 %}
-                                class="green"
+                                class="green{% if item.linea.balon.tipo_gas == 'catalitico' %} cat{% endif %}"
                             {% elif item.diferencia != 0 %}
-                                class="red"
+                                class="red{% if item.linea.balon.tipo_gas == 'catalitico' %} cat{% endif %}"
                             {% endif %}
                         >
                             {{ item.diferencia }}
@@ -323,9 +342,16 @@
                     <tr>
                         <td class="label">SUBTOTAL VENTA</td>
                         {% for item in lineas_data %}
-                        <td class="yellow">${{ item.subtotal|floatformat:0 }}</td>
+                        <td class="yellow{% if item.linea.balon.tipo_gas == 'catalitico' %} cat{% endif %}">${{ item.subtotal|floatformat:0 }}</td>
                         {% endfor %}
                         <td class="total">${{ total_venta|floatformat:0 }}</td>
+                    </tr>
+                    
+                    <!-- Fila: Total Kilos -->
+                    <tr>
+                        <td class="label">TOTAL KILOS</td>
+                        <td colspan="{{ lineas_data|length }}" style="text-align: center; font-weight: bold; background-color: #bfbfbf; border: 2px solid #333;">{{ total_kilos }} kg</td>
+                        <td class="total"></td>
                     </tr>
                 </tbody>
             </table>

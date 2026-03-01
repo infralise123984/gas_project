@@ -126,6 +126,20 @@ class LineaSobreForm(forms.ModelForm):
 
 
 class BaseLineaSobreFormSet(BaseInlineFormSet):
+    def get_queryset(self):
+        """Ordena las líneas del sobre: primero normales por peso desc, luego catalíticos, etc."""
+        from django.db.models import Case, When, Value, IntegerField
+        qs = super().get_queryset()
+        return qs.annotate(
+            tipo_orden=Case(
+                When(balon__tipo_gas='normal', then=Value(0)),
+                When(balon__tipo_gas='catalitico', then=Value(1)),
+                When(balon__tipo_gas='aluminio', then=Value(2)),
+                default=Value(3),
+                output_field=IntegerField(),
+            )
+        ).order_by('tipo_orden', '-balon__peso_neto_gas')
+    
     def clean(self):
         super().clean()
         if any(self.errors):
