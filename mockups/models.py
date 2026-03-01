@@ -70,6 +70,18 @@ class TipoBalon(models.Model):
         help_text="Precio para pedidos telefónicos, tarreo o entregas a domicilio"
     )
 
+    TIPOS_GAS = [
+        ("normal", "Normal"),
+        ("catalitico", "Catalítico"),
+        ("aluminio", "Aluminio"),
+    ]
+    
+    tipo_gas = models.CharField(
+        max_length=20,
+        choices=TIPOS_GAS,
+        default="normal",
+        verbose_name="Tipo de gas"
+    )
     activo = models.BooleanField(default=True, verbose_name="Disponible para venta")
     actualizado_el = models.DateTimeField(auto_now=True)
     actualizado_por = models.ForeignKey(
@@ -96,7 +108,7 @@ class TipoBalon(models.Model):
     class Meta:
         verbose_name = "Tipo de balón"
         verbose_name_plural = "Tipos de balones"
-        ordering = ["peso_neto_gas"]
+        ordering = ["-peso_neto_gas", "tipo_gas"]
 
 
 class HistorialPrecioBalon(models.Model):

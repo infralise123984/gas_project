@@ -54,7 +54,16 @@
                      data-id="{{ balon.id }}"
                      data-precio="{{ balon.precio_domicilio|stringformat:'d' }}">
 
-                    <div class="fs-5 fw-bold mb-1">{{ balon.nombre }}</div>
+                    <div class="fs-5 fw-bold mb-1">
+                        {{ balon.nombre }}
+                        {% if balon.tipo_gas == 'catalitico' %}
+                            <span class="badge bg-warning text-dark ms-1">CAT</span>
+                        {% elif balon.tipo_gas == 'aluminio' %}
+                            <span class="badge bg-secondary ms-1">ALU</span>
+                        {% else %}
+                            <span class="badge bg-info text-dark ms-1">NORMAL</span>
+                        {% endif %}
+                    </div>
                     <div class="small text-success fw-bold mb-2 fs-5">
                         ${{ balon.precio_domicilio|floatformat:0|intcomma }}
                     </div>

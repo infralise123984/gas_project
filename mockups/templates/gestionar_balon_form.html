@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ title }} - GasFácil{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 col-xl-7">
+
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <h2 class="text-primary fw-bold mb-0">
+                    <i class="bi bi-droplet me-2"></i>{{ title }}
+                </h2>
+            </div>
+
+            {% if messages %}
+            <div class="mb-3">
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="card shadow-lg border-0">
+                <div class="card-header bg-primary text-white text-center py-3">
+                    <h4 class="mb-0 fw-bold">{{ accion }} Balón</h4>
+                    <small>Completa todos los campos requeridos</small>
+                </div>
+
+                <div class="card-body p-4">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+
+                        <!-- Nombre -->
+                        <div class="mb-4">
+                            <label for="{{ form.nombre.id_for_label }}" class="form-label fw-semibold">
+                                {{ form.nombre.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.nombre }}
+                            {% if form.nombre.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.nombre.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            <small class="form-text text-muted d-block mt-1">
+                                Ej: Gas 5 kg, Gas 15 kg, Gas 45 kg
+                            </small>
+                        </div>
+
+                        <!-- Peso neto -->
+                        <div class="mb-4">
+                            <label for="{{ form.peso_neto_gas.id_for_label }}" class="form-label fw-semibold">
+                                {{ form.peso_neto_gas.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.peso_neto_gas }}
+                            {% if form.peso_neto_gas.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.peso_neto_gas.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            <small class="form-text text-muted d-block mt-1">
+                                Cantidad real de gas licuado sin envase (en kg)
+                            </small>
+                        </div>
+
+                        <!-- Tipo de gas -->
+                        <div class="mb-4">
+                            <label for="{{ form.tipo_gas.id_for_label }}" class="form-label fw-semibold">
+                                {{ form.tipo_gas.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.tipo_gas }}
+                            {% if form.tipo_gas.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.tipo_gas.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Sección de precios -->
+                        <div class="row">
+                            <!-- Precio compra -->
+                            <div class="col-md-6 mb-4">
+                                <label for="{{ form.precio_compra.id_for_label }}" class="form-label fw-semibold">
+                                    {{ form.precio_compra.label }}
+                                    <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    {{ form.precio_compra }}
+                                </div>
+                                {% if form.precio_compra.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.precio_compra.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                                <small class="form-text text-muted d-block mt-1">
+                                    Costo real para KIM GAS
+                                </small>
+                            </div>
+
+                            <!-- Precio local -->
+                            <div class="col-md-6 mb-4">
+                                <label for="{{ form.precio_local.id_for_label }}" class="form-label fw-semibold">
+                                    {{ form.precio_local.label }}
+                                    <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    {{ form.precio_local }}
+                                </div>
+                                {% if form.precio_local.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.precio_local.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                                <small class="form-text text-muted d-block mt-1">
+                                    Venta en bodega/local
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Precio domicilio -->
+                        <div class="mb-4">
+                            <label for="{{ form.precio_domicilio.id_for_label }}" class="form-label fw-semibold">
+                                {{ form.precio_domicilio.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                {{ form.precio_domicilio }}
+                            </div>
+                            {% if form.precio_domicilio.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.precio_domicilio.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            <small class="form-text text-muted d-block mt-1">
+                                Pedidos telefónicos, tarreo o entregas a domicilio
+                            </small>
+                        </div>
+
+                        <!-- Disponible para venta -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                {{ form.activo }}
+                                <label class="form-check-label fw-semibold" for="{{ form.activo.id_for_label }}">
+                                    {{ form.activo.label }}
+                                </label>
+                            </div>
+                            <small class="form-text text-muted d-block mt-1">
+                                Desactiva este balón si no está disponible para venta temporal
+                            </small>
+                        </div>
+
+                        <!-- Botones de acción -->
+                        <div class="mt-5 pt-4 border-top">
+                            <div class="d-flex gap-3 justify-content-center">
+                                <button type="submit" class="btn btn-success btn-lg px-5 shadow">
+                                    <i class="bi bi-check-circle me-2"></i>{{ accion }} Balón
+                                </button>
+                                <a href="{% url 'balones_lista' %}" class="btn btn-outline-secondary btn-lg px-5">
+                                    <i class="bi bi-arrow-left me-2"></i>Cancelar
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="text-center mt-4 text-muted small">
+                <p>
+                    <i class="bi bi-info-circle me-1"></i>
+                    Los cambios en precios se registran automáticamente en el historial.
+                </p>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-control:focus,
+    .form-select:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    
+    .input-group .form-control,
+    .input-group .form-select {
+        border-radius: 0.375rem 0 0 0.375rem;
+    }
+</style>
+{% endblock %}

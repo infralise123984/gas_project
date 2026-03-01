@@ -58,10 +58,18 @@ urlpatterns = [
     path('reportes/sobres/', views.reporte_sobres, name='reportes_sobres'),
 
     # ────────────────────────────────────────────────
-    # GESTIÓN DE PRECIOS
+    # GESTIÓN DE PRECIOS Y BALONES
     # ────────────────────────────────────────────────
-    path('precios/lista/', views.precios_balones, name='precios_lista'),
+    path('precios/lista/', views.gestionar_balones_lista, name='precios_lista'),  # Redirige a gestión integrada
     path('precios/historial/', views.historial_precios, name='precios_historial'),
+
+    # ────────────────────────────────────────────────
+    # GESTIÓN DE BALONES (sin admin)
+    # ────────────────────────────────────────────────
+    path('balones/lista/', views.gestionar_balones_lista, name='balones_lista'),
+    path('balones/crear/', views.gestionar_balones_crear, name='balones_crear'),
+    path('balones/<int:balon_id>/editar/', views.gestionar_balones_editar, name='balones_editar'),
+    path('balones/<int:balon_id>/eliminar/', views.gestionar_balones_eliminar, name='balones_eliminar'),
 
     # ────────────────────────────────────────────────
     # GESTIÓN DE SOBRES Y CIERRE DE CAJA
@@ -69,6 +77,6 @@ urlpatterns = [
     path('sobres/lista/', views.lista_sobres_diarios, name='sobres_lista'),
     path('sobres/editar/', views.editar_sobre_diario, name='sobres_editar'),
     path('sobres/historial/', views.historial_sobres, name='sobres_historial'),
-    path('sobres/<int:sobre_id>/exportar/', views.exportar_sobre_excel, name='sobres_exportar'),
+    path('sobres/<int:sobre_id>/imprimir/', views.imprimir_sobre_diario, name='sobres_imprimir'),
     path('sobres/<int:sobre_id>/crear-nuevo/', views.crear_sobre_post_cierre, name='crear_sobre_post_cierre'),
 ]
