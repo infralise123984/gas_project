@@ -1,97 +1,386 @@
 {% extends 'base.html' %}
 {% load humanize static %}
 
-{% block title %}Reporte de Ventas - GasFácil{% endblock %}
+{% block title %}Reporte de Ventas — {{ mes_display }} - Kim Gas{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+<style>
+    .metric-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .metric-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15) !important;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+    }
+    .table-hover tbody tr:hover {
+        background-color: rgba(13, 110, 253, 0.05);
+    }
+    .badge-custom {
+        font-size: 0.9rem;
+        padding: 0.4rem 0.8rem;
+    }
+    .nav-mes .btn { min-width: 38px; }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4 mb-5 px-3">
+<div class="container-fluid px-4 py-4">
 
-    <!-- Título principal -->
-    <h2 class="text-primary fw-bold text-center mb-4">
-        <i class="bi bi-graph-up me-2"></i>Reporte de Ventas
-    </h2>
-
-    <!-- Rango actual -->
-    <div class="text-center mb-4">
-        <h5 class="text-muted">
-            Mostrando: <strong>{{ rango_actual|default:"Mes actual" }}</strong>
-        </h5>
+    <!-- ENCABEZADO -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="display-6 fw-bold text-primary mb-2">
+                <i class="bi bi-graph-up-arrow me-2"></i>Dashboard de Ventas
+            </h1>
+            <p class="text-muted mb-0">
+                Análisis del mes de <strong>{{ mes_display }}</strong>
+            </p>
+        </div>
     </div>
 
-    <!-- Filtro simple de fechas -->
-    <div class="card shadow-sm border-0 mb-5">
-        <div class="card-body p-4">
-            <form method="get" class="row g-3 align-items-end">
-                <div class="col-lg-5 col-md-6">
-                    <label class="form-label fw-bold">
-                        <i class="bi bi-calendar-range me-1"></i>Rango de Fechas
-                    </label>
-                    <input type="text" name="fechas" id="rangoFechas" class="form-control form-control-lg"
-                           placeholder="Selecciona rango (ej: 01/01/2026 al 31/01/2026)"
-                           value="{{ fechas|default:'' }}">
-                </div>
-
-                <div class="col-lg-3 col-md-4 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary btn-lg flex-fill">
-                        <i class="bi bi-search"></i> Filtrar
-                    </button>
-                    <a href="{% url 'reporte_ventas' %}" class="btn btn-outline-secondary btn-lg">
-                        <i class="bi bi-arrow-counterclockwise"></i> Limpiar
+    <!-- FILTROS -->
+    <!-- NAVEGACIÓN DE MES + FILTRO CAMIONERO -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                <!-- Navegación prev / mes / next -->
+                <div class="d-flex align-items-center gap-2 nav-mes">
+                    <a href="?mes={{ mes_anterior }}{% if filtro_trabajador %}&trabajador={{ filtro_trabajador }}{% endif %}"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-chevron-left"></i>
                     </a>
+                    <h5 class="mb-0 fw-bold text-primary px-2">{{ mes_display }}</h5>
+                    <a href="?mes={{ mes_siguiente }}{% if filtro_trabajador %}&trabajador={{ filtro_trabajador }}{% endif %}"
+                       class="btn btn-outline-secondary btn-sm {% if es_mes_actual %}disabled{% endif %}">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                    {% if not es_mes_actual %}
+                    <a href="?{% if filtro_trabajador %}trabajador={{ filtro_trabajador }}{% endif %}"
+                       class="btn btn-outline-primary btn-sm ms-1">Mes actual</a>
+                    {% endif %}
                 </div>
-            </form>
+                <!-- Filtro camionero -->
+                <form method="get" class="d-flex align-items-center gap-2">
+                    <input type="hidden" name="mes" value="{{ mes_actual }}">
+                    <label class="form-label mb-0 small fw-semibold text-nowrap">Camionero:</label>
+                    <select name="trabajador" class="form-select form-select-sm" style="min-width:180px;"
+                            onchange="this.form.submit()">
+                        <option value="">Todos</option>
+                        {% for cam in camioneros %}
+                        <option value="{{ cam.id }}"
+                            {% if filtro_trabajador == cam.id|stringformat:"s" %}selected{% endif %}>
+                            {{ cam.get_full_name|default:cam.username }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {% if filtro_trabajador %}
+                    <a href="?mes={{ mes_actual }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-x-lg"></i>
+                    </a>
+                    {% endif %}
+                </form>
+            </div>
         </div>
     </div>
 
-    <!-- Tarjetas principales (solo ventas y ganancias) -->
-    <div class="row g-4 mb-5">
-        <div class="col-md-6">
-            <div class="card text-center border-primary shadow h-100">
-                <div class="card-body py-5">
-                    <h5 class="text-primary fw-bold mb-3">Ventas Totales</h5>
-                    <h2 class="display-4 fw-bold text-primary">
-                        ${{ total_ventas|floatformat:0|intcomma|default:"0" }}
-                    </h2>
+    <!-- MÉTRICAS PRINCIPALES -->
+    <div class="row g-3 mb-4">
+        
+        <div class="col-xl-3 col-md-6">
+            <div class="card metric-card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-1 small">Ventas Totales</p>
+                            <h3 class="fw-bold text-primary mb-0">
+                                ${{ total_ventas|floatformat:0|intcomma }}
+                            </h3>
+                        </div>
+                        <div class="bg-primary bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-cash-stack text-primary fs-3"></i>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-6">
-            <div class="card text-center border-success shadow h-100">
-                <div class="card-body py-5">
-                    <h5 class="text-success fw-bold mb-3">Ganancias Totales</h5>
-                    <h2 class="display-4 fw-bold text-success">
-                        ${{ total_ganancias|floatformat:0|intcomma|default:"0" }}
-                    </h2>
+        <div class="col-xl-3 col-md-6">
+            <div class="card metric-card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-1 small">Ganancia Total</p>
+                            <h3 class="fw-bold text-success mb-0">
+                                ${{ total_ganancias|floatformat:0|intcomma }}
+                            </h3>
+                            <small class="text-success">
+                                <i class="bi bi-graph-up-arrow me-1"></i>{{ margen_promedio|floatformat:1 }}% margen
+                            </small>
+                        </div>
+                        <div class="bg-success bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-wallet2 text-success fs-3"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card metric-card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-1 small">Total Pedidos</p>
+                            <h3 class="fw-bold text-info mb-0">{{ total_pedidos }}</h3>
+                        </div>
+                        <div class="bg-info bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-receipt text-info fs-3"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card metric-card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-1 small">Kilos vendidos</p>
+                            <h3 class="fw-bold text-warning mb-0">
+                                {{ total_kilos|intcomma }} kg
+                            </h3>
+                        </div>
+                        <div class="bg-warning bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-fire text-warning fs-3"></i>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Gráficos -->
-    <div class="row g-4">
-        <!-- Tipos de gas más vendidos -->
-        <div class="col-lg-6">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light text-center fw-bold">Tipos de Gas Más Vendidos</div>
+    <!-- GRÁFICOS PRINCIPALES -->
+    <div class="row g-3 mb-4">
+        
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="bi bi-graph-up me-2"></i>Evolución de Ventas
+                    </h6>
+                </div>
                 <div class="card-body">
-                    <canvas id="pieGas" height="200"></canvas>
+                    <div class="chart-container">
+                        <canvas id="chartVentasDiarias"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Sectores con más ventas -->
-        <div class="col-lg-6">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light text-center fw-bold">Sectores con Más Ventas</div>
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="bi bi-pie-chart me-2"></i>Por Origen
+                    </h6>
+                </div>
                 <div class="card-body">
-                    <canvas id="barSectores" height="200"></canvas>
+                    <div class="chart-container">
+                        <canvas id="chartOrigen"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ANÁLISIS POR PRODUCTO -->
+    <div class="row g-3 mb-4">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="bi bi-fire me-2"></i>Análisis por Tipo de Balón
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Producto</th>
+                                    <th class="text-center">Unidades</th>
+                                    <th class="text-center">Kilos</th>
+                                    <th class="text-end">Monto Vendido</th>
+                                    <th class="text-end">Ganancia</th>
+                                    <th class="text-center">Margen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in por_balon %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ item.balon__nombre }}</strong>
+                                        <small class="text-muted d-block">{{ item.balon__peso_neto_gas }} kg</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary badge-custom">{{ item.unidades_vendidas }}</span>
+                                    </td>
+                                    <td class="text-center">{{ item.kilos_vendidos|floatformat:0|intcomma }} kg</td>
+                                    <td class="text-end fw-semibold">${{ item.monto_vendido|floatformat:0|intcomma }}</td>
+                                    <td class="text-end text-success">${{ item.ganancia_total|floatformat:0|intcomma }}</td>
+                                    <td class="text-center">
+                                        {% widthratio item.ganancia_total item.monto_vendido 100 as margen %}
+                                        <span class="badge bg-success">{{ margen }}%</span>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        No hay datos para mostrar
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="bi bi-bar-chart me-2"></i>Ventas por Producto
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="chartBalones"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ANÁLISIS POR SECTOR Y RENDIMIENTO -->
+    <div class="row g-3 mb-4">
+        
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="bi bi-geo-alt me-2"></i>Top 10 Sectores
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Sector</th>
+                                    <th class="text-center">Pedidos</th>
+                                    <th class="text-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in top_sectores %}
+                                <tr>
+                                    <td class="text-muted">{{ forloop.counter }}</td>
+                                    <td><strong>{{ item.sector }}</strong></td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info">{{ item.cantidad_pedidos }}</span>
+                                    </td>
+                                    <td class="text-end fw-semibold">${{ item.total_vendido|floatformat:0|intcomma }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-3">
+                                        No hay datos de sectores
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- RENDIMIENTO CONSOLIDADO POR TRABAJADOR -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="bi bi-people-fill me-2"></i>Rendimiento por Trabajador (Kilos de gas)
+                    </h6>
+                    <small class="text-muted">Kilos propios + entregas consolidadas</small>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">#</th>
+                                    <th>Trabajador</th>
+                                    <th class="text-center">Rol</th>
+                                    <th class="text-center">Registrados (kg)</th>
+                                    <th class="text-center">Entregados (kg)</th>
+                                    <th class="text-center">Tarreo / Extra (kg)</th>
+                                    <th class="text-center">Total pedidos</th>
+                                    <th class="text-end pe-3">Total kilos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for w in rendimiento_trabajadores %}
+                                <tr>
+                                    <td class="ps-3 text-muted">{{ forloop.counter }}</td>
+                                    <td><strong>{{ w.nombre_trabajador }}</strong></td>
+                                    <td class="text-center">{{ w.rol }}</td>
+                                    <td class="text-center">{{ w.kilos_registrados|floatformat:0|intcomma }}</td>
+                                    <td class="text-center">{{ w.kilos_entregados|floatformat:0|intcomma }}</td>
+                                    <td class="text-center">{{ w.kilos_tarreo|floatformat:0|intcomma }}</td>
+                                    <td class="text-center fw-semibold">{{ w.total_pedidos }}</td>
+                                    <td class="text-end fw-bold pe-3">{{ w.total_kilos|floatformat:0|intcomma }} kg</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted py-4">
+                                        No hay datos de trabajadores
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GRÁFICO RENDIMIENTO TRABAJADORES -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="bi bi-bar-chart-fill me-2"></i>Comparativa de kilos de gas por trabajador
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height: 320px;">
+                        <canvas id="chartTrabajadores"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -99,52 +388,204 @@
 
 </div>
 
-<!-- Scripts -->
 <script>
-// Gráfico de tipos de gas (pie)
-const ctxGas = document.getElementById('pieGas').getContext('2d');
-new Chart(ctxGas, {
-    type: 'pie',
-    data: {
-        labels: {{ tipos_gas_labels|safe }},
-        datasets: [{
-            data: {{ tipos_gas_data|safe }},
-            backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6f42c1', '#fd7e14'],
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: {
-            legend: { position: 'bottom' }
+Chart.defaults.font.family = 'system-ui, -apple-system, sans-serif';
+Chart.defaults.plugins.legend.position = 'bottom';
+
+const ctxVentasDiarias = document.getElementById('chartVentasDiarias');
+if (ctxVentasDiarias) {
+    new Chart(ctxVentasDiarias, {
+        type: 'line',
+        data: {
+            labels: {{ chart_dias_labels|safe }},
+            datasets: [
+                {
+                    label: 'Ventas',
+                    data: {{ chart_dias_ventas|safe }},
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                },
+                {
+                    label: 'Ganancia',
+                    data: {{ chart_dias_ganancias|safe }},
+                    borderColor: '#198754',
+                    backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': $' + 
+                                   context.parsed.y.toLocaleString('es-CL');
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toLocaleString('es-CL');
+                        }
+                    }
+                }
+            }
         }
-    }
-});
+    });
+}
 
-// Gráfico de sectores (bar)
-const ctxSectores = document.getElementById('barSectores').getContext('2d');
-new Chart(ctxSectores, {
-    type: 'bar',
-    data: {
-        labels: {{ sectores_labels|safe }},
-        datasets: [{
-            label: 'Ventas ($)',
-            data: {{ sectores_data|safe }},
-            backgroundColor: '#0d6efd',
-        }]
-    },
-    options: {
-        responsive: true,
-        scales: { y: { beginAtZero: true } }
-    }
-});
+const ctxOrigen = document.getElementById('chartOrigen');
+if (ctxOrigen) {
+    new Chart(ctxOrigen, {
+        type: 'doughnut',
+        data: {
+            labels: {{ chart_origen_labels|safe }},
+            datasets: [{
+                data: {{ chart_origen_data|safe }},
+                backgroundColor: [
+                    '#0d6efd',
+                    '#198754',
+                    '#ffc107',
+                    '#dc3545',
+                    '#6f42c1'
+                ],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.parsed / total) * 100).toFixed(1);
+                            return context.label + ': $' + 
+                                   context.parsed.toLocaleString('es-CL') + 
+                                   ' (' + percentage + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
 
-// Flatpickr
-flatpickr("#rangoFechas", {
-    mode: "range",
-    dateFormat: "Y-m-d",
-    altInput: true,
-    altFormat: "d/m/Y",
-    locale: { firstDayOfWeek: 1 }
-});
+const ctxBalones = document.getElementById('chartBalones');
+if (ctxBalones) {
+    new Chart(ctxBalones, {
+        type: 'bar',
+        data: {
+            labels: {{ chart_balones_labels|safe }},
+            datasets: [{
+                label: 'Ventas',
+                data: {{ chart_balones_monto|safe }},
+                backgroundColor: '#0d6efd',
+                borderRadius: 6
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return '$' + context.parsed.x.toLocaleString('es-CL');
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toLocaleString('es-CL');
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+const ctxTrabajadores = document.getElementById('chartTrabajadores');
+if (ctxTrabajadores) {
+    new Chart(ctxTrabajadores, {
+        type: 'bar',
+        data: {
+            labels: {{ chart_trabajadores_labels|safe }},
+            datasets: [
+                {
+                    label: 'Registrado (teléfono / local)',
+                    data: {{ chart_trabajadores_registrado|safe }},
+                    backgroundColor: '#0d6efd',
+                    borderRadius: 4,
+                    stack: 'stack0'
+                },
+                {
+                    label: 'Entregado (domicilio)',
+                    data: {{ chart_trabajadores_entregado|safe }},
+                    backgroundColor: '#198754',
+                    borderRadius: 4,
+                    stack: 'stack0'
+                },
+                {
+                    label: 'Tarreo / Venta extra',
+                    data: {{ chart_trabajadores_tarreo|safe }},
+                    backgroundColor: '#ffc107',
+                    borderRadius: 4,
+                    stack: 'stack0'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' +
+                                   context.parsed.y.toLocaleString('es-CL') + ' kg';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { stacked: true },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return value + ' kg';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
 </script>
+
 {% endblock %}

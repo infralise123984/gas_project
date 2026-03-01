@@ -105,12 +105,12 @@
                             <!-- Botón Editar textual y condicional -->
                             {% if pedido.estado in 'pendiente,en_ruta' %}
                                 {% if user.rol == 'telefonista' and pedido.registrador == user %}
-                                    <a href="{% url 'editar_pedido' pedido.id %}" 
+                                    <a href="{% url 'pedidos_editar' pedido.id %}" 
                                        class="btn btn-warning btn-lg mt-2 w-100">
                                         Editar Pedido
                                     </a>
                                 {% elif user.rol == 'bodeguero' and pedido.registrador == user or pedido.registrador.rol == 'telefonista' %}
-                                    <a href="{% url 'editar_pedido' pedido.id %}" 
+                                    <a href="{% url 'pedidos_editar' pedido.id %}" 
                                        class="btn btn-warning btn-lg mt-2 w-100">
                                         Editar Pedido
                                     </a>

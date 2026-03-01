@@ -8,7 +8,7 @@
 
     <!-- Encabezado con botón volver y estado actual -->
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
-        <a href="{% if request.user.rol in 'jefe,admin' %}{% url 'consultas_pedidos' %}{% else %}{% url 'mis_pedidos_hoy' %}{% endif %}" 
+        <a href="{% if request.user.rol in 'jefe,admin' %}{% url 'pedidos_consulta' %}{% else %}{% url 'pedidos_mios' %}{% endif %}" 
            class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left me-2"></i>Volver
         </a>
@@ -107,6 +107,7 @@
                         <tr>
                             <th>Balón</th>
                             <th class="text-center">Cantidad</th>
+                            <th class="text-end">Precio compra</th>
                             <th class="text-end">Precio unitario</th>
                             <th class="text-end">Subtotal</th>
                         </tr>
@@ -116,6 +117,7 @@
                         <tr>
                             <td class="fw-semibold">{{ detalle.balon.nombre }}</td>
                             <td class="text-center">{{ detalle.cantidad }}</td>
+                            <td class="text-end">${{ detalle.precio_compra_unitario|floatformat:0|intcomma }}</td>
                             <td class="text-end">${{ detalle.precio_venta_unitario|floatformat:0|intcomma }}</td>
                             <td class="text-end fw-bold text-success">
                                 ${{ detalle.subtotal|floatformat:0|intcomma }}
@@ -147,7 +149,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
+        <!-- <div class="col-md-6">
             <div class="card text-center border-success shadow-sm h-100">
                 <div class="card-body py-4">
                     <h5 class="text-success fw-bold mb-2">Ganancia</h5>
@@ -156,7 +158,7 @@
                     </h3>
                 </div>
             </div>
-        </div>
+        </div> -->
     </div>
 
     <!-- Historial de estados (timeline real) -->
@@ -199,7 +201,7 @@
 
     <!-- Botón volver (centrado abajo) -->
     <div class="text-center mt-5">
-        <a href="{% if request.user.rol in 'jefe,admin' %}{% url 'consultas_pedidos' %}{% else %}{% url 'mis_pedidos_hoy' %}{% endif %}" 
+        <a href="{% if request.user.rol in 'jefe,admin' %}{% url 'pedidos_consulta' %}{% else %}{% url 'pedidos_mios' %}{% endif %}" 
            class="btn btn-primary btn-lg px-5 py-3">
             <i class="bi bi-arrow-left-circle me-2"></i>Volver a la lista
         </a>

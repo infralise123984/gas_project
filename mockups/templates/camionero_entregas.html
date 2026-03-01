@@ -54,7 +54,7 @@
 
             <!-- Acciones (mantengo el d-grid, agrego botón Editar textual solo si aplica) -->
             <div class="d-grid gap-2">
-                <form method="post" action="{% url 'camionero_marcar_entregado' pedido.id %}"
+                <form method="post" action="{% url 'entregas_entregado' pedido.id %}"
                       onsubmit="return confirm('¿Marcar como entregado el pedido #{{ pedido.id }}?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-success btn-lg w-100 py-4 fs-5 shadow rounded-3">
@@ -62,7 +62,7 @@
                     </button>
                 </form>
 
-                <form method="post" action="{% url 'camionero_cancelar_entrega' pedido.id %}"
+                <form method="post" action="{% url 'entregas_cancelar' pedido.id %}"
                       onsubmit="return confirm('¿Cancelar entrega del pedido #{{ pedido.id }}?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-danger btn-lg w-100 py-4 fs-5 shadow rounded-3">
@@ -72,7 +72,7 @@
 
                 <!-- Botón Editar textual (solo si estado en ruta y es su pedido) -->
                 {% if pedido.estado == 'en_ruta' and pedido.entregador == user %}
-                <a href="{% url 'editar_pedido' pedido.id %}" class="btn btn-warning btn-lg w-100 py-4 fs-5 shadow rounded-3">
+                <a href="{% url 'pedidos_editar' pedido.id %}" class="btn btn-warning btn-lg w-100 py-4 fs-5 shadow rounded-3">
                     Editar Pedido
                 </a>
                 {% endif %}
@@ -122,7 +122,7 @@
 
             <!-- Botón tomar (y NO botón editar aquí, ya que pendientes no son editables por camionero) -->
             <div class="d-grid gap-2">
-                <form method="post" action="{% url 'camionero_tomar_pedido' pedido.id %}"
+                <form method="post" action="{% url 'entregas_tomar' pedido.id %}"
                       onsubmit="return confirm('¿Tomar este pedido #{{ pedido.id }}?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-primary btn-lg w-100 py-4 fs-5 shadow rounded-3">

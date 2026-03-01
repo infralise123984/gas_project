@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 {% load l10n %}
 
-{% block title %}Sobre Diario - {{ hoy|date:"d/m/Y" }} - GasFácil{% endblock %}
+{% block title %}Sobre Diario - {{ sobre.fecha|date:"d/m/Y" }} - GasFácil{% endblock %}
 
 {% block content %}
-<div class="container mt-4 mb-5 px-3" style="max-width: 1100px;">
+<div class="container mt-4 mb-5 px-3" style="max-width: 1400px;">
     <h2 class="text-primary fw-bold text-center mb-4">
         <i class="bi bi-journal-text me-2"></i>
-        Sobre Diario - {{ hoy|date:"d/m/Y" }}
+        Sobre Diario - {{ sobre.fecha|date:"d/m/Y" }}
     </h2>
 
     <div class="card shadow-sm border-0 mb-5">
@@ -21,178 +21,900 @@
                 {% endif %}
             </h4>
             <small>Responsable: {{ sobre.creado_por.get_full_name|default:sobre.creado_por.username }}</small>
+            {% if sobre.cerrado %}
+                <div class="mt-2">
+                    <span class="badge bg-success fs-6">
+                        <i class="bi bi-lock-fill me-1"></i>
+                        Cerrado el {{ sobre.declarado_el|date:"d/m/Y H:i" }}
+                    </span>
+                </div>
+            {% endif %}
         </div>
 
         <div class="card-body p-4 p-md-5">
             <form method="post" id="sobreForm">
                 {% csrf_token %}
-                {{ formset.management_form }}
+                {{ formset_lineas.management_form }}
+                {{ formset_gastos.management_form }}
+                {{ formset_pagos.management_form }}
 
-                <!-- Bloque de errores (útil para debug, puedes quitarlo después) -->
-                {% if formset.errors or formset.non_form_errors %}
+                <!-- Campo de fecha correspondiente -->
+                {% if not sobre.cerrado %}
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">
+                            <i class="bi bi-calendar-event me-2"></i>Fecha correspondiente al sobre
+                        </label>
+                        <input 
+                            type="date" 
+                            name="fecha_correspondiente" 
+                            class="form-control"
+                            value="{{ sobre.fecha_correspondiente|date:'Y-m-d' }}"
+                        >
+                        <small class="form-text text-muted">
+                            Fecha a la que corresponden las ventas
+                        </small>
+                    </div>
+
+                    <!-- Kilometraje (solo para camioneros) -->
+                    {% if sobre.tipo != 'bodega' %}
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">
+                            <i class="bi bi-speedometer2 me-2"></i>Kilometraje del Camión
+                        </label>
+                        <input 
+                            type="number" 
+                            name="kilometraje_camion" 
+                            class="form-control"
+                            min="0"
+                            value="{{ sobre.kilometraje_camion|default:'' }}"
+                            placeholder="Ej: 45230"
+                        >
+                        <small class="form-text text-muted">
+                            Lectura del odómetro al colocar bencina
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- ⏰ ALERTA DE HORA RECOMENDADA PARA CERRAR -->
+                {% if mostrar_alerta_cierre %}
+                <div class="alert alert-warning alert-dismissible fade show mb-4" role="alert">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-clock-history me-3 fs-5"></i>
+                        <div>
+                            <strong>⏰ Hora recomendada para cerrar el sobre</strong>
+                            <p class="mb-0 small mt-1">
+                                {{ hora_actual }} - Habitualmente se cierra después de las {{ hora_recomendada_cierre }}:00 para garantizar que no falten pedidos.
+                            </p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endif %}
+
+                {% else %}
+                <div class="alert alert-info mb-4">
+                    <i class="bi bi-calendar-check me-2"></i>
+                    <strong>Fecha del sobre:</strong> {{ sobre.fecha_correspondiente|date:"d/m/Y" }}
+                    {% if sobre.tipo != 'bodega' %}
+                        | <i class="bi bi-speedometer2 me-1"></i><strong>Kilometraje:</strong> {{ sobre.kilometraje_camion }} km
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Bloque de errores -->
+                {% if formset_lineas.errors or formset_lineas.non_form_errors or formset_gastos.errors or formset_pagos.errors %}
                 <div class="alert alert-danger mb-4">
                     <strong>Errores detectados:</strong>
                     <ul class="mb-0">
-                        {% for form in formset %}
+                        {% for form in formset_lineas %}
                             {% for field, errors in form.errors.items %}
                                 {% for error in errors %}
                                     <li>{{ form.instance.balon.nombre }} → {{ field }}: {{ error }}</li>
                                 {% endfor %}
                             {% endfor %}
                         {% endfor %}
-                        {% if formset.non_form_errors %}
-                            {% for error in formset.non_form_errors %}
-                                <li>{{ error }}</li>
+                        {% for form in formset_gastos %}
+                            {% for field, errors in form.errors.items %}
+                                {% for error in errors %}
+                                    <li>Gasto → {{ field }}: {{ error }}</li>
+                                {% endfor %}
                             {% endfor %}
-                        {% endif %}
+                        {% endfor %}
+                        {% for form in formset_pagos %}
+                            {% for field, errors in form.errors.items %}
+                                {% for error in errors %}
+                                    <li>Pago → {{ field }}: {{ error }}</li>
+                                {% endfor %}
+                            {% endfor %}
+                        {% endfor %}
                     </ul>
                 </div>
                 {% endif %}
 
-                <div class="table-responsive">
-                    <table class="table table-bordered table-hover excel-table" id="sobreTable">
-                        <thead class="table-primary">
-                            <tr>
-                                <th>Balón</th>
-                                <th>Peso neto (kg)</th>
-                                <th>Calculada (app)</th>
-                                <th>Declarada (real)</th>
-                                <th>Diferencia</th>
-                                <th>Nota / Motivo</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for form in formset %}
-                            <tr data-index="{{ forloop.counter0 }}"
-                                data-precio="{{ form.instance.precio_venta_unitario|stringformat:"d" }}"
-                                data-peso="{{ form.instance.balon.peso_neto_gas|stringformat:"d" }}">
-                                <td class="fw-bold align-middle">{{ form.instance.balon.nombre }}</td>
-                                <td class="text-center fw-semibold text-muted align-middle">
-                                    {{ form.instance.balon.peso_neto_gas }}
-                                </td>
-                                <td class="text-center fw-bold text-muted align-middle">
-                                    {{ form.instance.cantidad_calculada|default:0 }}
-                                </td>
-                                <td class="text-center align-middle">
-                                    {{ form.id }}
-                                    {{ form.cantidad_declarada }}
-                                </td>
-                                <td class="text-center fw-bold align-middle diferencia-celda" data-diferencia="0">
-                                    0
-                                </td>
-                                <td class="align-middle">
-                                    {{ form.nota }}
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="6" class="text-center py-5 text-muted">
-                                    <i class="bi bi-inbox fs-1 d-block mb-3"></i>
-                                    No hay balones activos registrados para este sobre.
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                        <tfoot class="table-light">
-                            <tr class="fw-bold">
-                                <td colspan="2" class="text-end">Totales:</td>
-                                <td class="text-center" id="totalDeclarada">0</td>
-                                <td class="text-center" id="totalDiferencia">0</td>
-                                <td colspan="2"></td>
-                            </tr>
-                            <tr class="fw-bold">
-                                <td colspan="2" class="text-end">Total Kilos:</td>
-                                <td class="text-center" id="totalKilos">0</td>
-                                <td colspan="3"></td>
-                            </tr>
-                            <tr class="fw-bold fs-5">
-                                <td colspan="2" class="text-end">Total Dinero:</td>
-                                <td colspan="4" class="text-center text-success" id="totalDinero">$0</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
+                <div class="row">
+                    <!-- COLUMNA IZQUIERDA: VENTAS -->
+                    <div class="col-lg-8">
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover excel-table" id="sobreTable">
+                                <thead class="table-primary">
+                                    <tr>
+                                        <th style="width: 15%;">Balón</th>
+                                        <th style="width: 10%;">Peso neto (kg)</th>
+                                        <th style="width: 10%;">Calculada (app)</th>
+                                        <th style="width: 10%;">Declarada (real)</th>
+                                        <th style="width: 8%;">Diferencia</th>
+                                        <th style="width: 10%;">Precio Unit.</th>
+                                        <th style="width: 10%;">Subtotal</th>
+                                        <th style="width: 27%;">Nota / Motivo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for form in formset_lineas %}
+                                    <tr data-index="{{ forloop.counter0 }}"
+                                        data-precio="{{ form.instance.precio_venta_unitario|unlocalize }}"
+                                        data-peso="{{ form.instance.balon.peso_neto_gas|unlocalize }}">
+                                        <td class="fw-bold align-middle">
+                                            {{ form.instance.balon.nombre }}
+                                            {% if form.instance.balon.tipo_gas == 'catalitico' %}
+                                                <span class="badge bg-warning text-dark ms-1">CAT</span>
+                                            {% elif form.instance.balon.tipo_gas == 'aluminio' %}
+                                                <span class="badge bg-secondary ms-1">ALU</span>
+                                            {% else %}
+                                                <span class="badge bg-info text-dark ms-1">NORMAL</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center fw-semibold text-muted align-middle">
+                                            {{ form.instance.balon.peso_neto_gas }}
+                                        </td>
+                                        <td class="text-center fw-bold text-primary align-middle calculada-celda">
+                                            {{ form.instance.cantidad_calculada|default:0 }}
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            {{ form.id }}
+                                            {% if sobre.cerrado %}
+                                                <span class="fw-bold">{{ form.instance.cantidad_declarada }}</span>
+                                            {% else %}
+                                                {{ form.cantidad_declarada }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center fw-bold align-middle diferencia-celda" data-diferencia="0">
+                                            0
+                                        </td>
+                                        <td class="text-center text-success align-middle precio-celda">
+                                            ${{ form.instance.precio_venta_unitario|floatformat:0 }}
+                                        </td>
+                                        <td class="text-center fw-bold align-middle subtotal-celda">
+                                            $0
+                                        </td>
+                                        <td class="align-middle">
+                                            {% if sobre.cerrado %}
+                                                <span class="small">{{ form.instance.nota|default:"—" }}</span>
+                                            {% else %}
+                                                {{ form.nota }}
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="8" class="text-center py-5 text-muted">
+                                            <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                                            No hay balones activos registrados para este sobre.
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr class="fw-bold">
+                                        <td colspan="2" class="text-end align-middle">Totales:</td>
+                                        <td class="text-center align-middle" id="totalCalculada">0</td>
+                                        <td class="text-center align-middle" id="totalDeclarada">0</td>
+                                        <td class="text-center align-middle" id="totalDiferencia">0</td>
+                                        <td colspan="3"></td>
+                                    </tr>
+                                    <tr class="fw-bold">
+                                        <td colspan="2" class="text-end align-middle">Total Kilos:</td>
+                                        <td colspan="2" class="text-center align-middle" id="totalKilos">0 kg</td>
+                                        <td colspan="4"></td>
+                                    </tr>
+                                    <tr class="fw-bold fs-5 table-success">
+                                        <td colspan="2" class="text-end align-middle">Total Ventas:</td>
+                                        <td colspan="6" class="text-center text-success align-middle" id="totalVentas">$0</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
 
-                <div class="text-center mt-5">
-                    <button type="submit" class="btn btn-success btn-lg px-5 py-3 shadow">
-                        <i class="bi bi-save me-2"></i> Guardar Borrador
-                    </button>
-                    <a href="{% url 'lista_sobres_diarios' %}" class="btn btn-outline-secondary btn-lg px-5 py-3 ms-3 shadow">
-                        Volver sin guardar
-                    </a>
+                    <!-- COLUMNA DERECHA: PAGOS Y GASTOS -->
+                    <div class="col-lg-4">
+                        <!-- MÉTODOS DE PAGO -->
+                        <h5 class="text-primary mb-3">
+                            <i class="bi bi-cash-stack me-2"></i>Dinero Entregado a Bodega
+                        </h5>
+                        <div class="alert alert-info py-2 px-3 mb-3 small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Registra el dinero que entregaste a bodega (efectivo, transferencias, etc.)
+                        </div>
+                        <div class="table-responsive mb-4">
+                            <table class="table table-bordered table-sm excel-table" id="tablaPagos">
+                                <thead class="table-info">
+                                    <tr>
+                                        <th style="width: 35%;">Tipo</th>
+                                        <th style="width: 30%;">Referencia</th>
+                                        <th style="width: 30%;">Monto</th>
+                                        <th style="width: 5%;"><i class="bi bi-trash"></i></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaPagosBody">
+                                    {% for form in formset_pagos %}
+                                    <tr class="pago-row" data-tipo-pago="{{ form.instance.tipo_pago }}">
+                                        <td class="align-middle">
+                                            {{ form.id }}
+                                            {% if sobre.cerrado %}
+                                                <span class="fw-bold">{{ form.instance.get_tipo_pago_display }}</span>
+                                            {% else %}
+                                                {{ form.tipo_pago }}
+                                                {{ form.DELETE }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="align-middle">
+                                            {% if sobre.cerrado %}
+                                                <span class="small">{{ form.instance.referencia|default:"—" }}</span>
+                                            {% else %}
+                                                {{ form.referencia }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="align-middle text-end">
+                                            {% if sobre.cerrado %}
+                                                <span class="fw-bold" data-value="{{ form.instance.monto|unlocalize }}">${{ form.instance.monto|unlocalize|floatformat:0 }}</span>
+                                            {% else %}
+                                                {{ form.monto }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            {% if not sobre.cerrado %}
+                                                <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr class="fw-bold">
+                                        <td colspan="2" class="text-end align-middle">Total Pagos:</td>
+                                        <td colspan="2" class="text-center text-primary align-middle" id="totalPagos">$0</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                            {% if not sobre.cerrado %}
+                            <div class="text-end">
+                                <button type="button" class="btn btn-sm btn-success" onclick="agregarPago()">
+                                    <i class="bi bi-plus-circle me-1"></i>Agregar Pago
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- GASTOS -->
+                        <h5 class="text-primary mb-3">
+                            <i class="bi bi-receipt me-2"></i>Gastos del Día
+                        </h5>
+                        <div class="alert alert-info py-2 px-3 mb-3 small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Registra los gastos del día (colación, agua, propinas, etc.)
+                        </div>
+                        <div class="table-responsive mb-4">
+                            <table class="table table-bordered table-sm excel-table" id="tablaGastos">
+                                <thead class="table-warning">
+                                    <tr>
+                                        <th style="width: 60%;">Descripción</th>
+                                        <th style="width: 35%;">Monto</th>
+                                        <th style="width: 5%;"><i class="bi bi-trash"></i></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaGastosBody">
+                                    {% for form in formset_gastos %}
+                                    <tr class="gasto-row">
+                                        <td class="align-middle">
+                                            {{ form.id }}
+                                            {% if sobre.cerrado %}
+                                                <span>{{ form.instance.descripcion|default:"—" }}</span>
+                                            {% else %}
+                                                {{ form.descripcion }}
+                                                {{ form.DELETE }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="align-middle text-end">
+                                            {% if sobre.cerrado %}
+                                                <span class="fw-bold" data-value="{{ form.instance.monto|unlocalize }}">${{ form.instance.monto|unlocalize|floatformat:0 }}</span>
+                                            {% else %}
+                                                {{ form.monto }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            {% if not sobre.cerrado %}
+                                                <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr class="fw-bold">
+                                        <td class="text-end align-middle">Total Gastos:</td>
+                                        <td colspan="2" class="text-center text-warning align-middle" id="totalGastos">$0</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                            {% if not sobre.cerrado %}
+                            <div class="text-end">
+                                <button type="button" class="btn btn-sm btn-success" onclick="agregarGasto()">
+                                    <i class="bi bi-plus-circle me-1"></i>Agregar Gasto
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- RESUMEN FINAL -->
+                        <div class="card border-primary shadow-sm">
+                            <div class="card-header bg-primary text-white text-center fw-bold py-3">
+                                <i class="bi bi-calculator me-2"></i>Resumen General
+                            </div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm mb-0">
+                                    <tbody>
+                                        <tr>
+                                            <td class="fw-semibold">Total Ventas:</td>
+                                            <td class="text-end fw-bold text-success" id="resumenVentas">$0</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="fw-semibold">Total Pagos:</td>
+                                            <td class="text-end fw-bold text-primary" id="resumenPagos">$0</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="fw-semibold">Total Gastos:</td>
+                                            <td class="text-end fw-bold text-warning" id="resumenGastos">$0</td>
+                                        </tr>
+                                        <tr class="table-light">
+                                            <td class="fw-bold">Total Contabilizado:</td>
+                                            <td class="text-end fw-bold" id="resumenContabilizado">$0</td>
+                                        </tr>
+                                        <tr class="border-top border-3" id="filaDiferencia">
+                                            <td class="fw-bold fs-5">Diferencia:</td>
+                                            <td class="text-end fw-bold fs-5" id="resumenDiferencia">$0</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <div class="alert mb-0 mt-2 py-2 small" id="alertaDiferencia">
+                                    <span id="mensajeDiferencia"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- BOTONES -->
+                <div class="row mt-5">
+                    <div class="col-12">
+                        <div class="d-flex flex-wrap justify-content-center gap-3">
+                            {% if not sobre.cerrado %}
+                            <button type="submit" name="guardar" class="btn btn-primary btn-lg px-5">
+                                <i class="bi bi-save me-2"></i>Guardar Cambios
+                            </button>
+                            <button type="submit" name="cerrar" class="btn btn-danger btn-lg px-5" onclick="return confirmarCierre()">
+                                <i class="bi bi-lock-fill me-2"></i>Guardar y Cerrar Sobre
+                            </button>
+                            {% else %}
+                            <div class="alert alert-success mb-0 flex-grow-1" role="alert">
+                                <i class="bi bi-check-circle-fill me-2"></i>
+                                <strong>Cerrado:</strong> {{ sobre.declarado_el|date:"d/m/Y H:i" }}
+                            </div>
+                            
+                            <!-- Crear nuevo sobre -->
+                            <button type="button" class="btn btn-info btn-lg px-5" data-bs-toggle="modal" data-bs-target="#modalCrearNuevoSobre">
+                                <i class="bi bi-plus-circle me-2"></i>Crear Nuevo Sobre
+                            </button>
+                            {% endif %}
+                            
+                            <!-- Imprimir -->
+                            <a href="{% url 'sobres_imprimir' sobre.id %}" 
+                               class="btn btn-primary btn-lg px-5"
+                               target="_blank">
+                                <i class="bi bi-printer me-2"></i>Imprimir
+                            </a>
+                            
+                            <!-- Volver a Lista de Sobres -->
+                            <a href="{% url 'sobres_lista' %}" 
+                               class="btn btn-outline-secondary btn-lg px-5">
+                                <i class="bi bi-arrow-left me-2"></i>Volver a Sobres
+                            </a>
+                        </div>
+                    </div>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- JavaScript para cálculos en tiempo real -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- TEMPLATES OCULTOS PARA FORMSETS DINÁMICOS -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+
+<!-- Template para nuevos pagos -->
+<table id="empty-pago-template" style="display: none;">
+    <tbody>
+        <tr class="pago-row" data-tipo-pago="">
+            <td class="align-middle">
+                {{ formset_pagos.empty_form.id }}
+                {{ formset_pagos.empty_form.tipo_pago }}
+                {{ formset_pagos.empty_form.DELETE }}
+            </td>
+            <td class="align-middle">
+                {{ formset_pagos.empty_form.referencia }}
+            </td>
+            <td class="align-middle text-end">
+                {{ formset_pagos.empty_form.monto }}
+            </td>
+            <td class="text-center align-middle">
+                <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- Template para nuevos gastos -->
+<table id="empty-gasto-template" style="display: none;">
+    <tbody>
+        <tr class="gasto-row">
+            <td class="align-middle">
+                {{ formset_gastos.empty_form.id }}
+                {{ formset_gastos.empty_form.descripcion }}
+                {{ formset_gastos.empty_form.DELETE }}
+            </td>
+            <td class="align-middle text-end">
+                {{ formset_gastos.empty_form.monto }}
+            </td>
+            <td class="text-center align-middle">
+                <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)" title="Eliminar">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    const rows = document.querySelectorAll('#sobreTable tbody tr[data-index]');
+// ══════════════════════════════════════════════════════════════════
+// VARIABLES GLOBALES E INICIALIZACIÓN
+// ══════════════════════════════════════════════════════════════════
+let pagoFormIdx = {{ formset_pagos.total_form_count }};
+let gastoFormIdx = {{ formset_gastos.total_form_count }};
 
-    const updateTotals = () => {
-        let totalDecl = 0;
-        let totalDiff = 0;
-        let totalKilos = 0;
-        let totalDinero = 0;
+// ══════════════════════════════════════════════════════════════════
+// FUNCIONES DE ACTUALIZACIÓN DE TOTALES
+// ══════════════════════════════════════════════════════════════════
+function updateTotals() {
+    // Variables de totales
+    let totalCalculada = 0;
+    let totalDeclarada = 0;
+    let totalDiferencia = 0;
+    let totalKilos = 0;
+    let totalVentas = 0;
+    let totalPagos = 0;
+    let totalGastos = 0;
 
-        rows.forEach(row => {
-            const declInput = row.querySelector('input[name$="-cantidad_declarada"]');
-            if (!declInput) return;
-
-            const decl = parseInt(declInput.value) || 0;
-            const calc = parseInt(row.querySelector('td:nth-child(3)').textContent.trim()) || 0;
-            const diff = decl - calc;
-
-            // Actualizar diferencia visual
-            const diffCell = row.querySelector('.diferencia-celda');
-            diffCell.textContent = diff;
-            diffCell.style.color = diff > 0 ? 'green' : diff < 0 ? 'red' : 'black';
-            diffCell.dataset.diferencia = diff;
-
-            // Acumular totales
-            totalDecl += decl;
-            totalDiff += diff;
-            totalKilos += decl * (parseInt(row.dataset.peso) || 0);
-            totalDinero += decl * (parseFloat(row.dataset.precio) || 0);
-        });
-
-        document.getElementById('totalDeclarada').textContent = totalDecl;
-        document.getElementById('totalDiferencia').textContent = totalDiff;
-        document.getElementById('totalKilos').textContent = totalKilos;
-        document.getElementById('totalDinero').textContent = '$' + totalDinero.toLocaleString('es-CL');
-    };
-
-    // Escuchar cambios
-    rows.forEach(row => {
-        const input = row.querySelector('input[name$="-cantidad_declarada"]');
-        if (input) input.addEventListener('input', updateTotals);
+    // ─────────────────────────────────────────────────────────────
+    // CALCULAR TOTALES DE BALONES
+    // ─────────────────────────────────────────────────────────────
+    document.querySelectorAll('#sobreTable tbody tr[data-index]').forEach(row => {
+        const precio = parseFloat(row.dataset.precio) || 0;
+        const peso = parseFloat(row.dataset.peso) || 0;
+        
+        // Obtener calculada
+        const calculadaCelda = row.querySelector('.calculada-celda');
+        const calculada = parseInt(calculadaCelda.textContent) || 0;
+        
+        // Obtener declarada
+        const inputDeclarada = row.querySelector('input[name*="cantidad_declarada"]');
+        const declarada = inputDeclarada ? (parseInt(inputDeclarada.value) || 0) : parseInt(row.querySelector('td:nth-child(4)').textContent) || 0;
+        
+        // Calcular diferencia y subtotal
+        const diferencia = declarada - calculada;
+        const subtotal = declarada * precio;
+        const kilos = declarada * peso;
+        
+        // Actualizar celdas de diferencia y subtotal
+        const diferenciaCelda = row.querySelector('.diferencia-celda');
+        const subtotalCelda = row.querySelector('.subtotal-celda');
+        
+        if (diferenciaCelda) {
+            diferenciaCelda.textContent = diferencia;
+            diferenciaCelda.dataset.diferencia = diferencia;
+            
+            // Color según diferencia
+            diferenciaCelda.classList.remove('text-danger', 'text-success', 'text-dark');
+            if (diferencia < 0) {
+                diferenciaCelda.classList.add('text-danger');
+            } else if (diferencia > 0) {
+                diferenciaCelda.classList.add('text-success');
+            } else {
+                diferenciaCelda.classList.add('text-dark');
+            }
+        }
+        
+        if (subtotalCelda) {
+            subtotalCelda.textContent = '$' + subtotal.toLocaleString('es-CL', {minimumFractionDigits: 0});
+        }
+        
+        // Acumular totales
+        totalCalculada += calculada;
+        totalDeclarada += declarada;
+        totalDiferencia += diferencia;
+        totalKilos += kilos;
+        totalVentas += subtotal;
     });
 
-    updateTotals(); // Inicial
+    // ─────────────────────────────────────────────────────────────
+    // CALCULAR TOTALES DE PAGOS
+    // ─────────────────────────────────────────────────────────────
+    document.querySelectorAll('.pago-row').forEach(row => {
+        if (row.style.display === 'none') return; // Ignorar eliminadas
+        
+        const inputMonto = row.querySelector('input[name*="monto"]');
+        if (inputMonto) {
+            const monto = parseFloat(inputMonto.value) || 0;
+            totalPagos += monto;
+        } else {
+            // Si es un registro cerrado (span)
+            const spanMonto = row.querySelector('td:nth-child(3) span');
+            if (spanMonto) {
+                // Usar data-value (unlocalized) en lugar de parsear texto localizado
+                const dataValue = spanMonto.getAttribute('data-value');
+                const monto = dataValue ? parseFloat(dataValue) : 0;
+                totalPagos += monto;
+            }
+        }
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // CALCULAR TOTALES DE GASTOS
+    // ─────────────────────────────────────────────────────────────
+    document.querySelectorAll('.gasto-row').forEach(row => {
+        if (row.style.display === 'none') return; // Ignorar eliminadas
+        
+        const inputMonto = row.querySelector('input[name*="monto"]');
+        if (inputMonto) {
+            const monto = parseFloat(inputMonto.value) || 0;
+            totalGastos += monto;
+        } else {
+            // Si es un registro cerrado (span)
+            const spanMonto = row.querySelector('td:nth-child(2) span');
+            if (spanMonto) {
+                // Usar data-value (unlocalized) en lugar de parsear texto localizado
+                const dataValue = spanMonto.getAttribute('data-value');
+                const monto = dataValue ? parseFloat(dataValue) : 0;
+                totalGastos += monto;
+            }
+        }
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // ACTUALIZAR CELDAS DE TOTALES - TABLA BALONES
+    // ─────────────────────────────────────────────────────────────
+    document.getElementById('totalCalculada').textContent = totalCalculada;
+    document.getElementById('totalDeclarada').textContent = totalDeclarada;
+    document.getElementById('totalDiferencia').textContent = totalDiferencia;
+    document.getElementById('totalKilos').textContent = totalKilos.toLocaleString('es-CL', {minimumFractionDigits: 1}) + ' kg';
+    document.getElementById('totalVentas').textContent = '$' + totalVentas.toLocaleString('es-CL', {minimumFractionDigits: 0});
+
+    // ─────────────────────────────────────────────────────────────
+    // ACTUALIZAR TOTALES DE PAGOS Y GASTOS
+    // ─────────────────────────────────────────────────────────────
+    document.getElementById('totalPagos').textContent = '$' + totalPagos.toLocaleString('es-CL', {minimumFractionDigits: 0});
+    document.getElementById('totalGastos').textContent = '$' + totalGastos.toLocaleString('es-CL', {minimumFractionDigits: 0});
+
+    // ─────────────────────────────────────────────────────────────
+    // CALCULAR RESUMEN FINAL
+    // ─────────────────────────────────────────────────────────────
+    const totalContabilizado = totalPagos + totalGastos;
+    const diferencia = totalVentas - totalContabilizado;
+
+    document.getElementById('resumenVentas').textContent = '$' + totalVentas.toLocaleString('es-CL', {minimumFractionDigits: 0});
+    document.getElementById('resumenPagos').textContent = '$' + totalPagos.toLocaleString('es-CL', {minimumFractionDigits: 0});
+    document.getElementById('resumenGastos').textContent = '$' + totalGastos.toLocaleString('es-CL', {minimumFractionDigits: 0});
+    document.getElementById('resumenContabilizado').textContent = '$' + totalContabilizado.toLocaleString('es-CL', {minimumFractionDigits: 0});
+    document.getElementById('resumenDiferencia').textContent = '$' + diferencia.toLocaleString('es-CL', {minimumFractionDigits: 0});
+
+    // Colorear fila de diferencia
+    const filaDiferencia = document.getElementById('filaDiferencia');
+    const alertaDiferencia = document.getElementById('alertaDiferencia');
+    const mensajeDiferencia = document.getElementById('mensajeDiferencia');
+
+    filaDiferencia.classList.remove('table-success', 'table-danger', 'table-warning');
+    alertaDiferencia.classList.remove('alert-success', 'alert-danger', 'alert-warning', 'd-none');
+
+    if (diferencia === 0) {
+        filaDiferencia.classList.add('table-success');
+        alertaDiferencia.classList.add('alert-success');
+        mensajeDiferencia.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> ¡Perfecto! Las ventas coinciden con lo entregado.';
+    } else if (diferencia > 0) {
+        filaDiferencia.classList.add('table-warning');
+        alertaDiferencia.classList.add('alert-warning');
+        mensajeDiferencia.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Falta dinero por entregar: $' + diferencia.toLocaleString('es-CL');
+    } else {
+        filaDiferencia.classList.add('table-danger');
+        alertaDiferencia.classList.add('alert-danger');
+        mensajeDiferencia.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Se entregó más dinero del generado en ventas: $' + Math.abs(diferencia).toLocaleString('es-CL');
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// EVENT LISTENERS
+// ══════════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', function() {
+    // Agregar listeners a inputs de cantidad declarada
+    document.querySelectorAll('input[name*="cantidad_declarada"]').forEach(input => {
+        input.addEventListener('input', updateTotals);
+    });
+    
+    // Agregar listeners a inputs de montos
+    document.querySelectorAll('input[name*="monto"]').forEach(input => {
+        input.addEventListener('input', updateTotals);
+    });
+    
+    // Calcular totales al cargar la página
+    updateTotals();
 });
+
+// ══════════════════════════════════════════════════════════════════
+// FUNCIONES PARA AGREGAR Y ELIMINAR FILAS DINÁMICAMENTE
+// ══════════════════════════════════════════════════════════════════
+function eliminarFila(boton) {
+    const fila = boton.closest('tr');
+    const checkbox = fila.querySelector('input[type="checkbox"][name*="DELETE"]');
+    
+    if (checkbox) {
+        // Si la fila ya existe en la BD, marcar para eliminar
+        checkbox.checked = true;
+        fila.style.display = 'none';
+    } else {
+        // Si es una fila nueva (no guardada), eliminarla directamente
+        fila.remove();
+    }
+    
+    updateTotals();
+}
+
+function agregarPago() {
+    const tbody = document.getElementById('tablaPagosBody');
+    const template = document.getElementById('empty-pago-template');
+    
+    if (!template) {
+        console.error('Template de pago no encontrado');
+        return;
+    }
+    
+    // Clonar el template (tabla > tbody > tr)
+    const templateRow = template.querySelector('tbody tr');
+    if (!templateRow) {
+        console.error('No se encontró el <tr> dentro del template de pago');
+        return;
+    }
+    
+    const newRow = templateRow.cloneNode(true);
+    
+    // Reemplazar __prefix__ con el índice actual
+    newRow.innerHTML = newRow.innerHTML.replace(/__prefix__/g, pagoFormIdx);
+    
+    // Agregar la fila al tbody
+    tbody.appendChild(newRow);
+    
+    // Incrementar el contador
+    pagoFormIdx++;
+    
+    // Actualizar el campo TOTAL_FORMS
+    document.querySelector('#id_pagos-TOTAL_FORMS').value = pagoFormIdx;
+    
+    // Agregar event listener al input de monto
+    const inputMonto = newRow.querySelector('input[name*="monto"]');
+    if (inputMonto) {
+        inputMonto.addEventListener('input', updateTotals);
+    }
+    
+    // Actualizar totales
+    updateTotals();
+}
+
+function agregarGasto() {
+    const tbody = document.getElementById('tablaGastosBody');
+    const template = document.getElementById('empty-gasto-template');
+    
+    if (!template) {
+        console.error('Template de gasto no encontrado');
+        return;
+    }
+    
+    // Clonar el template (tabla > tbody > tr)
+    const templateRow = template.querySelector('tbody tr');
+    if (!templateRow) {
+        console.error('No se encontró el <tr> dentro del template de gasto');
+        return;
+    }
+    
+    const newRow = templateRow.cloneNode(true);
+    
+    // Reemplazar __prefix__ con el índice actual
+    newRow.innerHTML = newRow.innerHTML.replace(/__prefix__/g, gastoFormIdx);
+    
+    // Agregar la fila al tbody
+    tbody.appendChild(newRow);
+    
+    // Incrementar el contador
+    gastoFormIdx++;
+    
+    // Actualizar el campo TOTAL_FORMS
+    document.querySelector('#id_gastos-TOTAL_FORMS').value = gastoFormIdx;
+    
+    // Agregar event listener al input de monto
+    const inputMonto = newRow.querySelector('input[name*="monto"]');
+    if (inputMonto) {
+        inputMonto.addEventListener('input', updateTotals);
+    }
+    
+    // Actualizar totales
+    updateTotals();
+}
+
+function confirmarCierre() {
+    return confirm('¿Está seguro de cerrar este sobre?\n\nUna vez cerrado, no podrá ser modificado.');
+}
 </script>
 
 <style>
+/* Estilos de la tabla tipo Excel */
 .excel-table th, .excel-table td {
     vertical-align: middle;
+}
+.excel-table th {
     text-align: center;
+    font-size: 0.9rem;
 }
 .excel-table input[type="number"] {
     width: 100%;
-    border: none;
-    background: transparent;
+    max-width: 100px;
+    margin: 0 auto;
+    border: 2px solid #dee2e6;
+    background: #fff;
     font-weight: bold;
     text-align: center;
+    padding: 8px;
+    border-radius: 4px;
 }
 .excel-table input[type="number"]:focus {
     outline: none;
-    background: #fff;
-    box-shadow: 0 0 0 2px #0d6efd;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+}
+.excel-table input[type="number"]:disabled {
+    background-color: #e9ecef;
+    cursor: not-allowed;
+}
+.excel-table input[type="text"] {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px;
+    font-size: 0.85rem;
+}
+.excel-table input[type="text"]:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+.excel-table select {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px;
+    font-size: 0.85rem;
+}
+.excel-table select:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+.excel-table textarea {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px;
+    font-size: 0.85rem;
+}
+.excel-table textarea:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+.excel-table textarea:disabled,
+.excel-table input:disabled,
+.excel-table select:disabled {
+    background-color: #e9ecef;
+    cursor: not-allowed;
 }
 .excel-table tfoot td {
     font-weight: bold;
+    font-size: 1.05rem;
+}
+.diferencia-celda {
+    font-size: 1.1rem;
+}
+.precio-celda {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+.subtotal-celda {
+    font-size: 0.95rem;
 }
 </style>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- MODAL: CREAR NUEVO SOBRE -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalCrearNuevoSobre" tabindex="-1" aria-labelledby="modalCrearNuevoSobreLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="modalCrearNuevoSobreLabel">
+                    <i class="bi bi-plus-circle me-2"></i>Crear Nuevo Sobre
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{% url 'crear_sobre_post_cierre' sobre.id %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p class="text-muted mb-3">
+                        Se creará un nuevo sobre del mismo tipo 
+                        <strong>
+                            {% if sobre.tipo == 'bodega' %}
+                                Bodega
+                            {% else %}
+                                {{ sobre.trabajador.get_full_name|default:sobre.trabajador.username }}
+                            {% endif %}
+                        </strong>
+                    </p>
+                    
+                    <div class="mb-3">
+                        <label for="fecha_correspondiente_nuevo" class="form-label fw-bold">
+                            <i class="bi bi-calendar-event me-2"></i>Fecha Correspondiente al Nuevo Sobre
+                        </label>
+                        <input 
+                            type="date" 
+                            name="fecha_correspondiente" 
+                            id="fecha_correspondiente_nuevo" 
+                            class="form-control"
+                            value="{{ hoy|date:'Y-m-d' }}"
+                            required
+                        >
+                        <small class="form-text text-muted">
+                            Por defecto es hoy, puedes cambiarla si es necesario (ej: encuadre del día anterior)
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle me-1"></i>Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-info">
+                        <i class="bi bi-check-circle me-1"></i>Crear Sobre
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {% endblock %}  

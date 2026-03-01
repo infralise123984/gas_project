@@ -70,6 +70,18 @@ class TipoBalon(models.Model):
         help_text="Precio para pedidos telefónicos, tarreo o entregas a domicilio"
     )
 
+    TIPOS_GAS = [
+        ("normal", "Normal"),
+        ("catalitico", "Catalítico"),
+        ("aluminio", "Aluminio"),
+    ]
+    
+    tipo_gas = models.CharField(
+        max_length=20,
+        choices=TIPOS_GAS,
+        default="normal",
+        verbose_name="Tipo de gas"
+    )
     activo = models.BooleanField(default=True, verbose_name="Disponible para venta")
     actualizado_el = models.DateTimeField(auto_now=True)
     actualizado_por = models.ForeignKey(
@@ -96,27 +108,41 @@ class TipoBalon(models.Model):
     class Meta:
         verbose_name = "Tipo de balón"
         verbose_name_plural = "Tipos de balones"
-        ordering = ["peso_neto_gas"]
+        ordering = ["-peso_neto_gas", "tipo_gas"]
 
 
 class HistorialPrecioBalon(models.Model):
-    tipo_balón = models.ForeignKey(
-        TipoBalon, on_delete=models.CASCADE, related_name="historial_precios"
+    # Snapshot del nombre del balón en el momento del cambio (para que se entienda de qué se trata sin FK)
+    nombre_balon = models.CharField(
+        max_length=100,
+        verbose_name="Nombre del Balón (snapshot)",
+        null=True,          # ← temporal, para pasar la migración
+        blank=True,
     )
-    precio_compra_anterior     = models.DecimalField(max_digits=10, decimal_places=0)
-    precio_local_anterior      = models.DecimalField(max_digits=10, decimal_places=0)
-    precio_domicilio_anterior  = models.DecimalField(max_digits=10, decimal_places=0)
-    activo_anterior            = models.BooleanField()
-    fecha_cambio               = models.DateTimeField(default=timezone.now)
-    actualizado_por            = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Precios anteriores (los 3 tipos)
+    precio_compra_anterior     = models.DecimalField(max_digits=10, decimal_places=0, verbose_name="Precio Compra Anterior")
+    precio_local_anterior      = models.DecimalField(max_digits=10, decimal_places=0, verbose_name="Precio Local Anterior")
+    precio_domicilio_anterior  = models.DecimalField(max_digits=10, decimal_places=0, verbose_name="Precio Domicilio Anterior")
+    
+    activo_anterior            = models.BooleanField(verbose_name="Disponible Anterior")
+    
+    fecha_cambio               = models.DateTimeField(default=timezone.now, verbose_name="Fecha del Cambio")
+    actualizado_por            = models.ForeignKey(
+        'Usuario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Actualizado por"
+    )
 
     class Meta:
-        verbose_name = "Historial de precio"
-        verbose_name_plural = "Historial de precios"
+        verbose_name = "Historial de Precio de Balón"
+        verbose_name_plural = "Historial de Precios de Balones"
         ordering = ["-fecha_cambio"]
 
     def __str__(self):
-        return f"{self.tipo_balón} - {self.fecha_cambio.date()}"
+        return f"{self.nombre_balon} - {self.fecha_cambio.date()}"
 
 
 class Pedido(models.Model):
@@ -132,6 +158,23 @@ class Pedido(models.Model):
         ("local",        "Venta en local"),
         ("tarreo",       "Venta por tarreo"),
         ("venta_extra",  "Venta adicional en entrega"),
+    ]
+
+    SECTORES = [
+        ("Población Dintrans",  "Población Dintrans"),
+        ("Machalí Alto",        "Machalí Alto"),
+        ("Gultro",              "Gultro"),
+        ("Villa Los Tilos",     "Villa Los Tilos"),
+        ("Centro Rancagua",     "Centro Rancagua"),
+        ("Baquedano",           "Baquedano"),
+        ("La Granja",           "La Granja"),
+        ("Rancagua Norte",      "Rancagua Norte"),
+        ("Villa Teniente",      "Villa Teniente"),
+        ("Requínoa",            "Requínoa"),
+        ("Graneros",            "Graneros"),
+        ("Mostazal",            "Mostazal"),
+        ("Codegua",             "Codegua"),
+        ("Otro",                "Otro"),
     ]
 
     # Campos de cabecera
@@ -232,22 +275,22 @@ class DetallePedido(models.Model):
         verbose_name = "Detalle de pedido"
         verbose_name_plural = "Detalles de pedidos"
         ordering = ["balon__peso_neto_gas"]
-        
-# mockups/models.py (agregar al final)
 
 class SobreDiario(models.Model):
-    """
-    Declaración diaria ("sobre") de ventas/entregas por trabajador.
-    Se genera típicamente al final del día para camioneros o bodeguero.
-    Permite ajuste manual respecto a lo calculado por pedidos.
-    """
-    FECHA_CHOICES = "diaria"  # por ahora solo diaria, luego se puede extender
-
-    fecha = models.DateField(default=timezone.now, verbose_name="Fecha del sobre")
+    # Fechas
+    fecha = models.DateTimeField(default=timezone.now, verbose_name="Fecha de creación")
+    fecha_correspondiente = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha a la que corresponde"
+    )
+    
+    # Relaciones
     creado_por = models.ForeignKey(
-        Usuario, 
-        on_delete=models.SET_NULL, 
-        null=True, 
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="sobres_creados",
         verbose_name="Creado por (bodeguero/jefe)"
     )
@@ -256,10 +299,12 @@ class SobreDiario(models.Model):
         on_delete=models.PROTECT,
         related_name="sobres",
         limit_choices_to={'rol__in': ['camionero', 'bodeguero']},
-        null=True,          # ← AGREGAR ESTO
-        blank=True,         # ← AGREGAR ESTO
+        null=True,
+        blank=True,
         verbose_name="Trabajador (camionero o bodeguero)"
     )
+    
+    # Tipo y timestamps
     tipo = models.CharField(
         max_length=20,
         choices=[('camion', 'Camión'), ('bodega', 'Bodega/local')],
@@ -268,57 +313,83 @@ class SobreDiario(models.Model):
     )
     creado_el = models.DateTimeField(auto_now_add=True)
     actualizado_el = models.DateTimeField(auto_now=True)
-
-    # Campos calculados (cache) - se actualizan al guardar
+    
+    # Montos
     monto_calculado_app = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Monto según pedidos en app")
     monto_declarado = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Monto declarado/ajustado")
     diferencia = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Diferencia (ajuste)")
-
     nota = models.TextField(blank=True, verbose_name="Motivo del ajuste en esta línea")
-
+    
+    # Cierre
+    cerrado = models.BooleanField(default=False, verbose_name="Sobre cerrado/finalizado")
+    declarado_el = models.DateTimeField(null=True, blank=True, verbose_name="Fecha y hora de declaración/cierre")
+    nota_cierre = models.TextField(blank=True, verbose_name="Nota al cerrar el sobre")
+    
+    # Kilometraje
+    kilometraje_camion = models.PositiveIntegerField(
+        default=0,
+        blank=True,
+        verbose_name="Kilometraje total del camión",
+        help_text="Lectura del odómetro al momento de cerrar el sobre"
+    )
+    
     class Meta:
         verbose_name = "Sobre diario"
         verbose_name_plural = "Sobres diarios"
-        unique_together = ['fecha', 'trabajador', 'tipo']
-        ordering = ['-fecha', 'trabajador__username']
+        # unique_together = ['fecha_correspondiente', 'trabajador', 'tipo']
+        ordering = ['-fecha_correspondiente', '-fecha']
+
     def __str__(self):
         if self.tipo == 'bodega':
-            return f"Sobre Bodega - {self.fecha.strftime('%d/%m/%Y')}"
+            return f"Sobre Bodega - {self.fecha_correspondiente.strftime('%d/%m/%Y')}"
         else:
             trabajador_nombre = self.trabajador.get_full_name() if self.trabajador else "Sin trabajador"
-            return f"Sobre {self.fecha.strftime('%d/%m/%Y')} - {trabajador_nombre} ({self.get_tipo_display()})"
+            return f"Sobre {self.fecha_correspondiente.strftime('%d/%m/%Y')} - {trabajador_nombre} ({self.get_tipo_display()})"
+
     def calcular_desde_pedidos(self):
         """Suma cantidades y montos desde pedidos del día para este trabajador"""
         if self.tipo == 'camion':
-            # Para camioneros: pedidos entregados por él ese día
             pedidos = Pedido.objects.filter(
-                fecha__date=self.fecha,
+                fecha__date=self.fecha_correspondiente,
                 entregador=self.trabajador,
                 estado='entregado'
             )
         else:
-            # Para bodeguero: ventas locales registradas por él
             pedidos = Pedido.objects.filter(
-                fecha__date=self.fecha,
+                fecha__date=self.fecha_correspondiente,
                 registrador=self.trabajador,
                 origen='local',
                 estado='entregado'
             )
-
         total_monto = pedidos.aggregate(total=Sum('monto_total'))['total'] or 0
         self.monto_calculado_app = total_monto
-
-        # Para las líneas de detalle (más abajo), también se pueden calcular cantidades por balón
         return total_monto
 
+    def calcular_total_declarado(self):
+        """Suma real de las líneas declaradas"""
+        return sum(linea.subtotal_declarado for linea in self.lineas.all())
+
     def save(self, *args, **kwargs):
-        if not self.pk:  # nuevo
+        """
+        Versión corregida: Guarda primero para tener pk, luego recalcula desde líneas.
+        Evita el error "instance needs to have a primary key".
+        """
+        if not self.pk:  # Al crear
             self.calcular_desde_pedidos()
-            self.monto_declarado = self.monto_calculado_app  # valor inicial = calculado
-        self.diferencia = self.monto_declarado - self.monto_calculado_app
+            self.monto_declarado = self.monto_calculado_app
+            self.diferencia = 0
+
+        # Guardar primero
         super().save(*args, **kwargs)
 
-
+        # Recalcular desde líneas solo si ya tiene pk
+        if self.pk:
+            nuevo_monto = self.calcular_total_declarado()
+            nueva_diferencia = nuevo_monto - self.monto_calculado_app
+            if nuevo_monto != self.monto_declarado or nueva_diferencia != self.diferencia:
+                self.monto_declarado = nuevo_monto
+                self.diferencia = nueva_diferencia
+                super().save(update_fields=['monto_declarado', 'diferencia'])
 class LineaSobre(models.Model):
     """
     Línea de detalle por tipo de balón en el sobre (editable manualmente)
@@ -399,3 +470,42 @@ class HistorialCambioPedido(models.Model):
 
     def __str__(self):
         return f"Cambio en Pedido #{self.pedido.id} por {self.usuario} ({self.fecha})"
+    
+# ... (código existente de models.py)
+
+class LineaPago(models.Model):
+    TIPO_PAGO = [
+        ('abono', 'Abono Caja'),
+        ('transferencia', 'Transferencia'),
+        ('visa', 'Visa'),
+        ('cheque', 'Cheque'),
+        ('efectivo', 'Efectivo'),
+        ('otro', 'Otro'),
+    ]
+
+    sobre = models.ForeignKey(SobreDiario, on_delete=models.CASCADE, related_name='pagos')
+    tipo_pago = models.CharField(max_length=20, choices=TIPO_PAGO, default='otro', verbose_name="Tipo de Pago")
+    monto = models.DecimalField(max_digits=10, decimal_places=0, default=0, verbose_name="Monto")
+    referencia = models.CharField(max_length=100, blank=True, verbose_name="Referencia/Nota")
+
+    class Meta:
+        verbose_name = "Línea de Pago No Efectivo"
+        verbose_name_plural = "Líneas de Pagos No Efectivos"
+        ordering = ['-monto']
+
+    def __str__(self):
+        return f"{self.get_tipo_pago_display()} - ${self.monto:,}"
+
+class LineaGasto(models.Model):
+    sobre = models.ForeignKey(SobreDiario, on_delete=models.CASCADE, related_name='gastos')
+    descripcion = models.CharField(max_length=100, verbose_name="Descripción")
+    monto = models.DecimalField(max_digits=10, decimal_places=0, default=0, verbose_name="Monto")
+    nota = models.TextField(blank=True, verbose_name="Nota")
+
+    class Meta:
+        verbose_name = "Línea de Gasto Extra"
+        verbose_name_plural = "Líneas de Gastos Extras"
+        ordering = ['-monto']
+
+    def __str__(self):
+        return f"{self.descripcion} - ${self.monto:,}"

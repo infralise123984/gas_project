@@ -1,25 +1,10 @@
 # mockups/forms.py
 from django import forms
 from django.forms import inlineformset_factory, BaseInlineFormSet
-from .models import Pedido, DetallePedido, TipoBalon, SobreDiario, LineaSobre
+from .models import Pedido, DetallePedido, TipoBalon, SobreDiario, LineaSobre, LineaPago, LineaGasto
 
-SECTORES = [
-    ("", "— Seleccionar sector —"),
-    ("Población Dintrans", "Población Dintrans"),
-    ("Machalí Alto", "Machalí Alto"),
-    ("Gultro", "Gultro"),
-    ("Villa Los Tilos", "Villa Los Tilos"),
-    ("Centro Rancagua", "Centro Rancagua"),
-    ("Baquedano", "Baquedano"),
-    ("La Granja", "La Granja"),
-    ("Rancagua Norte", "Rancagua Norte"),
-    ("Villa Teniente", "Villa Teniente"),
-    ("Requínoa", "Requínoa"),
-    ("Graneros", "Graneros"),
-    ("Mostazal", "Mostazal"),
-    ("Codegua", "Codegua"),
-    ("Otro", "Otro (especificar en dirección)"),
-]
+# Sectores definidos en Pedido.SECTORES (fuente única de verdad)
+SECTORES = [("", "— Seleccionar sector —")] + Pedido.SECTORES
 
 
 class DetallePedidoForm(forms.ModelForm):
@@ -83,7 +68,7 @@ class BaseDetalleFormSet(BaseInlineFormSet):
             raise forms.ValidationError("Debe agregar al menos un producto con balón y cantidad válidos.")
 
 
-# Formset - ajustado para permitir formularios vacíos inicialmente
+# Formset para pedidos - ajustado para permitir formularios vacíos inicialmente
 DetalleFormSet = inlineformset_factory(
     Pedido,
     DetallePedido,
@@ -91,8 +76,8 @@ DetalleFormSet = inlineformset_factory(
     formset=BaseDetalleFormSet,
     extra=1,  # Mostrar 1 formulario vacío inicialmente
     can_delete=True,
-    min_num=0,  # No forzar mínimo en el formset base
-    validate_min=False,  # La validación la hacemos en clean()
+    min_num=0,
+    validate_min=False,
 )
 
 
@@ -104,7 +89,7 @@ class PedidoCabeceraForm(forms.ModelForm):
         required=False,
         label="Sector / Población",
     )
-
+    
     class Meta:
         model = Pedido
         fields = ['metodo_pago', 'sector', 'direccion_entrega']
@@ -116,30 +101,60 @@ class PedidoCabeceraForm(forms.ModelForm):
                 'placeholder': 'Calle, número, casa esquina, depto, referencia clara...'
             }),
         }
-        
+
+
+# ──────────────────────────────────────────────────────────────
+# FORMULARIOS Y FORMSETS PARA SOBRES DIARIOS
+# ──────────────────────────────────────────────────────────────
+
 class LineaSobreForm(forms.ModelForm):
     class Meta:
-        model = LineaSobre  # ← Corrige: usa LineaSobre, NO SobreDiario
-        fields = ['cantidad_declarada', 'nota']  # ← Usa nombres exactos del modelo
+        model = LineaSobre
+        fields = ['cantidad_declarada', 'nota']
         widgets = {
             'cantidad_declarada': forms.NumberInput(attrs={
                 'class': 'form-control fs-4 text-center fw-bold',
                 'min': 0,
+                'style': 'width: 120px;'
             }),
             'nota': forms.Textarea(attrs={
                 'class': 'form-control',
-                'rows': 3,
+                'rows': 2,
                 'placeholder': 'Ej: Faltó registrar 2 balones de 15 kg en la app'
             }),
         }
+
+
+class BaseLineaSobreFormSet(BaseInlineFormSet):
+    def get_queryset(self):
+        """Ordena las líneas del sobre: primero normales por peso desc, luego catalíticos, etc."""
+        from django.db.models import Case, When, Value, IntegerField
+        qs = super().get_queryset()
+        return qs.annotate(
+            tipo_orden=Case(
+                When(balon__tipo_gas='normal', then=Value(0)),
+                When(balon__tipo_gas='catalitico', then=Value(1)),
+                When(balon__tipo_gas='aluminio', then=Value(2)),
+                default=Value(3),
+                output_field=IntegerField(),
+            )
+        ).order_by('tipo_orden', '-balon__peso_neto_gas')
+    
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+        # Aquí podrías agregar validaciones extras si quieres (ej: suma mínima de declaradas)
+
 
 LineaSobreFormSet = inlineformset_factory(
     SobreDiario,
     LineaSobre,
     form=LineaSobreForm,
-    extra=0,                # no agregar líneas nuevas manualmente
-    can_delete=False,       # no permitir borrar líneas (solo ajustar)
-    fields=('cantidad_declarada', 'nota'),  # ← Corrige: usa 'cantidad_declarada' en vez de 'ajustada'
+    formset=BaseLineaSobreFormSet,
+    extra=0,                # No se agregan líneas nuevas manualmente (ya están creadas por balones)
+    can_delete=False,       # No se eliminan balones del sobre
+    fields=('cantidad_declarada', 'nota'),
 )
 
 
@@ -148,8 +163,121 @@ DetalleFormSetEdit = inlineformset_factory(
     DetallePedido,
     form=DetallePedidoForm,
     formset=BaseDetalleFormSet,
-    extra=0,  # ← AQUÍ está la clave: 0 formularios extras
+    extra=0,
     can_delete=True,
     min_num=0,
     validate_min=False,
 )
+
+
+class LineaPagoForm(forms.ModelForm):
+    class Meta:
+        model = LineaPago
+        fields = ['tipo_pago', 'monto', 'referencia']
+        widgets = {
+            'tipo_pago': forms.Select(attrs={'class': 'form-select'}),
+            'monto': forms.NumberInput(attrs={
+                'class': 'form-control text-end',
+                'min': 0,
+                'step': 1,
+                'placeholder': '0'
+            }),
+            'referencia': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ej: Nº transacción o cheque'
+            }),
+        }
+
+
+LineaPagoFormSet = inlineformset_factory(
+    SobreDiario,
+    LineaPago,
+    form=LineaPagoForm,
+    extra=0,                # Permite agregar líneas nuevas
+    can_delete=True,
+    min_num=0,
+)
+
+
+class LineaGastoForm(forms.ModelForm):
+    class Meta:
+        model = LineaGasto
+        fields = ['descripcion', 'monto', 'nota']
+        widgets = {
+            'descripcion': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ej: Compra agua, pago aseo, combustible'
+            }),
+            'monto': forms.NumberInput(attrs={
+                'class': 'form-control text-end',
+                'min': 0,
+                'step': 1,
+                'placeholder': '0'
+            }),
+            'nota': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 2,
+                'placeholder': 'Detalles adicionales (opcional)'
+            }),
+        }
+
+
+LineaGastoFormSet = inlineformset_factory(
+    SobreDiario,
+    LineaGasto,
+    form=LineaGastoForm,
+    extra=0,                # Permite agregar líneas nuevas
+    can_delete=True,
+    min_num=0,
+)
+
+
+# ──────────────────────────────────────────────────────────────
+# FORMULARIOS PARA GESTIÓN DE BALONES (desde la web, sin admin)
+# ──────────────────────────────────────────────────────────────
+
+class TipoBalonForm(forms.ModelForm):
+    """Formulario para crear/editar tipos de balones desde la web (sin precios)"""
+    class Meta:
+        model = TipoBalon
+        fields = ['nombre', 'peso_neto_gas', 'tipo_gas', 'activo']
+        widgets = {
+            'nombre': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ej: Gas 5 kg, Gas 15 kg, Gas 45 kg',
+                'maxlength': 50,
+            }),
+            'peso_neto_gas': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': 1,
+                'placeholder': 'Ej: 5, 11, 15, 45',
+            }),
+            'tipo_gas': forms.Select(attrs={
+                'class': 'form-select',
+            }),
+            'activo': forms.CheckboxInput(attrs={
+                'class': 'form-check-input',
+                'style': 'width: 1.5rem; height: 1.5rem;',
+            }),
+        }
+        labels = {
+            'nombre': 'Nombre comercial',
+            'peso_neto_gas': 'Peso neto de gas (kg)',
+            'tipo_gas': 'Tipo de gas',
+            'activo': 'Disponible para venta',
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        nombre = cleaned_data.get('nombre', '').strip()
+        peso = cleaned_data.get('peso_neto_gas')
+        
+        # Validar que nombre no esté vacío
+        if not nombre:
+            self.add_error('nombre', 'El nombre no puede estar vacío')
+        
+        # Validar que peso sea positivo
+        if peso and peso <= 0:
+            self.add_error('peso_neto_gas', 'El peso debe ser mayor a 0')
+        
+        return cleaned_data
