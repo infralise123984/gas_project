@@ -17,7 +17,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 
 # Modelos, consultas y paginación
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, F, Q, Sum, Case, When, Value, IntegerField
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse, JsonResponse
@@ -35,7 +35,8 @@ from .forms import (
     LineaSobreFormSet,
     DetalleFormSetEdit,
     LineaPagoFormSet,
-    LineaGastoFormSet
+    LineaGastoFormSet,
+    TipoBalonForm
 )
 from .models import (
     Pedido, 
@@ -248,7 +249,15 @@ def precios_balones(request):
     if resp:
         return resp
 
-    balones = TipoBalon.objects.all().order_by("peso_neto_gas")
+    balones = TipoBalon.objects.all().annotate(
+        tipo_orden=Case(
+            When(tipo_gas='normal', then=Value(0)),
+            When(tipo_gas='catalitico', then=Value(1)),
+            When(tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by("tipo_orden", "-peso_neto_gas")
 
     if request.method == "POST":
         cambios_realizados = False
@@ -383,6 +392,232 @@ def historial_precios(request):
     }
 
     return render(request, 'historial_precios.html', context)
+
+
+# ──────────────────────────────────────────────────────────────
+# 4B. GESTIÓN DE BALONES (sin requerir admin)
+# ──────────────────────────────────────────────────────────────
+
+@login_required
+def gestionar_balones_lista(request):
+    """
+    Lista todos los tipos de balones con opción de crear y editar.
+    También permite editar precios masivamente.
+    Admin y jefe pueden además eliminar.
+    Acceso: admin, jefe, bodeguero.
+    """
+    resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para gestionar balones.")
+    if resp:
+        return resp
+    
+    balones = TipoBalon.objects.all().annotate(
+        tipo_orden=Case(
+            When(tipo_gas='normal', then=Value(0)),
+            When(tipo_gas='catalitico', then=Value(1)),
+            When(tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by("tipo_orden", "-peso_neto_gas")
+    
+    # Procesar POST para edición masiva de precios
+    if request.method == "POST":
+        cambios_realizados = False
+
+        for balon in balones:
+            # Claves de los campos del formulario
+            compra_key    = f"precio_compra_{balon.id}"
+            local_key     = f"precio_local_{balon.id}"
+            dom_key       = f"precio_domicilio_{balon.id}"
+            activo_key    = f"activo_{balon.id}"
+
+            # Valores enviados
+            nuevo_compra_str    = request.POST.get(compra_key)
+            nuevo_local_str     = request.POST.get(local_key)
+            nuevo_dom_str       = request.POST.get(dom_key)
+            nuevo_activo        = activo_key in request.POST
+
+            try:
+                nuevo_compra     = int(nuevo_compra_str) if nuevo_compra_str else balon.precio_compra
+                nuevo_local      = int(nuevo_local_str)  if nuevo_local_str  else balon.precio_local
+                nuevo_domicilio  = int(nuevo_dom_str)    if nuevo_dom_str    else balon.precio_domicilio
+
+                if nuevo_compra < 0 or nuevo_local < 0 or nuevo_domicilio < 0:
+                    raise ValueError("Precios no pueden ser negativos")
+            except ValueError:
+                messages.error(request, f"Precio inválido para {balon.nombre}. Se ignoraron cambios en esta fila.")
+                continue
+
+            # Detectar si realmente hay algún cambio
+            hubo_cambio = (
+                balon.precio_compra     != nuevo_compra or
+                balon.precio_local      != nuevo_local or
+                balon.precio_domicilio  != nuevo_domicilio or
+                balon.activo            != nuevo_activo
+            )
+
+            if hubo_cambio:
+                # Guardar historial antes de aplicar cambios
+                HistorialPrecioBalon.objects.create(
+                    nombre_balon       = balon.nombre,
+                    precio_compra_anterior     = balon.precio_compra,
+                    precio_local_anterior      = balon.precio_local,
+                    precio_domicilio_anterior  = balon.precio_domicilio,
+                    activo_anterior            = balon.activo,
+                    actualizado_por            = request.user,
+                )
+
+                # Aplicar nuevos valores
+                balon.precio_compra     = nuevo_compra
+                balon.precio_local      = nuevo_local
+                balon.precio_domicilio  = nuevo_domicilio
+                balon.activo            = nuevo_activo
+                balon.actualizado_por   = request.user
+                balon.save()
+
+                cambios_realizados = True
+
+        if cambios_realizados:
+            messages.success(request, "Precios y disponibilidad actualizados correctamente. Historial registrado.")
+        else:
+            messages.info(request, "No se detectaron cambios válidos.")
+
+        return redirect("balones_lista")
+    
+    context = {
+        'balones': balones,
+        'title': 'Gestión de Balones',
+        'puede_eliminar': request.user.rol in ['jefe', 'admin']
+    }
+    
+    return render(request, 'gestionar_balones.html', context)
+
+
+@login_required
+def gestionar_balones_crear(request):
+    """
+    Crea un nuevo tipo de balón desde la web.
+    Acceso: admin, jefe, bodeguero.
+    """
+    resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para crear balones.")
+    if resp:
+        return resp
+    
+    if request.method == "POST":
+        form = TipoBalonForm(request.POST)
+        
+        if form.is_valid():
+            balon = form.save(commit=False)
+            balon.actualizado_por = request.user
+            balon.save()
+            messages.success(request, f"Balón '{balon.nombre}' creado correctamente.")
+            return redirect("balones_lista")
+        else:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field}: {error}")
+    else:
+        form = TipoBalonForm()
+    
+    context = {
+        'form': form,
+        'title': 'Crear Nuevo Balón',
+        'accion': 'Crear'
+    }
+    
+    return render(request, 'gestionar_balon_form.html', context)
+
+
+@login_required
+def gestionar_balones_editar(request, balon_id):
+    """
+    Edita un tipo de balón existente desde la web.
+    Acceso: admin, jefe, bodeguero.
+    """
+    resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para editar balones.")
+    if resp:
+        return resp
+    
+    balon = get_object_or_404(TipoBalon, id=balon_id)
+    
+    if request.method == "POST":
+        form = TipoBalonForm(request.POST, instance=balon)
+        
+        if form.is_valid():
+            # Guardar historial del cambio anterior
+            balon_anterior = TipoBalon.objects.get(id=balon_id)
+            
+            balon_actualizado = form.save(commit=False)
+            balon_actualizado.actualizado_por = request.user
+            
+            # Verificar si hay cambios reales
+            hubo_cambio = (
+                balon_anterior.precio_compra != balon_actualizado.precio_compra or
+                balon_anterior.precio_local != balon_actualizado.precio_local or
+                balon_anterior.precio_domicilio != balon_actualizado.precio_domicilio or
+                balon_anterior.activo != balon_actualizado.activo
+            )
+            
+            if hubo_cambio:
+                HistorialPrecioBalon.objects.create(
+                    nombre_balon=balon_anterior.nombre,
+                    precio_compra_anterior=balon_anterior.precio_compra,
+                    precio_local_anterior=balon_anterior.precio_local,
+                    precio_domicilio_anterior=balon_anterior.precio_domicilio,
+                    activo_anterior=balon_anterior.activo,
+                    actualizado_por=request.user,
+                )
+            
+            balon_actualizado.save()
+            messages.success(request, f"Balón '{balon_actualizado.nombre}' actualizado correctamente.")
+            return redirect("balones_lista")
+        else:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field}: {error}")
+    else:
+        form = TipoBalonForm(instance=balon)
+    
+    context = {
+        'form': form,
+        'balon': balon,
+        'title': f'Editar Balón - {balon.nombre}',
+        'accion': 'Editar'
+    }
+    
+    return render(request, 'gestionar_balon_form.html', context)
+
+
+@login_required
+def gestionar_balones_eliminar(request, balon_id):
+    """
+    Elimina un tipo de balón (solo si no tiene pedidos asociados).
+    Solo para admin y jefe.
+    """
+    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para eliminar balones.")
+    if resp:
+        return resp
+    
+    balon = get_object_or_404(TipoBalon, id=balon_id)
+    
+    # Verificar si el balón tiene detalles de pedidos
+    detalles = DetallePedido.objects.filter(balon=balon)
+    
+    if detalles.exists():
+        messages.error(
+            request,
+            f"No se puede eliminar '{balon.nombre}' porque tiene {detalles.count()} registro(s) de venta asociado(s). "
+            "Desactívalo en lugar de eliminarlo."
+        )
+        return redirect("balones_lista")
+    
+    nombre_balon = balon.nombre
+    balon.delete()
+    messages.success(request, f"Balón '{nombre_balon}' eliminado correctamente.")
+    
+    return redirect("balones_lista")
+
+
 # ──────────────────────────────────────────────────────────────
 # 5. OPERACIONES TRANSACCIONALES (Registro de Ventas)
 # ──────────────────────────────────────────────────────────────
@@ -849,7 +1084,15 @@ def tarreo_pedido(request):
         messages.error(request, "Acceso solo para camioneros.")
         return redirect('index')
 
-    balones = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
+    balones = TipoBalon.objects.filter(activo=True).annotate(
+        tipo_orden=Case(
+            When(tipo_gas='normal', then=Value(0)),
+            When(tipo_gas='catalitico', then=Value(1)),
+            When(tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by('tipo_orden', '-peso_neto_gas')
 
     if request.method == 'POST':
         metodo_pago = request.POST.get('metodo_pago')
@@ -1838,7 +2081,15 @@ def editar_sobre_diario(request):
     # ═══════════════════════════════════════════════════════════
     
     # Preparar datos para crear líneas (si es necesario)
-    balones_activos = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
+    balones_activos = TipoBalon.objects.filter(activo=True).annotate(
+        tipo_orden=Case(
+            When(tipo_gas='normal', then=Value(0)),
+            When(tipo_gas='catalitico', then=Value(1)),
+            When(tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by('tipo_orden', '-peso_neto_gas')
     fecha_para_calcular = sobre.fecha_correspondiente or sobre.fecha.date()
     tz_chile = ZoneInfo('America/Santiago')
     tz_utc = ZoneInfo('UTC')
@@ -1981,7 +2232,7 @@ def editar_sobre_diario(request):
     
     # ⏰ Determinar si mostrar alerta de "hora recomendada para cerrar"
     # (ej: después de las 20:00 = 8 PM)
-    hora_recomendada_cierre = 20  # 8 PM
+    hora_recomendada_cierre = 18  # 
     mostrar_alerta_cierre = hora_actual >= hora_recomendada_cierre and not sobre.cerrado
     
     # Determinar si es bodega (para el template)
@@ -2180,13 +2431,92 @@ def historial_sobres(request):
     return render(request, 'historial_sobres.html', context)
 
 @login_required
+def imprimir_sobre_diario(request, sobre_id):
+    """
+    Genera una página HTML optimizada para impresión del sobre diario.
+    Formato compacto similar a Excel.
+    """
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin', 'camionero']:
+        messages.error(request, "No tienes permiso para imprimir sobres.")
+        return redirect('index')
+
+    sobre = get_object_or_404(SobreDiario, id=sobre_id)
+    lineas = sobre.lineas.all().annotate(
+        tipo_orden=Case(
+            When(balon__tipo_gas='normal', then=Value(0)),
+            When(balon__tipo_gas='catalitico', then=Value(1)),
+            When(balon__tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by('tipo_orden', '-balon__peso_neto_gas')
+    pagos = sobre.pagos.all()
+    gastos = sobre.gastos.all()
+
+    # Calcular totales y subtotales por línea
+    lineas_data = []
+    total_venta = 0
+    total_cantidad_calc = 0
+    total_cantidad_decl = 0
+    total_diferencia = 0
+    total_kilos = 0
+    
+    for linea in lineas:
+        subtotal = linea.cantidad_declarada * linea.precio_venta_unitario
+        diferencia = linea.cantidad_declarada - linea.cantidad_calculada
+        kilos = linea.cantidad_declarada * linea.balon.peso_neto_gas
+        
+        lineas_data.append({
+            'linea': linea,
+            'subtotal': subtotal,
+            'diferencia': diferencia
+        })
+        
+        total_venta += subtotal
+        total_cantidad_calc += linea.cantidad_calculada
+        total_cantidad_decl += linea.cantidad_declarada
+        total_diferencia += diferencia
+        total_kilos += kilos
+    
+    total_pagos = sum(pago.monto for pago in pagos)
+    total_gastos = sum(gasto.monto for gasto in gastos)
+    total_contabilizado = total_pagos + total_gastos
+    diferencia = total_venta - total_contabilizado
+
+    context = {
+        'sobre': sobre,
+        'lineas_data': lineas_data,
+        'pagos': pagos,
+        'gastos': gastos,
+        'total_venta': total_venta,
+        'total_pagos': total_pagos,
+        'total_gastos': total_gastos,
+        'total_contabilizado': total_contabilizado,
+        'diferencia': diferencia,
+        'total_cantidad_calc': total_cantidad_calc,
+        'total_cantidad_decl': total_cantidad_decl,
+        'total_diferencia': total_diferencia,
+        'total_kilos': total_kilos,
+    }
+
+    return render(request, 'imprimir_sobre.html', context)
+
+@login_required
 def exportar_sobre_excel(request, sobre_id):
     if request.user.rol not in ['bodeguero', 'jefe', 'admin', 'camionero']:
         messages.error(request, "No tienes permiso para exportar sobres.")
         return redirect('index')
 
     sobre = get_object_or_404(SobreDiario, id=sobre_id)
-    lineas = sobre.lineas.all().order_by('balon__peso_neto_gas')
+    lineas = sobre.lineas.all().annotate(
+        tipo_orden=Case(
+            When(balon__tipo_gas='normal', then=Value(0)),
+            When(balon__tipo_gas='catalitico', then=Value(1)),
+            When(balon__tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by('tipo_orden', '-balon__peso_neto_gas')
 
     wb = openpyxl.Workbook()
     ws = wb.active
