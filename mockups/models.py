@@ -509,3 +509,178 @@ class LineaGasto(models.Model):
 
     def __str__(self):
         return f"{self.descripcion} - ${self.monto:,}"
+
+
+# ══════════════════════════════════════════════════════════════════
+# SISTEMA DE AUDITORÍA
+# ══════════════════════════════════════════════════════════════════
+
+class AuditoriaAccion(models.Model):
+    """
+    Registro de auditoría para acciones críticas del sistema.
+    Guarda un historial inmutable de quién hizo qué y cuándo.
+    """
+    TIPOS_ACCION = [
+        # Autenticación
+        ('LOGIN_OK', 'Inicio de sesión exitoso'),
+        ('LOGIN_FAIL', 'Intento de login fallido'),
+        ('LOGOUT', 'Cierre de sesión'),
+        
+        # Usuarios
+        ('USER_CREATE', 'Usuario creado'),
+        ('USER_UPDATE', 'Usuario modificado'),
+        ('USER_DELETE', 'Usuario eliminado'),
+        ('PASSWORD_CHANGE', 'Contraseña cambiada'),
+        
+        # Pedidos
+        ('PEDIDO_CREATE', 'Pedido creado'),
+        ('PEDIDO_UPDATE', 'Pedido modificado'),
+        ('PEDIDO_DELETE', 'Pedido eliminado'),
+        ('PEDIDO_ESTADO', 'Estado de pedido cambiado'),
+        
+        # Precios
+        ('PRECIO_UPDATE', 'Precio actualizado'),
+        ('BALON_CREATE', 'Balón creado'),
+        ('BALON_UPDATE', 'Balón modificado'),
+        ('BALON_DELETE', 'Balón eliminado'),
+        
+        # Sobres/Caja
+        ('SOBRE_CREATE', 'Sobre creado'),
+        ('SOBRE_CLOSE', 'Sobre cerrado'),
+        ('SOBRE_UPDATE', 'Sobre modificado'),
+        
+        # Seguridad
+        ('PERM_DENIED', 'Acceso denegado'),
+        ('SUSPICIOUS', 'Actividad sospechosa'),
+        
+        # Sistema
+        ('EXPORT_DATA', 'Exportación de datos'),
+        ('CONFIG_CHANGE', 'Configuración cambiada'),
+    ]
+    
+    tipo = models.CharField(
+        max_length=20,
+        choices=TIPOS_ACCION,
+        db_index=True,
+        verbose_name="Tipo de acción"
+    )
+    usuario = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Usuario"
+    )
+    username = models.CharField(
+        max_length=150,
+        blank=True,
+        verbose_name="Username (snapshot)",
+        help_text="Guardamos el username por si el usuario es eliminado"
+    )
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        verbose_name="Dirección IP"
+    )
+    user_agent = models.TextField(
+        blank=True,
+        verbose_name="User Agent"
+    )
+    descripcion = models.TextField(
+        blank=True,
+        verbose_name="Descripción detallada"
+    )
+    objeto_tipo = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Tipo de objeto afectado",
+        help_text="Ej: Pedido, Usuario, TipoBalon"
+    )
+    objeto_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="ID del objeto afectado"
+    )
+    objeto_repr = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Representación del objeto",
+        help_text="Snapshot del __str__ del objeto"
+    )
+    datos_anteriores = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name="Datos anteriores (JSON)"
+    )
+    datos_nuevos = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name="Datos nuevos (JSON)"
+    )
+    fecha = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        verbose_name="Fecha y hora"
+    )
+    
+    class Meta:
+        verbose_name = "Registro de Auditoría"
+        verbose_name_plural = "Registros de Auditoría"
+        ordering = ['-fecha']
+        indexes = [
+            models.Index(fields=['tipo', 'fecha']),
+            models.Index(fields=['usuario', 'fecha']),
+            models.Index(fields=['objeto_tipo', 'objeto_id']),
+        ]
+    
+    def __str__(self):
+        user_display = self.username or 'Anónimo'
+        return f"[{self.fecha.strftime('%d/%m %H:%M')}] {self.get_tipo_display()} - {user_display}"
+    
+    @classmethod
+    def registrar(cls, request, tipo, descripcion="", objeto=None, datos_anteriores=None, datos_nuevos=None):
+        """
+        Método helper para registrar una acción de auditoría.
+        
+        Uso:
+            AuditoriaAccion.registrar(
+                request=request,
+                tipo='PEDIDO_CREATE',
+                descripcion='Pedido telefónico creado',
+                objeto=pedido,
+                datos_nuevos={'cliente': 'Juan', 'total': 15000}
+            )
+        """
+        # Obtener IP real (considerando proxies)
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0].strip()
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        
+        # Datos del usuario
+        usuario = request.user if request.user.is_authenticated else None
+        username = usuario.username if usuario else request.POST.get('username', '')
+        
+        # Datos del objeto afectado
+        objeto_tipo = ""
+        objeto_id = None
+        objeto_repr = ""
+        if objeto:
+            objeto_tipo = objeto.__class__.__name__
+            objeto_id = getattr(objeto, 'pk', None) or getattr(objeto, 'id', None)
+            objeto_repr = str(objeto)[:255]
+        
+        return cls.objects.create(
+            tipo=tipo,
+            usuario=usuario,
+            username=username,
+            ip_address=ip,
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
+            descripcion=descripcion,
+            objeto_tipo=objeto_tipo,
+            objeto_id=objeto_id,
+            objeto_repr=objeto_repr,
+            datos_anteriores=datos_anteriores,
+            datos_nuevos=datos_nuevos,
+        )
