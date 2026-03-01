@@ -129,6 +129,12 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'balones_lista' %}active{% endif %}"
+                            href="{% url 'balones_lista' %}">
+                            <i class="bi bi-droplet-half me-1"></i>Balones
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'precios_lista' %}active{% endif %}"
                             href="{% url 'precios_lista' %}">
                             <i class="bi bi-currency-dollar me-1"></i>Precios
