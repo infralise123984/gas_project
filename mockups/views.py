@@ -402,6 +402,7 @@ def historial_precios(request):
 def gestionar_balones_lista(request):
     """
     Lista todos los tipos de balones con opción de crear y editar.
+    También permite editar precios masivamente.
     Admin y jefe pueden además eliminar.
     Acceso: admin, jefe, bodeguero.
     """
@@ -418,6 +419,70 @@ def gestionar_balones_lista(request):
             output_field=IntegerField(),
         )
     ).order_by("tipo_orden", "-peso_neto_gas")
+    
+    # Procesar POST para edición masiva de precios
+    if request.method == "POST":
+        cambios_realizados = False
+
+        for balon in balones:
+            # Claves de los campos del formulario
+            compra_key    = f"precio_compra_{balon.id}"
+            local_key     = f"precio_local_{balon.id}"
+            dom_key       = f"precio_domicilio_{balon.id}"
+            activo_key    = f"activo_{balon.id}"
+
+            # Valores enviados
+            nuevo_compra_str    = request.POST.get(compra_key)
+            nuevo_local_str     = request.POST.get(local_key)
+            nuevo_dom_str       = request.POST.get(dom_key)
+            nuevo_activo        = activo_key in request.POST
+
+            try:
+                nuevo_compra     = int(nuevo_compra_str) if nuevo_compra_str else balon.precio_compra
+                nuevo_local      = int(nuevo_local_str)  if nuevo_local_str  else balon.precio_local
+                nuevo_domicilio  = int(nuevo_dom_str)    if nuevo_dom_str    else balon.precio_domicilio
+
+                if nuevo_compra < 0 or nuevo_local < 0 or nuevo_domicilio < 0:
+                    raise ValueError("Precios no pueden ser negativos")
+            except ValueError:
+                messages.error(request, f"Precio inválido para {balon.nombre}. Se ignoraron cambios en esta fila.")
+                continue
+
+            # Detectar si realmente hay algún cambio
+            hubo_cambio = (
+                balon.precio_compra     != nuevo_compra or
+                balon.precio_local      != nuevo_local or
+                balon.precio_domicilio  != nuevo_domicilio or
+                balon.activo            != nuevo_activo
+            )
+
+            if hubo_cambio:
+                # Guardar historial antes de aplicar cambios
+                HistorialPrecioBalon.objects.create(
+                    nombre_balon       = balon.nombre,
+                    precio_compra_anterior     = balon.precio_compra,
+                    precio_local_anterior      = balon.precio_local,
+                    precio_domicilio_anterior  = balon.precio_domicilio,
+                    activo_anterior            = balon.activo,
+                    actualizado_por            = request.user,
+                )
+
+                # Aplicar nuevos valores
+                balon.precio_compra     = nuevo_compra
+                balon.precio_local      = nuevo_local
+                balon.precio_domicilio  = nuevo_domicilio
+                balon.activo            = nuevo_activo
+                balon.actualizado_por   = request.user
+                balon.save()
+
+                cambios_realizados = True
+
+        if cambios_realizados:
+            messages.success(request, "Precios y disponibilidad actualizados correctamente. Historial registrado.")
+        else:
+            messages.info(request, "No se detectaron cambios válidos.")
+
+        return redirect("balones_lista")
     
     context = {
         'balones': balones,

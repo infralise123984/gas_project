@@ -58,9 +58,9 @@ urlpatterns = [
     path('reportes/sobres/', views.reporte_sobres, name='reportes_sobres'),
 
     # ────────────────────────────────────────────────
-    # GESTIÓN DE PRECIOS
+    # GESTIÓN DE PRECIOS Y BALONES
     # ────────────────────────────────────────────────
-    path('precios/lista/', views.precios_balones, name='precios_lista'),
+    path('precios/lista/', views.gestionar_balones_lista, name='precios_lista'),  # Redirige a gestión integrada
     path('precios/historial/', views.historial_precios, name='precios_historial'),
 
     # ────────────────────────────────────────────────
