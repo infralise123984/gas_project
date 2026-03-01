@@ -281,7 +281,7 @@ class AuditoriaAccionAdmin(admin.ModelAdmin):
         'fecha',
     )
     ordering = ('-fecha',)
-    date_hierarchy = 'fecha'
+    # date_hierarchy = 'fecha'  # Desactivado: MySQL necesita timezone definitions
     list_per_page = 50
     
     # Deshabilitar eliminación y edición
