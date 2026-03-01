@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Gestión de Balones - GasFácil{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-11 col-xl-10">
+
+            <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+                <h2 class="text-primary fw-bold mb-0">
+                    <i class="bi bi-droplet me-2"></i>Gestión de Balones
+                </h2>
+                <a href="{% url 'balones_crear' %}" class="btn btn-success btn-lg px-4 shadow">
+                    <i class="bi bi-plus-circle me-2"></i>Nuevo Balón
+                </a>
+            </div>
+
+            {% if messages %}
+            <div class="mb-3">
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="card shadow-lg border-0">
+                <div class="card-header bg-primary text-white text-center py-4">
+                    <h4 class="mb-0 fw-bold">Tipos de Balones Disponibles</h4>
+                    <small>Crear, editar o desactivar balones sin necesidad del panel de admin</small>
+                </div>
+
+                <div class="card-body p-0">
+                    {% if balones %}
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered align-middle mb-0">
+                            <thead class="table-primary text-white">
+                                <tr>
+                                    <th class="ps-3 w-25">Nombre</th>
+                                    <th class="text-center w-15">Peso (kg)</th>
+                                    <th class="text-center w-15">Tipo</th>
+                                    <th class="text-end pe-3 w-20">Precio Compra</th>
+                                    <th class="text-end pe-3 w-20">Precio Local</th>
+                                    <th class="text-end pe-3 w-20">Precio Domicilio</th>
+                                    <th class="text-center w-10">Estado</th>
+                                    <th class="text-center w-25">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for balon in balones %}
+                                <tr {% if not balon.activo %}class="table-secondary opacity-75"{% endif %}>
+                                    <td class="ps-3 fw-semibold">
+                                        {{ balon.nombre }}
+                                        {% if balon.tipo_gas == 'catalitico' %}
+                                            <span class="badge bg-warning text-dark ms-1">CAT</span>
+                                        {% elif balon.tipo_gas == 'aluminio' %}
+                                            <span class="badge bg-secondary ms-1">ALU</span>
+                                        {% else %}
+                                            <span class="badge bg-info text-dark ms-1">NORMAL</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">{{ balon.peso_neto_gas }} kg</td>
+                                    <td class="text-center">
+                                        <span class="badge {% if balon.tipo_gas == 'normal' %}bg-light text-dark{% elif balon.tipo_gas == 'catalitico' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                                            {{ balon.get_tipo_gas_display }}
+                                        </span>
+                                    </td>
+                                    <td class="text-end pe-3">${{ balon.precio_compra|floatformat:0|intcomma }}</td>
+                                    <td class="text-end pe-3">${{ balon.precio_local|floatformat:0|intcomma }}</td>
+                                    <td class="text-end pe-3">${{ balon.precio_domicilio|floatformat:0|intcomma }}</td>
+                                    <td class="text-center">
+                                        {% if balon.activo %}
+                                        <span class="badge bg-success">Activo</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Inactivo</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{% url 'balones_editar' balon.id %}" class="btn btn-outline-primary" title="Editar">
+                                                <i class="bi bi-pencil-square"></i> Editar
+                                            </a>
+                                            <a href="{% url 'balones_eliminar' balon.id %}" class="btn btn-outline-danger" title="Eliminar" onclick="return confirm('¿Estás seguro de que deseas eliminar este balón?\n\nSi tiene ventas registradas, no podrá ser eliminado.');">
+                                                <i class="bi bi-trash"></i> Eliminar
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                        <strong>No hay tipos de balones registrados aún</strong>
+                        <p class="mt-2">
+                            <a href="{% url 'balones_crear' %}" class="btn btn-primary btn-sm mt-3">
+                                <i class="bi bi-plus-circle me-1"></i>Crear el primer balón
+                            </a>
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="text-center mt-4 text-muted small">
+                <p>
+                    <i class="bi bi-info-circle me-1"></i>
+                    Los cambios en precios se registran automáticamente en el historial de cambios.
+                </p>
+                <p>
+                    <i class="bi bi-shield-lock me-1"></i>
+                    Solo administradores y jefes pueden gestionar balones.
+                </p>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -35,7 +35,8 @@ from .forms import (
     LineaSobreFormSet,
     DetalleFormSetEdit,
     LineaPagoFormSet,
-    LineaGastoFormSet
+    LineaGastoFormSet,
+    TipoBalonForm
 )
 from .models import (
     Pedido, 
@@ -391,6 +392,165 @@ def historial_precios(request):
     }
 
     return render(request, 'historial_precios.html', context)
+
+
+# ──────────────────────────────────────────────────────────────
+# 4B. GESTIÓN DE BALONES (sin requerir admin)
+# ──────────────────────────────────────────────────────────────
+
+@login_required
+def gestionar_balones_lista(request):
+    """
+    Lista todos los tipos de balones con opción de crear, editar y eliminar.
+    Solo para admin y jefe.
+    """
+    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para gestionar balones.")
+    if resp:
+        return resp
+    
+    balones = TipoBalon.objects.all().annotate(
+        tipo_orden=Case(
+            When(tipo_gas='normal', then=Value(0)),
+            When(tipo_gas='catalitico', then=Value(1)),
+            When(tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by("tipo_orden", "-peso_neto_gas")
+    
+    context = {
+        'balones': balones,
+        'title': 'Gestión de Balones'
+    }
+    
+    return render(request, 'gestionar_balones.html', context)
+
+
+@login_required
+def gestionar_balones_crear(request):
+    """
+    Crea un nuevo tipo de balón desde la web.
+    Solo para admin y jefe.
+    """
+    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para crear balones.")
+    if resp:
+        return resp
+    
+    if request.method == "POST":
+        form = TipoBalonForm(request.POST)
+        
+        if form.is_valid():
+            balon = form.save(commit=False)
+            balon.actualizado_por = request.user
+            balon.save()
+            messages.success(request, f"Balón '{balon.nombre}' creado correctamente.")
+            return redirect("balones_lista")
+        else:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field}: {error}")
+    else:
+        form = TipoBalonForm()
+    
+    context = {
+        'form': form,
+        'title': 'Crear Nuevo Balón',
+        'accion': 'Crear'
+    }
+    
+    return render(request, 'gestionar_balon_form.html', context)
+
+
+@login_required
+def gestionar_balones_editar(request, balon_id):
+    """
+    Edita un tipo de balón existente desde la web.
+    Solo para admin y jefe.
+    """
+    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para editar balones.")
+    if resp:
+        return resp
+    
+    balon = get_object_or_404(TipoBalon, id=balon_id)
+    
+    if request.method == "POST":
+        form = TipoBalonForm(request.POST, instance=balon)
+        
+        if form.is_valid():
+            # Guardar historial del cambio anterior
+            balon_anterior = TipoBalon.objects.get(id=balon_id)
+            
+            balon_actualizado = form.save(commit=False)
+            balon_actualizado.actualizado_por = request.user
+            
+            # Verificar si hay cambios reales
+            hubo_cambio = (
+                balon_anterior.precio_compra != balon_actualizado.precio_compra or
+                balon_anterior.precio_local != balon_actualizado.precio_local or
+                balon_anterior.precio_domicilio != balon_actualizado.precio_domicilio or
+                balon_anterior.activo != balon_actualizado.activo
+            )
+            
+            if hubo_cambio:
+                HistorialPrecioBalon.objects.create(
+                    nombre_balon=balon_anterior.nombre,
+                    precio_compra_anterior=balon_anterior.precio_compra,
+                    precio_local_anterior=balon_anterior.precio_local,
+                    precio_domicilio_anterior=balon_anterior.precio_domicilio,
+                    activo_anterior=balon_anterior.activo,
+                    actualizado_por=request.user,
+                )
+            
+            balon_actualizado.save()
+            messages.success(request, f"Balón '{balon_actualizado.nombre}' actualizado correctamente.")
+            return redirect("balones_lista")
+        else:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{field}: {error}")
+    else:
+        form = TipoBalonForm(instance=balon)
+    
+    context = {
+        'form': form,
+        'balon': balon,
+        'title': f'Editar Balón - {balon.nombre}',
+        'accion': 'Editar'
+    }
+    
+    return render(request, 'gestionar_balon_form.html', context)
+
+
+@login_required
+def gestionar_balones_eliminar(request, balon_id):
+    """
+    Elimina un tipo de balón (solo si no tiene pedidos asociados).
+    Solo para admin y jefe.
+    """
+    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para eliminar balones.")
+    if resp:
+        return resp
+    
+    balon = get_object_or_404(TipoBalon, id=balon_id)
+    
+    # Verificar si el balón tiene detalles de pedidos
+    detalles = DetallePedido.objects.filter(balon=balon)
+    
+    if detalles.exists():
+        messages.error(
+            request,
+            f"No se puede eliminar '{balon.nombre}' porque tiene {detalles.count()} registro(s) de venta asociado(s). "
+            "Desactívalo en lugar de eliminarlo."
+        )
+        return redirect("balones_lista")
+    
+    nombre_balon = balon.nombre
+    balon.delete()
+    messages.success(request, f"Balón '{nombre_balon}' eliminado correctamente.")
+    
+    return redirect("balones_lista")
+
+
 # ──────────────────────────────────────────────────────────────
 # 5. OPERACIONES TRANSACCIONALES (Registro de Ventas)
 # ──────────────────────────────────────────────────────────────

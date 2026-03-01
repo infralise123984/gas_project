@@ -64,6 +64,14 @@ urlpatterns = [
     path('precios/historial/', views.historial_precios, name='precios_historial'),
 
     # ────────────────────────────────────────────────
+    # GESTIÓN DE BALONES (sin admin)
+    # ────────────────────────────────────────────────
+    path('balones/lista/', views.gestionar_balones_lista, name='balones_lista'),
+    path('balones/crear/', views.gestionar_balones_crear, name='balones_crear'),
+    path('balones/<int:balon_id>/editar/', views.gestionar_balones_editar, name='balones_editar'),
+    path('balones/<int:balon_id>/eliminar/', views.gestionar_balones_eliminar, name='balones_eliminar'),
+
+    # ────────────────────────────────────────────────
     # GESTIÓN DE SOBRES Y CIERRE DE CAJA
     # ────────────────────────────────────────────────
     path('sobres/lista/', views.lista_sobres_diarios, name='sobres_lista'),

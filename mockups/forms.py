@@ -230,3 +230,75 @@ LineaGastoFormSet = inlineformset_factory(
     can_delete=True,
     min_num=0,
 )
+
+
+# ──────────────────────────────────────────────────────────────
+# FORMULARIOS PARA GESTIÓN DE BALONES (desde la web, sin admin)
+# ──────────────────────────────────────────────────────────────
+
+class TipoBalonForm(forms.ModelForm):
+    """Formulario para crear/editar tipos de balones desde la web"""
+    class Meta:
+        model = TipoBalon
+        fields = ['nombre', 'peso_neto_gas', 'tipo_gas', 'precio_compra', 'precio_local', 'precio_domicilio', 'activo']
+        widgets = {
+            'nombre': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ej: Gas 5 kg, Gas 15 kg, Gas 45 kg',
+                'maxlength': 50,
+            }),
+            'peso_neto_gas': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': 1,
+                'placeholder': 'Ej: 5, 11, 15, 45',
+            }),
+            'tipo_gas': forms.Select(attrs={
+                'class': 'form-select',
+            }),
+            'precio_compra': forms.NumberInput(attrs={
+                'class': 'form-control text-end',
+                'min': 0,
+                'step': 1,
+                'placeholder': '0',
+            }),
+            'precio_local': forms.NumberInput(attrs={
+                'class': 'form-control text-end',
+                'min': 0,
+                'step': 1,
+                'placeholder': '0',
+            }),
+            'precio_domicilio': forms.NumberInput(attrs={
+                'class': 'form-control text-end',
+                'min': 0,
+                'step': 1,
+                'placeholder': '0',
+            }),
+            'activo': forms.CheckboxInput(attrs={
+                'class': 'form-check-input',
+                'style': 'width: 1.5rem; height: 1.5rem;',
+            }),
+        }
+        labels = {
+            'nombre': 'Nombre comercial',
+            'peso_neto_gas': 'Peso neto de gas (kg)',
+            'tipo_gas': 'Tipo de gas',
+            'precio_compra': 'Precio de compra (CLP)',
+            'precio_local': 'Precio venta local (CLP)',
+            'precio_domicilio': 'Precio venta domicilio (CLP)',
+            'activo': 'Disponible para venta',
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        nombre = cleaned_data.get('nombre', '').strip()
+        peso = cleaned_data.get('peso_neto_gas')
+        
+        # Validar que nombre no esté vacío
+        if not nombre:
+            self.add_error('nombre', 'El nombre no puede estar vacío')
+        
+        # Validar que peso sea positivo
+        if peso and peso <= 0:
+            self.add_error('peso_neto_gas', 'El peso debe ser mayor a 0')
+        
+        return cleaned_data
