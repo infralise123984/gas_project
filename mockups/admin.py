@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.db.models import Sum, F, ExpressionWrapper, DecimalField
-from .models import Usuario, TipoBalon, HistorialPrecioBalon, Pedido, DetallePedido, HistorialEstadoPedido, SobreDiario, LineaSobre
+from .models import Usuario, TipoBalon, HistorialPrecioBalon, Pedido, DetallePedido, HistorialEstadoPedido, SobreDiario, LineaSobre, AuditoriaAccion
 
 
 @admin.register(Usuario)
@@ -233,5 +233,119 @@ class LineaSobreAdmin(admin.ModelAdmin):
         }),
         ('Observaciones', {
             'fields': ('nota',)
+        }),
+    )
+
+
+# ══════════════════════════════════════════════════════════════════
+# AUDITORÍA
+# ══════════════════════════════════════════════════════════════════
+
+@admin.register(AuditoriaAccion)
+class AuditoriaAccionAdmin(admin.ModelAdmin):
+    """
+    Panel de auditoría para revisar todas las acciones del sistema.
+    Solo lectura - los registros de auditoría NO deben modificarse.
+    """
+    list_display = (
+        'fecha',
+        'tipo_badge',
+        'username',
+        'descripcion_corta',
+        'ip_address',
+        'objeto_info',
+    )
+    list_filter = (
+        'tipo',
+        'fecha',
+        ('usuario', admin.RelatedOnlyFieldListFilter),
+    )
+    search_fields = (
+        'username',
+        'descripcion',
+        'ip_address',
+        'objeto_repr',
+    )
+    readonly_fields = (
+        'tipo',
+        'usuario',
+        'username',
+        'ip_address',
+        'user_agent',
+        'descripcion',
+        'objeto_tipo',
+        'objeto_id',
+        'objeto_repr',
+        'datos_anteriores',
+        'datos_nuevos',
+        'fecha',
+    )
+    ordering = ('-fecha',)
+    date_hierarchy = 'fecha'
+    list_per_page = 50
+    
+    # Deshabilitar eliminación y edición
+    def has_add_permission(self, request):
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        return False
+    
+    def tipo_badge(self, obj):
+        """Muestra el tipo de acción con color según categoría."""
+        colores = {
+            'LOGIN_OK': '#28a745',      # verde
+            'LOGIN_FAIL': '#dc3545',    # rojo
+            'LOGOUT': '#6c757d',        # gris
+            'USER_CREATE': '#17a2b8',   # cyan
+            'USER_UPDATE': '#17a2b8',
+            'USER_DELETE': '#dc3545',
+            'PEDIDO_CREATE': '#007bff', # azul
+            'PEDIDO_UPDATE': '#ffc107', # amarillo
+            'PEDIDO_DELETE': '#dc3545',
+            'PRECIO_UPDATE': '#fd7e14', # naranja
+            'PERM_DENIED': '#dc3545',   # rojo
+            'SUSPICIOUS': '#dc3545',
+        }
+        color = colores.get(obj.tipo, '#6c757d')
+        return format_html(
+            '<span style="background-color:{}; color:white; padding:3px 8px; '
+            'border-radius:3px; font-size:11px;">{}</span>',
+            color, obj.get_tipo_display()
+        )
+    tipo_badge.short_description = 'Tipo'
+    tipo_badge.admin_order_field = 'tipo'
+    
+    def descripcion_corta(self, obj):
+        """Muestra descripción truncada."""
+        if obj.descripcion:
+            return obj.descripcion[:60] + ('...' if len(obj.descripcion) > 60 else '')
+        return '-'
+    descripcion_corta.short_description = 'Descripción'
+    
+    def objeto_info(self, obj):
+        """Muestra información del objeto afectado."""
+        if obj.objeto_tipo:
+            return f"{obj.objeto_tipo} #{obj.objeto_id}"
+        return '-'
+    objeto_info.short_description = 'Objeto'
+    
+    fieldsets = (
+        ('Información General', {
+            'fields': ('tipo', 'fecha', 'descripcion')
+        }),
+        ('Usuario', {
+            'fields': ('usuario', 'username', 'ip_address', 'user_agent')
+        }),
+        ('Objeto Afectado', {
+            'fields': ('objeto_tipo', 'objeto_id', 'objeto_repr'),
+            'classes': ('collapse',)
+        }),
+        ('Datos (JSON)', {
+            'fields': ('datos_anteriores', 'datos_nuevos'),
+            'classes': ('collapse',)
         }),
     )
