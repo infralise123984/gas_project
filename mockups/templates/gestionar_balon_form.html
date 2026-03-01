@@ -89,75 +89,6 @@
                             {% endif %}
                         </div>
 
-                        <!-- Sección de precios -->
-                        <div class="row">
-                            <!-- Precio compra -->
-                            <div class="col-md-6 mb-4">
-                                <label for="{{ form.precio_compra.id_for_label }}" class="form-label fw-semibold">
-                                    {{ form.precio_compra.label }}
-                                    <span class="text-danger">*</span>
-                                </label>
-                                <div class="input-group">
-                                    <span class="input-group-text">$</span>
-                                    {{ form.precio_compra }}
-                                </div>
-                                {% if form.precio_compra.errors %}
-                                <div class="invalid-feedback d-block">
-                                    {% for error in form.precio_compra.errors %}
-                                        {{ error }}
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
-                                <small class="form-text text-muted d-block mt-1">
-                                    Costo real para KIM GAS
-                                </small>
-                            </div>
-
-                            <!-- Precio local -->
-                            <div class="col-md-6 mb-4">
-                                <label for="{{ form.precio_local.id_for_label }}" class="form-label fw-semibold">
-                                    {{ form.precio_local.label }}
-                                    <span class="text-danger">*</span>
-                                </label>
-                                <div class="input-group">
-                                    <span class="input-group-text">$</span>
-                                    {{ form.precio_local }}
-                                </div>
-                                {% if form.precio_local.errors %}
-                                <div class="invalid-feedback d-block">
-                                    {% for error in form.precio_local.errors %}
-                                        {{ error }}
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
-                                <small class="form-text text-muted d-block mt-1">
-                                    Venta en bodega/local
-                                </small>
-                            </div>
-                        </div>
-
-                        <!-- Precio domicilio -->
-                        <div class="mb-4">
-                            <label for="{{ form.precio_domicilio.id_for_label }}" class="form-label fw-semibold">
-                                {{ form.precio_domicilio.label }}
-                                <span class="text-danger">*</span>
-                            </label>
-                            <div class="input-group">
-                                <span class="input-group-text">$</span>
-                                {{ form.precio_domicilio }}
-                            </div>
-                            {% if form.precio_domicilio.errors %}
-                            <div class="invalid-feedback d-block">
-                                {% for error in form.precio_domicilio.errors %}
-                                    {{ error }}
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                            <small class="form-text text-muted d-block mt-1">
-                                Pedidos telefónicos, tarreo o entregas a domicilio
-                            </small>
-                        </div>
-
                         <!-- Disponible para venta -->
                         <div class="mb-4">
                             <div class="form-check form-switch">
@@ -189,7 +120,7 @@
             <div class="text-center mt-4 text-muted small">
                 <p>
                     <i class="bi bi-info-circle me-1"></i>
-                    Los cambios en precios se registran automáticamente en el historial.
+                    Los precios se editan desde la pestaña "Editar Precios" en la vista principal.
                 </p>
             </div>
 

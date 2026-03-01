@@ -237,10 +237,10 @@ LineaGastoFormSet = inlineformset_factory(
 # ──────────────────────────────────────────────────────────────
 
 class TipoBalonForm(forms.ModelForm):
-    """Formulario para crear/editar tipos de balones desde la web"""
+    """Formulario para crear/editar tipos de balones desde la web (sin precios)"""
     class Meta:
         model = TipoBalon
-        fields = ['nombre', 'peso_neto_gas', 'tipo_gas', 'precio_compra', 'precio_local', 'precio_domicilio', 'activo']
+        fields = ['nombre', 'peso_neto_gas', 'tipo_gas', 'activo']
         widgets = {
             'nombre': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -255,24 +255,6 @@ class TipoBalonForm(forms.ModelForm):
             'tipo_gas': forms.Select(attrs={
                 'class': 'form-select',
             }),
-            'precio_compra': forms.NumberInput(attrs={
-                'class': 'form-control text-end',
-                'min': 0,
-                'step': 1,
-                'placeholder': '0',
-            }),
-            'precio_local': forms.NumberInput(attrs={
-                'class': 'form-control text-end',
-                'min': 0,
-                'step': 1,
-                'placeholder': '0',
-            }),
-            'precio_domicilio': forms.NumberInput(attrs={
-                'class': 'form-control text-end',
-                'min': 0,
-                'step': 1,
-                'placeholder': '0',
-            }),
             'activo': forms.CheckboxInput(attrs={
                 'class': 'form-check-input',
                 'style': 'width: 1.5rem; height: 1.5rem;',
@@ -282,9 +264,6 @@ class TipoBalonForm(forms.ModelForm):
             'nombre': 'Nombre comercial',
             'peso_neto_gas': 'Peso neto de gas (kg)',
             'tipo_gas': 'Tipo de gas',
-            'precio_compra': 'Precio de compra (CLP)',
-            'precio_local': 'Precio venta local (CLP)',
-            'precio_domicilio': 'Precio venta domicilio (CLP)',
             'activo': 'Disponible para venta',
         }
 
