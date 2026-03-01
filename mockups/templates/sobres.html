@@ -155,7 +155,16 @@
                                     <tr data-index="{{ forloop.counter0 }}"
                                         data-precio="{{ form.instance.precio_venta_unitario|unlocalize }}"
                                         data-peso="{{ form.instance.balon.peso_neto_gas|unlocalize }}">
-                                        <td class="fw-bold align-middle">{{ form.instance.balon.nombre }}</td>
+                                        <td class="fw-bold align-middle">
+                                            {{ form.instance.balon.nombre }}
+                                            {% if form.instance.balon.tipo_gas == 'catalitico' %}
+                                                <span class="badge bg-warning text-dark ms-1">CAT</span>
+                                            {% elif form.instance.balon.tipo_gas == 'aluminio' %}
+                                                <span class="badge bg-secondary ms-1">ALU</span>
+                                            {% else %}
+                                                <span class="badge bg-info text-dark ms-1">NORMAL</span>
+                                            {% endif %}
+                                        </td>
                                         <td class="text-center fw-semibold text-muted align-middle">
                                             {{ form.instance.balon.peso_neto_gas }}
                                         </td>

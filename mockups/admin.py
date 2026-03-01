@@ -19,6 +19,7 @@ class TipoBalonAdmin(admin.ModelAdmin):
     list_display = (
         'nombre',
         'peso_neto_gas',
+        'tipo_gas',
         'precio_compra',
         'precio_local',
         'precio_domicilio',
@@ -26,11 +27,11 @@ class TipoBalonAdmin(admin.ModelAdmin):
         'actualizado_el',
         'actualizado_por'
     )
-    list_filter = ('activo',)
+    list_filter = ('activo', 'tipo_gas')
     search_fields = ('nombre', 'peso_neto_gas')
     list_editable = ('precio_compra', 'precio_local', 'precio_domicilio', 'activo')
     readonly_fields = ('actualizado_el', 'actualizado_por')
-    ordering = ('peso_neto_gas',)
+    ordering = ('-peso_neto_gas', 'tipo_gas')
 
 
 @admin.register(HistorialPrecioBalon)
@@ -80,7 +81,7 @@ class DetallePedidoInline(admin.TabularInline):
     extra = 1
     fields = ('balon', 'cantidad', 'precio_venta_unitario', 'precio_compra_unitario', 'subtotal', 'ganancia')
     readonly_fields = ('subtotal', 'ganancia')
-    ordering = ('balon__peso_neto_gas',)
+    ordering = ('-balon__peso_neto_gas', 'balon__tipo_gas')
 
 
 class HistorialEstadoPedidoInline(admin.TabularInline):
