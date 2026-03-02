@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.db.models import Sum, F, ExpressionWrapper, DecimalField
-from .models import Usuario, TipoBalon, HistorialPrecioBalon, Pedido, DetallePedido, HistorialEstadoPedido, SobreDiario, LineaSobre, AuditoriaAccion
+from .models import Usuario, TipoBalon, HistorialPrecioBalon, Pedido, DetallePedido, HistorialEstadoPedido, SobreDiario, LineaSobre, AuditoriaAccion, PushSubscription
 
 
 @admin.register(Usuario)
@@ -349,3 +349,48 @@ class AuditoriaAccionAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+
+@admin.register(PushSubscription)
+class PushSubscriptionAdmin(admin.ModelAdmin):
+    """Admin para gestionar suscripciones de notificaciones push."""
+    
+    list_display = ('usuario', 'dispositivo', 'activa', 'creada_el', 'actualizada_el')
+    list_filter = ('activa', 'creada_el')
+    search_fields = ('usuario__username', 'usuario__first_name', 'usuario__last_name', 'endpoint')
+    readonly_fields = ('endpoint', 'p256dh', 'auth', 'user_agent', 'creada_el', 'actualizada_el')
+    list_per_page = 25
+    date_hierarchy = 'creada_el'
+    
+    def dispositivo(self, obj):
+        """Muestra el tipo de dispositivo basado en el user agent."""
+        if 'Mobile' in obj.user_agent or 'Android' in obj.user_agent or 'iPhone' in obj.user_agent:
+            return format_html('<span class="badge" style="background-color: #198754;">📱 Móvil</span>')
+        return format_html('<span class="badge" style="background-color: #0d6efd;">💻 Desktop</span>')
+    dispositivo.short_description = 'Dispositivo'
+    
+    fieldsets = (
+        ('Usuario', {
+            'fields': ('usuario', 'activa')
+        }),
+        ('Suscripción', {
+            'fields': ('endpoint', 'p256dh', 'auth'),
+            'classes': ('collapse',)
+        }),
+        ('Metadatos', {
+            'fields': ('user_agent', 'creada_el', 'actualizada_el'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    actions = ['activar_suscripciones', 'desactivar_suscripciones']
+    
+    def activar_suscripciones(self, request, queryset):
+        queryset.update(activa=True)
+        self.message_user(request, f'{queryset.count()} suscripciones activadas.')
+    activar_suscripciones.short_description = 'Activar suscripciones seleccionadas'
+    
+    def desactivar_suscripciones(self, request, queryset):
+        queryset.update(activa=False)
+        self.message_user(request, f'{queryset.count()} suscripciones desactivadas.')
+    desactivar_suscripciones.short_description = 'Desactivar suscripciones seleccionadas'

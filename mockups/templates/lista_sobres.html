@@ -16,7 +16,7 @@
     </div>
 
     <p class="text-center text-muted mb-4">
-        Selecciona bodega o un camionero para ver/editar el sobre de hoy ({{ hoy|date:"d/m/Y" }})
+        Sobres del día {{ hoy|date:"d/m/Y" }}
     </p>
 
     {% if messages %}
@@ -30,40 +30,81 @@
     </div>
     {% endif %}
 
-    <div class="card shadow-sm border-0">
-        <div class="card-header bg-primary text-white text-center py-3">
-            <h5 class="mb-0">Opciones de cierre del día</h5>
-        </div>
-        <div class="list-group list-group-flush">
-            <a href="{% url 'sobres_editar' %}?bodega=1" 
-               class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-4">
-                <div>
-                    <h5 class="mb-1 fw-bold"><i class="bi bi-shop-window me-2"></i>Bodega (ventas locales)</h5>
-                    <small class="text-muted">Cierre de ventas directas en local</small>
-                </div>
-                <i class="bi bi-arrow-right fs-4 text-primary"></i>
-            </a>
-
-            {% for camionero in camioneros %}
-            <a href="{% url 'sobres_editar' %}?camionero={{ camionero.id }}" 
-               class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-4">
-                <div>
-                    <h5 class="mb-1 fw-bold">
-                        <i class="bi bi-truck me-2"></i>
-                        {{ camionero.get_full_name|default:camionero.username }}
-                    </h5>
-                    <small class="text-muted">Camionero</small>
-                </div>
-                <i class="bi bi-arrow-right fs-4 text-primary"></i>
-            </a>
-            {% empty %}
-            <div class="list-group-item text-center py-5 text-muted">
-                <i class="bi bi-info-circle fs-1 d-block mb-3"></i>
-                No hay camioneros activos registrados
+    {# BODEGA #}
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-primary text-white py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-shop-window me-2"></i>Bodega (ventas locales)</h5>
+                <a href="{% url 'sobres_editar' %}?bodega=1" class="btn btn-light btn-sm">
+                    <i class="bi bi-plus-lg me-1"></i>Nuevo / Abrir
+                </a>
             </div>
-            {% endfor %}
         </div>
+        
+        {% if sobres_bodega %}
+        <ul class="list-group list-group-flush">
+            {% for sobre in sobres_bodega %}
+            <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+                <div>
+                    <strong>Sobre #{{ sobre.id }}</strong>
+                    <small class="text-muted ms-2">{{ sobre.fecha|date:"H:i" }}</small>
+                    {% if sobre.cerrado %}
+                    <span class="badge bg-success ms-2">Cerrado</span>
+                    {% else %}
+                    <span class="badge bg-warning text-dark ms-2">Abierto</span>
+                    {% endif %}
+                </div>
+                <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}" class="btn btn-sm btn-outline-primary">
+                    Ver
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="card-body text-center text-muted py-4">
+            Sin sobres hoy - Haz clic en "Nuevo / Abrir"
+        </div>
+        {% endif %}
     </div>
+
+    {# CAMIONEROS #}
+    {% for camionero in camioneros %}
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-info text-white py-2">
+            <div class="d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    <i class="bi bi-truck me-2"></i>{{ camionero.get_full_name|default:camionero.username }}
+                </h6>
+                <a href="{% url 'sobres_editar' %}?camionero={{ camionero.id }}" class="btn btn-light btn-sm">
+                    <i class="bi bi-plus-lg me-1"></i>Nuevo / Abrir
+                </a>
+            </div>
+        </div>
+        
+        <ul class="list-group list-group-flush">
+        {% for sobre in sobres_camioneros %}
+            {% if sobre.trabajador_id == camionero.id %}
+            <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                <div>
+                    <span>Sobre #{{ sobre.id }}</span>
+                    <small class="text-muted ms-2">{{ sobre.fecha|date:"H:i" }}</small>
+                    {% if sobre.cerrado %}
+                    <span class="badge bg-success ms-2">Cerrado</span>
+                    {% else %}
+                    <span class="badge bg-warning text-dark ms-2">Abierto</span>
+                    {% endif %}
+                </div>
+                <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}" class="btn btn-sm btn-outline-info">
+                    Ver
+                </a>
+            </li>
+            {% endif %}
+        {% endfor %}
+        </ul>
+    </div>
+    {% empty %}
+    <div class="alert alert-info">No hay camioneros activos</div>
+    {% endfor %}
 
     <div class="text-center mt-5">
         <a href="{% url 'reportes_ventas' %}" class="btn btn-outline-secondary btn-lg px-5">

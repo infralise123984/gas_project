@@ -9,6 +9,8 @@ gunicorn==23.0.0               # Servidor WSGI para producción
 whitenoise==6.7.0              # Estáticos en producción (CSS, JS para Bootstrap, etc.)
 python-dotenv==1.0.1           # .env para SECRET_KEY, DB_PASSWORD, etc. (seguridad)
 openpyxl==3.1.5                # Export a Excel/XLSX en consultas_pedidos/report_ventas (styles, utils, etc.)
+pywebpush==2.2.0               # Web Push Notifications para camioneros (notificar nuevos pedidos)
+dj-database-url==2.3.0         # Parseo de DATABASE_URL para Render y otros PaaS
 
 # Opcionales comentados - agrégalos SOLO si implementamos algo nuevo
 # django-crispy-forms==2.3      # Si mejoramos forms con estilos más avanzados
