@@ -807,7 +807,7 @@ def transaccional_pedido(request):
                     from .push_notifications import notificar_nuevo_pedido
                     notificados = notificar_nuevo_pedido(pedido)
                     if notificados > 0:
-                        audit_logger.info(f"PUSH_SENT | Pedido #{pedido.id} → {notificados} camioneros notificados")
+                        audit_logger.info(f"PUSH_SENT | Pedido #{pedido.id} -> {notificados} camioneros notificados")
                 except Exception as e:
                     # No fallar si las notificaciones fallan
                     audit_logger.warning(f"PUSH_ERROR | Pedido #{pedido.id} | Error: {str(e)}")
@@ -1121,6 +1121,59 @@ def camionero_entregas(request):
     }
 
     return render(request, "camionero_entregas.html", context)
+
+
+@login_required
+def camionero_entregas_api(request):
+    """
+    API endpoint para actualización dinámica de entregas.
+    Devuelve el HTML parcial de las cards de pedidos.
+    """
+    resp = require_roles(request, ["camionero", "admin"], "index", "Acceso restringido.")
+    if resp:
+        return JsonResponse({'error': 'No autorizado'}, status=403)
+
+    user = request.user
+
+    # Zona horaria Chile
+    tz_chile = ZoneInfo('America/Santiago')
+    ahora = timezone.now().astimezone(tz_chile)
+    hoy = ahora.date()
+
+    # Rango para "hoy"
+    inicio_dia = timezone.make_aware(datetime.combine(hoy, datetime.min.time()), tz_chile)
+    fin_dia = timezone.make_aware(datetime.combine(hoy, datetime.max.time()), tz_chile)
+
+    # Pedidos en ruta del camionero
+    pedidos_en_ruta = Pedido.objects.filter(
+        estado="en_ruta",
+        entregador=user
+    ).select_related('registrador').prefetch_related('detalles__balon').order_by("fecha")
+
+    # Pedidos pendientes disponibles hoy
+    pendientes = Pedido.objects.filter(
+        estado="pendiente",
+        origen="telefono",
+        entregador__isnull=True,
+        fecha__gte=inicio_dia,
+        fecha__lte=fin_dia
+    ).select_related('registrador').prefetch_related('detalles__balon').order_by("-fecha")
+
+    context = {
+        "pedidos_en_ruta": pedidos_en_ruta,
+        "pendientes": pendientes,
+        "user": user,
+    }
+
+    # Renderizar template parcial
+    html = render(request, "_entregas_cards.html", context).content.decode('utf-8')
+    
+    return JsonResponse({
+        'html': html,
+        'count_en_ruta': pedidos_en_ruta.count(),
+        'count_pendientes': pendientes.count(),
+    })
+
 
 @login_required
 def camionero_tomar_pedido(request, pedido_id):

@@ -1,8 +1,8 @@
 // Service Worker para GasFácil - Notificaciones Push
 // Este archivo debe estar en la raíz del scope de la PWA
-// sw.js - Versión 1.0
+// sw.js - Versión 1.1
 
-const CACHE_NAME = 'gasfacil-v1';
+const CACHE_NAME = 'gasfacil-v2';
 const OFFLINE_URL = '/';
 
 // Archivos a cachear para funcionamiento offline
@@ -85,6 +85,7 @@ self.addEventListener('push', (event) => {
         icon: data.icon || '/static/img/web-app-manifest-192x192.png',
         badge: data.badge || '/static/img/favicon-96x96.png',
         tag: data.tag || 'gasfacil-notification',
+        renotify: true, // Vuelve a mostrar aunque el tag sea igual
         data: data.data || { url: '/' },
         vibrate: [200, 100, 200, 100, 200], // Vibración personalizada
         requireInteraction: true, // La notificación permanece hasta que el usuario interactúe

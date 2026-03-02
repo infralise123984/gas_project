@@ -19,149 +19,124 @@
         </p>
     </div>
     
-    <!-- Contador centrado y destacado -->
-    <div class="text-center mb-5">
-        <span class="badge bg-primary fs-5 px-5 py-3 shadow-lg rounded-pill">
-            {{ pendientes.count }} pendiente{{ pendientes.count|pluralize:"s" }} • 
-            {{ pedidos_en_ruta.count }} en ruta
-        </span>
+    <!-- Contenedor dinámico de pedidos -->
+    <div id="entregas-container">
+        {% include '_entregas_cards.html' %}
     </div>
-    <!-- Sección: En Ruta -->
-    {% if pedidos_en_ruta %}
-    <h5 class="text-success fw-bold mb-4 text-center fs-5">En Ruta ({{ pedidos_en_ruta.count }})</h5>
-    {% for pedido in pedidos_en_ruta %}
-    <div class="card shadow-lg mb-5 border-warning border-3 rounded-4">
-        <div class="card-body p-4 text-center">
-            <!-- Número de pedido -->
-            <h4 class="fw-bold mb-4 text-dark">Pedido #{{ pedido.id }}</h4>
-            <!-- Productos -->
-            <div class="mb-4">
-                <ul class="list-group list-group-flush mb-3">
-                    {% for detalle in pedido.detalles.all %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center fs-5 py-3">
-                        <span>{{ detalle.cantidad }} X {{ detalle.balon.nombre }}</span>
-                        <span class="badge bg-success fs-5 px-3 py-2">${{ detalle.subtotal|floatformat:0|intcomma }}</span>
-                    </li>
-                    {% empty %}
-                    <li class="list-group-item text-muted py-3">Sin productos</li>
-                    {% endfor %}
-                </ul>
-                <div class="fw-bold fs-4 text-success">
-                    Total: ${{ pedido.monto_total|floatformat:0|intcomma }}
-                </div>
-            </div>
-
-            <!-- Dirección -->
-            {% if pedido.direccion_entrega %}
-            <div class="mb-4">
-                <h5 class="fw-bold mb-3">Dirección:</h5>
-                <p class="fs-5 fw-semibold text-primary mb-2">{{ pedido.direccion_entrega|linebreaksbr }}</p>
-                {% if pedido.sector %}
-                <small class="text-muted d-block">Sector: {{ pedido.sector }}</small>
-                {% endif %}
-            </div>
-            {% else %}
-            <p class="text-muted mb-4 fs-5">Sin dirección específica</p>
-            {% endif %}
-
-            <!-- Acciones (mantengo el d-grid, agrego botón Editar textual solo si aplica) -->
-            <div class="d-grid gap-2">
-                <form method="post" action="{% url 'entregas_entregado' pedido.id %}"
-                      onsubmit="return confirm('¿Marcar como entregado el pedido #{{ pedido.id }}?');">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-success btn-lg w-100 py-4 fs-5 shadow rounded-3">
-                        <i class="bi bi-check-circle-fill me-2"></i> MARCAR ENTREGADO
-                    </button>
-                </form>
-
-                <form method="post" action="{% url 'entregas_cancelar' pedido.id %}"
-                      onsubmit="return confirm('¿Cancelar entrega del pedido #{{ pedido.id }}?');">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-danger btn-lg w-100 py-4 fs-5 shadow rounded-3">
-                        <i class="bi bi-x-circle-fill me-2"></i> CANCELAR ENTREGA
-                    </button>
-                </form>
-
-                <!-- Botón Editar textual (solo si estado en ruta y es su pedido) -->
-                {% if pedido.estado == 'en_ruta' and pedido.entregador == user %}
-                <a href="{% url 'pedidos_editar' pedido.id %}" class="btn btn-warning btn-lg w-100 py-4 fs-5 shadow rounded-3">
-                    Editar Pedido
-                </a>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    {% endfor %}
-    {% endif %}
-
-    <!-- Sección: Pendientes -->
-    {% if pendientes %}
-    <h5 class="text-info fw-bold mb-4 text-center fs-5">Pendientes ({{ pendientes.count }})</h5>
-    {% for pedido in pendientes %}
-    <div class="card shadow-lg mb-5 border-info border-3 rounded-4">
-        <div class="card-body p-4 text-center">
-            <!-- Número de pedido -->
-            <h4 class="fw-bold mb-4 text-dark">Pedido #{{ pedido.id }}</h4>
-            <!-- Productos -->
-            <div class="mb-4">
-                <ul class="list-group list-group-flush mb-3">
-                    {% for detalle in pedido.detalles.all %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center fs-5 py-3">
-                        <span>{{ detalle.cantidad }} X {{ detalle.balon.nombre }}</span>
-                        <span class="badge bg-success fs-5 px-3 py-2">${{ detalle.subtotal|floatformat:0|intcomma }}</span>
-                    </li>
-                    {% empty %}
-                    <li class="list-group-item text-muted py-3">Sin productos</li>
-                    {% endfor %}
-                </ul>
-                <div class="fw-bold fs-4 text-success">
-                    Total: ${{ pedido.monto_total|floatformat:0|intcomma }}
-                </div>
-            </div>
-
-            <!-- Dirección -->
-            {% if pedido.direccion_entrega %}
-            <div class="mb-4">
-                <h5 class="fw-bold mb-3">Dirección:</h5>
-                <p class="fs-5 fw-semibold text-primary mb-2">{{ pedido.direccion_entrega|linebreaksbr }}</p>
-                {% if pedido.sector %}
-                <small class="text-muted d-block">Sector: {{ pedido.sector }}</small>
-                {% endif %}
-            </div>
-            {% else %}
-            <p class="text-muted mb-4 fs-5">Sin dirección específica</p>
-            {% endif %}
-
-            <!-- Botón tomar (y NO botón editar aquí, ya que pendientes no son editables por camionero) -->
-            <div class="d-grid gap-2">
-                <form method="post" action="{% url 'entregas_tomar' pedido.id %}"
-                      onsubmit="return confirm('¿Tomar este pedido #{{ pedido.id }}?');">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-primary btn-lg w-100 py-4 fs-5 shadow rounded-3">
-                        <i class="bi bi-arrow-right-circle-fill me-2"></i> TOMAR PEDIDO
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-    {% endfor %}
-    {% endif %}
-
-    <!-- Mensaje sin pedidos -->
-    {% if not pedidos_en_ruta and not pendientes %}
-    <div class="alert alert-light text-center py-5 shadow-sm rounded-4">
-        <i class="bi bi-check2-all fs-1 text-success d-block mb-3"></i>
-        <h5 class="mb-2">Todo listo</h5>
-        <p class="text-muted fs-5">No hay entregas pendientes ni en ruta por ahora.</p>
-    </div>
-    {% endif %}
 </div>
 
 <!-- Toast container para mensajes -->
 <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1100;"></div>
 
 <script>
+// ═══════════════════════════════════════════════════════════
+// Sistema de actualización dinámica de entregas
+// ═══════════════════════════════════════════════════════════
+(function() {
+    'use strict';
+    
+    const POLL_INTERVAL = 15000; // 15 segundos
+    const API_URL = '/entregas/api/';
+    
+    let lastPendientes = {{ pendientes.count }};
+    let lastEnRuta = {{ pedidos_en_ruta.count }};
+    let pollTimer = null;
+    let isPolling = false;
+    
+    // Actualizar contenido vía AJAX
+    async function actualizarEntregas() {
+        if (isPolling) return;
+        isPolling = true;
+        
+        try {
+            const response = await fetch(API_URL, {
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            
+            if (!response.ok) throw new Error('Error en la respuesta');
+            
+            const data = await response.json();
+            
+            // Actualizar el contenedor solo si hay cambios
+            if (data.count_pendientes !== lastPendientes || data.count_en_ruta !== lastEnRuta) {
+                const container = document.getElementById('entregas-container');
+                if (container) {
+                    container.innerHTML = data.html;
+                    
+                    // Si hay nuevos pedidos pendientes, mostrar notificación visual
+                    if (data.count_pendientes > lastPendientes) {
+                        mostrarToast('Nuevo pedido disponible', 'info');
+                    }
+                }
+                
+                lastPendientes = data.count_pendientes;
+                lastEnRuta = data.count_en_ruta;
+            }
+        } catch (error) {
+            console.warn('[Entregas] Error actualizando:', error.message);
+        } finally {
+            isPolling = false;
+        }
+    }
+    
+    // Mostrar toast de notificación
+    function mostrarToast(mensaje, tipo = 'info') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        
+        const toastId = 'toast-' + Date.now();
+        const bgClass = tipo === 'info' ? 'bg-info' : 'bg-success';
+        
+        const toastHTML = `
+            <div id="${toastId}" class="toast align-items-center text-white ${bgClass} border-0" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body fw-bold">
+                        <i class="bi bi-bell-fill me-2"></i>${mensaje}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+        `;
+        
+        container.insertAdjacentHTML('beforeend', toastHTML);
+        
+        const toastEl = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastEl, { delay: 4000 });
+        toast.show();
+        
+        toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+    }
+    
+    // Iniciar polling
+    function iniciarPolling() {
+        if (pollTimer) return;
+        pollTimer = setInterval(actualizarEntregas, POLL_INTERVAL);
+    }
+    
+    // Detener polling cuando la pestaña no está visible
+    function manejarVisibilidad() {
+        if (document.hidden) {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+        } else {
+            actualizarEntregas(); // Actualizar inmediatamente al volver
+            iniciarPolling();
+        }
+    }
+    
+    // Eventos
+    document.addEventListener('DOMContentLoaded', iniciarPolling);
+    document.addEventListener('visibilitychange', manejarVisibilidad);
+})();
+
+// ═══════════════════════════════════════════════════════════
 // Inicializar estado del botón de notificaciones
+// ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async function() {
     const btn = document.getElementById('push-toggle-btn');
     const statusText = document.getElementById('push-status-text');

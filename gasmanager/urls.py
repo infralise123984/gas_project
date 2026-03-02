@@ -45,6 +45,7 @@ urlpatterns = [
     # ENTREGAS Y DISTRIBUCIÓN (Camionero)
     # ────────────────────────────────────────────────
     path('entregas/', views.camionero_entregas, name='entregas_lista'),
+    path('entregas/api/', views.camionero_entregas_api, name='entregas_api'),
     path('entregas/mias/', views.mis_entregas_camionero, name='entregas_mias'),
     path('entregas/<int:pedido_id>/tomar/', views.camionero_tomar_pedido, name='entregas_tomar'),
     path('entregas/<int:pedido_id>/entregado/', views.camionero_marcar_entregado, name='entregas_entregado'),

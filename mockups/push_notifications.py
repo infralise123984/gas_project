@@ -60,6 +60,9 @@ def send_push_notification(subscription_info, title, body, url='/', tag='gasfaci
         'icon': '/static/img/web-app-manifest-192x192.png',
         'badge': '/static/img/favicon-96x96.png',
         'tag': tag,
+        'renotify': True,  # Vuelve a notificar aunque tenga el mismo tag
+        'requireInteraction': True,  # Mantiene la notificación visible hasta que el usuario interactúe
+        'vibrate': [200, 100, 200, 100, 200],  # Patrón de vibración
         'data': {
             'url': url,
             **(extra_data or {})
@@ -77,14 +80,21 @@ def send_push_notification(subscription_info, title, body, url='/', tag='gasfaci
             vapid_private_key=vapid['private_key'],
             vapid_claims={
                 'sub': vapid['admin_email']
+            },
+            headers={
+                'Urgency': 'high',  # Prioridad alta para heads-up notification
+                'TTL': '60'  # Tiempo de vida: 60 segundos
             }
         )
-        audit_logger.info(f"PUSH_SENT | Title: {title} | To: {subscription_info.get('endpoint', '')[:50]}...")
+        # Log sin emojis para evitar error de encoding en Windows
+        title_log = title.encode('ascii', 'ignore').decode('ascii') or 'Notificacion'
+        audit_logger.info(f"PUSH_SENT | Title: {title_log} | To: {subscription_info.get('endpoint', '')[:50]}...")
         return True, None
         
     except WebPushException as e:
         error_msg = str(e)
-        audit_logger.warning(f"PUSH_FAILED | Title: {title} | Error: {error_msg}")
+        title_log = title.encode('ascii', 'ignore').decode('ascii') or 'Notificacion'
+        audit_logger.warning(f"PUSH_FAILED | Title: {title_log} | Error: {error_msg}")
         
         # Si la suscripción expiró o es inválida, retornar código específico
         if e.response and e.response.status_code in [404, 410]:
@@ -135,7 +145,9 @@ def notificar_nuevo_pedido(pedido):
     
     body = f"📍 {pedido.sector}\n{items}"
     url = "/entregas/"  # Vista de entregas del camionero
-    tag = f"pedido-{pedido.id}"
+    # Tag único con timestamp para forzar heads-up en Android
+    import time
+    tag = f"pedido-{pedido.id}-{int(time.time())}"
     
     enviados = 0
     errores_suscripcion = []
@@ -168,7 +180,7 @@ def notificar_nuevo_pedido(pedido):
         PushSubscription.objects.filter(id__in=errores_suscripcion).update(activa=False)
         audit_logger.info(f"PUSH_CLEANUP | Desactivadas {len(errores_suscripcion)} suscripciones expiradas")
     
-    audit_logger.info(f"PUSH_PEDIDO | #{pedido.id} → {enviados}/{suscripciones.count()} camioneros notificados")
+    audit_logger.info(f"PUSH_PEDIDO | #{pedido.id} -> {enviados}/{suscripciones.count()} camioneros notificados")
     return enviados
 
 
@@ -245,7 +257,7 @@ def notificar_recordatorio_pendientes():
     if errores:
         PushSubscription.objects.filter(id__in=errores).update(activa=False)
     
-    audit_logger.info(f"PUSH_RECORDATORIO | {count} pedidos → {enviados} notificaciones enviadas")
+    audit_logger.info(f"PUSH_RECORDATORIO | {count} pedidos -> {enviados} notificaciones enviadas")
     
     return {
         'enviados': enviados,
