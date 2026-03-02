@@ -11,6 +11,9 @@
     "background_color": "#ffffff",
     "theme_color": "#0d6efd",
     "orientation": "any",
+    "permissions": [
+        "notifications"
+    ],
     "icons": [
         {
             "src": "/static/img/web-app-manifest-192x192.png",

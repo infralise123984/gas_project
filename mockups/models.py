@@ -511,118 +511,129 @@ class LineaGasto(models.Model):
         return f"{self.descripcion} - ${self.monto:,}"
 
 
-# ══════════════════════════════════════════════════════════════════
-# SISTEMA DE AUDITORÍA
-# ══════════════════════════════════════════════════════════════════
+# ──────────────────────────────────────────────────────────────
+# MODELO PARA SUSCRIPCIONES PUSH (Web Push API)
+# ──────────────────────────────────────────────────────────────
+class PushSubscription(models.Model):
+    """
+    Almacena las suscripciones de Push Notifications para cada usuario.
+    Permite enviar notificaciones incluso con la app cerrada.
+    """
+    usuario = models.ForeignKey(
+        Usuario,
+        on_delete=models.CASCADE,
+        related_name='push_subscriptions',
+        verbose_name="Usuario"
+    )
+    # Usamos CharField con longitud fija para permitir índices en MySQL
+    # Los endpoints de Web Push típicamente son ~300-500 caracteres
+    endpoint = models.CharField(
+        max_length=500,
+        verbose_name="Endpoint URL",
+        help_text="URL única del servicio push del navegador (truncado a 500 chars)"
+    )
+    p256dh = models.CharField(
+        max_length=255,
+        verbose_name="Clave P256DH",
+        help_text="Clave pública del cliente para encriptación"
+    )
+    auth = models.CharField(
+        max_length=255,
+        verbose_name="Auth Secret",
+        help_text="Secret de autenticación del cliente"
+    )
+    activa = models.BooleanField(
+        default=True,
+        verbose_name="Activa",
+        help_text="Desactivar si la suscripción expira o falla"
+    )
+    user_agent = models.CharField(
+        max_length=500,
+        blank=True,
+        verbose_name="User Agent",
+        help_text="Navegador/dispositivo del usuario"
+    )
+    creada_el = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Creada el"
+    )
+    actualizada_el = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Última actualización"
+    )
 
+    class Meta:
+        verbose_name = "Suscripción Push"
+        verbose_name_plural = "Suscripciones Push"
+        ordering = ['-creada_el']
+        # Nota: No usamos unique_together aquí porque los endpoints pueden
+        # exceder el límite de índice de MySQL. La unicidad se maneja en views.py
+
+    def __str__(self):
+        dispositivo = 'Móvil' if 'Mobile' in self.user_agent else 'Desktop'
+        estado = '✓' if self.activa else '✗'
+        return f"{self.usuario.username} - {dispositivo} [{estado}]"
+
+    def to_subscription_info(self):
+        """Retorna dict en formato compatible con pywebpush"""
+        return {
+            'endpoint': self.endpoint,
+            'keys': {
+                'p256dh': self.p256dh,
+                'auth': self.auth
+            }
+        }
+
+
+# ──────────────────────────────────────────────────────────────
+# MODELO DE AUDITORÍA
+# ──────────────────────────────────────────────────────────────
 class AuditoriaAccion(models.Model):
     """
-    Registro de auditoría para acciones críticas del sistema.
-    Guarda un historial inmutable de quién hizo qué y cuándo.
+    Registro de auditoría para acciones importantes en el sistema.
+    Permite rastrear quién hizo qué y cuándo.
     """
-    TIPOS_ACCION = [
-        # Autenticación
+    TIPOS = [
         ('LOGIN_OK', 'Inicio de sesión exitoso'),
         ('LOGIN_FAIL', 'Intento de login fallido'),
         ('LOGOUT', 'Cierre de sesión'),
-        
-        # Usuarios
         ('USER_CREATE', 'Usuario creado'),
         ('USER_UPDATE', 'Usuario modificado'),
         ('USER_DELETE', 'Usuario eliminado'),
         ('PASSWORD_CHANGE', 'Contraseña cambiada'),
-        
-        # Pedidos
         ('PEDIDO_CREATE', 'Pedido creado'),
         ('PEDIDO_UPDATE', 'Pedido modificado'),
         ('PEDIDO_DELETE', 'Pedido eliminado'),
         ('PEDIDO_ESTADO', 'Estado de pedido cambiado'),
-        
-        # Precios
         ('PRECIO_UPDATE', 'Precio actualizado'),
         ('BALON_CREATE', 'Balón creado'),
         ('BALON_UPDATE', 'Balón modificado'),
         ('BALON_DELETE', 'Balón eliminado'),
-        
-        # Sobres/Caja
         ('SOBRE_CREATE', 'Sobre creado'),
         ('SOBRE_CLOSE', 'Sobre cerrado'),
         ('SOBRE_UPDATE', 'Sobre modificado'),
-        
-        # Seguridad
         ('PERM_DENIED', 'Acceso denegado'),
         ('SUSPICIOUS', 'Actividad sospechosa'),
-        
-        # Sistema
         ('EXPORT_DATA', 'Exportación de datos'),
         ('CONFIG_CHANGE', 'Configuración cambiada'),
     ]
-    
-    tipo = models.CharField(
-        max_length=20,
-        choices=TIPOS_ACCION,
-        db_index=True,
-        verbose_name="Tipo de acción"
-    )
-    usuario = models.ForeignKey(
-        Usuario,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name="Usuario"
-    )
-    username = models.CharField(
-        max_length=150,
-        blank=True,
-        verbose_name="Username (snapshot)",
-        help_text="Guardamos el username por si el usuario es eliminado"
-    )
-    ip_address = models.GenericIPAddressField(
-        null=True,
-        blank=True,
-        verbose_name="Dirección IP"
-    )
-    user_agent = models.TextField(
-        blank=True,
-        verbose_name="User Agent"
-    )
-    descripcion = models.TextField(
-        blank=True,
-        verbose_name="Descripción detallada"
-    )
-    objeto_tipo = models.CharField(
-        max_length=100,
-        blank=True,
-        verbose_name="Tipo de objeto afectado",
-        help_text="Ej: Pedido, Usuario, TipoBalon"
-    )
-    objeto_id = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        verbose_name="ID del objeto afectado"
-    )
-    objeto_repr = models.CharField(
-        max_length=255,
-        blank=True,
-        verbose_name="Representación del objeto",
-        help_text="Snapshot del __str__ del objeto"
-    )
-    datos_anteriores = models.JSONField(
-        null=True,
-        blank=True,
-        verbose_name="Datos anteriores (JSON)"
-    )
-    datos_nuevos = models.JSONField(
-        null=True,
-        blank=True,
-        verbose_name="Datos nuevos (JSON)"
-    )
-    fecha = models.DateTimeField(
-        auto_now_add=True,
-        db_index=True,
-        verbose_name="Fecha y hora"
-    )
-    
+
+    tipo = models.CharField(max_length=20, choices=TIPOS, db_index=True, verbose_name="Tipo de acción")
+    usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Usuario")
+    username = models.CharField(max_length=150, blank=True, verbose_name="Username (snapshot)",
+                                help_text="Guardamos el username por si el usuario es eliminado")
+    ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name="Dirección IP")
+    user_agent = models.TextField(blank=True, verbose_name="User Agent")
+    descripcion = models.TextField(blank=True, verbose_name="Descripción detallada")
+    objeto_tipo = models.CharField(max_length=100, blank=True, verbose_name="Tipo de objeto afectado",
+                                   help_text="Ej: Pedido, Usuario, TipoBalon")
+    objeto_id = models.PositiveIntegerField(null=True, blank=True, verbose_name="ID del objeto afectado")
+    objeto_repr = models.CharField(max_length=255, blank=True, verbose_name="Representación del objeto",
+                                   help_text="Snapshot del __str__ del objeto")
+    datos_anteriores = models.JSONField(null=True, blank=True, verbose_name="Datos anteriores (JSON)")
+    datos_nuevos = models.JSONField(null=True, blank=True, verbose_name="Datos nuevos (JSON)")
+    fecha = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="Fecha y hora")
+
     class Meta:
         verbose_name = "Registro de Auditoría"
         verbose_name_plural = "Registros de Auditoría"
@@ -632,55 +643,42 @@ class AuditoriaAccion(models.Model):
             models.Index(fields=['usuario', 'fecha']),
             models.Index(fields=['objeto_tipo', 'objeto_id']),
         ]
-    
+
     def __str__(self):
-        user_display = self.username or 'Anónimo'
-        return f"[{self.fecha.strftime('%d/%m %H:%M')}] {self.get_tipo_display()} - {user_display}"
-    
+        return f"{self.get_tipo_display()} - {self.username or 'Anónimo'} - {self.fecha}"
+
     @classmethod
-    def registrar(cls, request, tipo, descripcion="", objeto=None, datos_anteriores=None, datos_nuevos=None):
+    def registrar(cls, request, tipo, descripcion='', objeto=None, datos_anteriores=None, datos_nuevos=None):
         """
         Método helper para registrar una acción de auditoría.
         
-        Uso:
-            AuditoriaAccion.registrar(
-                request=request,
-                tipo='PEDIDO_CREATE',
-                descripcion='Pedido telefónico creado',
-                objeto=pedido,
-                datos_nuevos={'cliente': 'Juan', 'total': 15000}
-            )
+        Args:
+            request: HttpRequest de Django
+            tipo: Tipo de acción (ver TIPOS)
+            descripcion: Descripción detallada
+            objeto: Objeto afectado (cualquier modelo)
+            datos_anteriores: Dict con datos antes del cambio
+            datos_nuevos: Dict con datos después del cambio
         """
-        # Obtener IP real (considerando proxies)
+        # Obtener IP
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0].strip()
-        else:
-            ip = request.META.get('REMOTE_ADDR')
+        ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
         
-        # Datos del usuario
-        usuario = request.user if request.user.is_authenticated else None
-        username = usuario.username if usuario else request.POST.get('username', '')
-        
-        # Datos del objeto afectado
-        objeto_tipo = ""
-        objeto_id = None
-        objeto_repr = ""
-        if objeto:
-            objeto_tipo = objeto.__class__.__name__
-            objeto_id = getattr(objeto, 'pk', None) or getattr(objeto, 'id', None)
-            objeto_repr = str(objeto)[:255]
-        
-        return cls.objects.create(
+        registro = cls(
             tipo=tipo,
-            usuario=usuario,
-            username=username,
+            usuario=request.user if request.user.is_authenticated else None,
+            username=request.user.username if request.user.is_authenticated else '',
             ip_address=ip,
             user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
             descripcion=descripcion,
-            objeto_tipo=objeto_tipo,
-            objeto_id=objeto_id,
-            objeto_repr=objeto_repr,
             datos_anteriores=datos_anteriores,
             datos_nuevos=datos_nuevos,
         )
+        
+        if objeto:
+            registro.objeto_tipo = objeto.__class__.__name__
+            registro.objeto_id = objeto.pk
+            registro.objeto_repr = str(objeto)[:255]
+        
+        registro.save()
+        return registro
