@@ -2120,6 +2120,7 @@ def detalle_pedido(request, pedido_id):
 def lista_sobres_diarios(request):
     """
     Listado para seleccionar qué sobre abrir/editar (Bodega o Camionero).
+    Si hay más de un sobre del día, muestra lista para elegir.
     """
     if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
         messages.error(request, "Acceso no permitido.")
@@ -2127,10 +2128,22 @@ def lista_sobres_diarios(request):
 
     hoy = today_chile()
     camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+    
+    # Sobres de bodega del día
+    sobres_bodega = list(SobreDiario.objects.filter(
+        fecha_correspondiente=hoy, tipo='bodega'
+    ).order_by('-id'))
+    
+    # Sobres de camioneros del día (agrupados por trabajador)
+    sobres_camioneros = list(SobreDiario.objects.filter(
+        fecha_correspondiente=hoy, tipo='camion'
+    ).select_related('trabajador').order_by('trabajador__first_name', '-id'))
 
     return render(request, 'lista_sobres.html', {
         'hoy': hoy,
         'camioneros': camioneros,
+        'sobres_bodega': sobres_bodega,
+        'sobres_camioneros': sobres_camioneros,
     })
 
 # CAMBIOS MÍNIMOS EN views.py - SOLO LO NECESARIO
@@ -2179,18 +2192,21 @@ def editar_sobre_diario(request):
             messages.error(request, "Parámetros inválidos. Use: ?sobre_id=123")
             return redirect('sobres_lista')
         
-        # Buscar el sobre del día o crear uno nuevo
+        # Buscar sobre del día (abierto o cerrado) o crear uno nuevo
         hoy = today_chile()
+        
+        # Buscar el sobre más reciente del día (puede estar abierto o cerrado)
         sobre = SobreDiario.objects.filter(
             fecha_correspondiente=hoy,
             tipo=tipo_sobre,
             trabajador=trabajador
-        ).first()
+        ).order_by('-id').first()  # El más reciente
         
         if sobre:
+            # Existe un sobre del día, usarlo (el usuario decide si crear otro)
             creado = False
         else:
-            # No existe, crear uno nuevo
+            # No existe ningún sobre para hoy, crear uno nuevo
             sobre = SobreDiario.objects.create(
                 fecha=now_chile(),
                 tipo=tipo_sobre,
@@ -2340,11 +2356,18 @@ def editar_sobre_diario(request):
                             messages.warning(request, "Kilometraje inválido. Se guardará el valor anterior.")
                     
                     sobre.save()
+                    
+                    if sobre.tipo == 'bodega':
+                        km_msg = ""
+                    else:
+                        km_msg = f" Kilometraje: {sobre.kilometraje_camion} km."
+                    
                     messages.success(
                         request,
-                        f"Sobre cerrado correctamente el {sobre.declarado_el.strftime('%d/%m/%Y %H:%M')}. "
-                        f"Kilometraje: {sobre.kilometraje_camion} km."
+                        f"Sobre cerrado correctamente el {sobre.declarado_el.strftime('%d/%m/%Y %H:%M')}.{km_msg}"
                     )
+                    
+                    # Redirigir a la lista para que el usuario elija qué hacer
                     return redirect('sobres_lista')
             else:
                 messages.success(request, "Cambios guardados correctamente (borrador).")
@@ -2535,7 +2558,7 @@ def historial_sobres(request):
     sobres_bodega = todos_sobres.filter(tipo='bodega').order_by('-cerrado', '-fecha')
     
     # Para camioneros: agrupar por trabajador
-    sobres_camionero = todos_sobres.filter(tipo='camionero').order_by('trabajador__first_name', '-cerrado', '-fecha')
+    sobres_camionero = todos_sobres.filter(tipo='camion').order_by('trabajador__first_name', '-cerrado', '-fecha')
     
     # Crear diccionario {camionero: [sobres]}
     sobres_por_camionero = {}
