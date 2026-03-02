@@ -788,15 +788,29 @@ def transaccional_pedido(request):
                 descripcion=f'Pedido #{pedido.id} creado - {pedido.get_origen_display()}',
                 objeto=pedido,
                 datos_nuevos={
-                    'cliente': pedido.cliente,
-                    'direccion': pedido.direccion,
+                    'sector': pedido.sector,
+                    'direccion': pedido.direccion_entrega,
                     'origen': pedido.origen,
                     'estado': pedido.estado,
-                    'total': str(pedido.total_venta),
+                    'total': str(pedido.monto_total),
                     'detalles': detalles_guardados
                 }
             )
             audit_logger.info(f"PEDIDO_CREATE | #{pedido.id} | By: {request.user.username}")
+            
+            # ══════════════════════════════════════════════════════
+            # NOTIFICACIONES PUSH A CAMIONEROS
+            # Solo para pedidos pendientes de teléfono/domicilio
+            # ══════════════════════════════════════════════════════
+            if pedido.estado == 'pendiente' and pedido.origen == 'telefono':
+                try:
+                    from .push_notifications import notificar_nuevo_pedido
+                    notificados = notificar_nuevo_pedido(pedido)
+                    if notificados > 0:
+                        audit_logger.info(f"PUSH_SENT | Pedido #{pedido.id} -> {notificados} camioneros notificados")
+                except Exception as e:
+                    # No fallar si las notificaciones fallan
+                    audit_logger.warning(f"PUSH_ERROR | Pedido #{pedido.id} | Error: {str(e)}")
             
             messages.success(request, f"¡Pedido #{pedido.id} registrado correctamente con {detalles_guardados} producto(s)!")
             return redirect("index")
@@ -1107,6 +1121,59 @@ def camionero_entregas(request):
     }
 
     return render(request, "camionero_entregas.html", context)
+
+
+@login_required
+def camionero_entregas_api(request):
+    """
+    API endpoint para actualización dinámica de entregas.
+    Devuelve el HTML parcial de las cards de pedidos.
+    """
+    resp = require_roles(request, ["camionero", "admin"], "index", "Acceso restringido.")
+    if resp:
+        return JsonResponse({'error': 'No autorizado'}, status=403)
+
+    user = request.user
+
+    # Zona horaria Chile
+    tz_chile = ZoneInfo('America/Santiago')
+    ahora = timezone.now().astimezone(tz_chile)
+    hoy = ahora.date()
+
+    # Rango para "hoy"
+    inicio_dia = timezone.make_aware(datetime.combine(hoy, datetime.min.time()), tz_chile)
+    fin_dia = timezone.make_aware(datetime.combine(hoy, datetime.max.time()), tz_chile)
+
+    # Pedidos en ruta del camionero
+    pedidos_en_ruta = Pedido.objects.filter(
+        estado="en_ruta",
+        entregador=user
+    ).select_related('registrador').prefetch_related('detalles__balon').order_by("fecha")
+
+    # Pedidos pendientes disponibles hoy
+    pendientes = Pedido.objects.filter(
+        estado="pendiente",
+        origen="telefono",
+        entregador__isnull=True,
+        fecha__gte=inicio_dia,
+        fecha__lte=fin_dia
+    ).select_related('registrador').prefetch_related('detalles__balon').order_by("-fecha")
+
+    context = {
+        "pedidos_en_ruta": pedidos_en_ruta,
+        "pendientes": pendientes,
+        "user": user,
+    }
+
+    # Renderizar template parcial
+    html = render(request, "_entregas_cards.html", context).content.decode('utf-8')
+    
+    return JsonResponse({
+        'html': html,
+        'count_en_ruta': pedidos_en_ruta.count(),
+        'count_pendientes': pendientes.count(),
+    })
+
 
 @login_required
 def camionero_tomar_pedido(request, pedido_id):
@@ -3002,3 +3069,188 @@ def exportar_sobre_excel(request, sobre_id):
     return response
 
 
+# ══════════════════════════════════════════════════════════════
+# PUSH NOTIFICATIONS - VISTAS PARA SUSCRIPCIONES WEB PUSH
+# ══════════════════════════════════════════════════════════════
+
+@login_required
+def push_subscribe(request):
+    """
+    Guarda o actualiza la suscripción push del usuario actual.
+    Solo permite suscripciones a camioneros (por ahora).
+    Endpoint: POST /push/subscribe/
+    """
+    # Log de debug
+    audit_logger.info(f"PUSH_SUBSCRIBE_ATTEMPT | User: {request.user.username} | Rol: {request.user.rol} | Method: {request.method}")
+    
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
+    
+    # Solo camioneros pueden suscribirse (por ahora)
+    if request.user.rol != 'camionero':
+        audit_logger.warning(f"PUSH_SUBSCRIBE_DENIED | User: {request.user.username} | Rol: {request.user.rol} (no es camionero)")
+        return JsonResponse({
+            'success': False, 
+            'error': f'Solo los camioneros pueden activar notificaciones (tu rol: {request.user.rol})'
+        }, status=403)
+    
+    try:
+        import json
+        data = json.loads(request.body)
+        
+        endpoint = data.get('endpoint', '')[:500]  # Truncar a 500 caracteres (límite del modelo)
+        keys = data.get('keys', {})
+        p256dh = keys.get('p256dh')
+        auth = keys.get('auth')
+        
+        audit_logger.info(f"PUSH_SUBSCRIBE_DATA | Endpoint length: {len(data.get('endpoint', ''))} | Has p256dh: {bool(p256dh)} | Has auth: {bool(auth)}")
+        
+        if not all([endpoint, p256dh, auth]):
+            return JsonResponse({
+                'success': False, 
+                'error': 'Datos de suscripción incompletos'
+            }, status=400)
+        
+        from .models import PushSubscription
+        
+        # Crear o actualizar suscripción
+        subscription, created = PushSubscription.objects.update_or_create(
+            usuario=request.user,
+            endpoint=endpoint,
+            defaults={
+                'p256dh': p256dh,
+                'auth': auth,
+                'activa': True,
+                'user_agent': request.META.get('HTTP_USER_AGENT', '')[:500]
+            }
+        )
+        
+        action = 'creada' if created else 'actualizada'
+        audit_logger.info(f"PUSH_SUBSCRIBE | User: {request.user.username} | Suscripción {action}")
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Suscripción {action} correctamente',
+            'subscription_id': subscription.id
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'JSON inválido'}, status=400)
+    except Exception as e:
+        audit_logger.error(f"PUSH_SUBSCRIBE_ERROR | User: {request.user.username} | Error: {str(e)}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+def push_unsubscribe(request):
+    """
+    Desactiva la suscripción push del usuario actual.
+    Endpoint: POST /push/unsubscribe/
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
+    
+    try:
+        import json
+        data = json.loads(request.body)
+        endpoint = data.get('endpoint')
+        
+        from .models import PushSubscription
+        
+        if endpoint:
+            # Desactivar suscripción específica
+            updated = PushSubscription.objects.filter(
+                usuario=request.user,
+                endpoint=endpoint
+            ).update(activa=False)
+        else:
+            # Desactivar todas las suscripciones del usuario
+            updated = PushSubscription.objects.filter(
+                usuario=request.user
+            ).update(activa=False)
+        
+        audit_logger.info(f"PUSH_UNSUBSCRIBE | User: {request.user.username} | {updated} suscripciones desactivadas")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Notificaciones desactivadas',
+            'count': updated
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+def push_test(request):
+    """
+    Envía una notificación de prueba al usuario actual.
+    Solo para testing/debugging.
+    Endpoint: POST /push/test/
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
+    
+    from .push_notifications import test_push_notification
+    
+    success, message = test_push_notification(request.user)
+    
+    return JsonResponse({
+        'success': success,
+        'message': message
+    })
+
+
+@login_required  
+def push_status(request):
+    """
+    Retorna el estado de las suscripciones push del usuario actual.
+    Endpoint: GET /push/status/
+    """
+    from .models import PushSubscription
+    from django.conf import settings
+    
+    suscripciones = PushSubscription.objects.filter(
+        usuario=request.user,
+        activa=True
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'vapid_public_key': getattr(settings, 'VAPID_PUBLIC_KEY', None),
+        'has_subscriptions': suscripciones.exists(),
+        'subscription_count': suscripciones.count(),
+        'subscriptions': [
+            {
+                'id': s.id,
+                'device': 'Móvil' if 'Mobile' in s.user_agent else 'Desktop',
+                'created': s.creada_el.isoformat()
+            }
+            for s in suscripciones
+        ]
+    })
+
+
+def service_worker(request):
+    """
+    Sirve el Service Worker desde la raíz del sitio.
+    Esto es necesario para que el SW tenga scope '/' y pueda
+    manejar notificaciones push en todo el sitio.
+    """
+    import os
+    from django.conf import settings as django_settings
+    
+    # Leer el archivo sw.js desde static
+    sw_path = os.path.join(django_settings.BASE_DIR, 'mockups', 'static', 'sw.js')
+    
+    try:
+        with open(sw_path, 'r', encoding='utf-8') as f:
+            sw_content = f.read()
+    except FileNotFoundError:
+        return HttpResponse('Service Worker not found', status=404)
+    
+    response = HttpResponse(sw_content, content_type='application/javascript')
+    # Headers importantes para Service Workers
+    response['Service-Worker-Allowed'] = '/'
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return response
