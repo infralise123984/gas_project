@@ -4,9 +4,21 @@
 {% block content %}
 <div class="container-fluid px-3 py-4" style="max-width: 540px; margin: 0 auto;">
     <!-- Título centrado y con más aire -->
-    <h2 class="text-center fw-bold text-primary mb-5 fs-3">
+    <h2 class="text-center fw-bold text-primary mb-4 fs-3">
         <i class="bi bi-truck me-2"></i>Mis Entregas
     </h2>
+    
+    <!-- Botón de notificaciones push -->
+    <div class="text-center mb-4" id="push-notification-container">
+        <button type="button" id="push-toggle-btn" class="btn btn-outline-primary btn-lg rounded-pill px-4 py-3 shadow-sm"
+                onclick="PushNotifications.handleButtonClick(this)">
+            <i class="bi bi-bell me-2"></i>Activar Notificaciones
+        </button>
+        <p class="text-muted small mt-2 mb-0" id="push-status-text">
+            Recibe alertas de nuevos pedidos en tu teléfono
+        </p>
+    </div>
+    
     <!-- Contador centrado y destacado -->
     <div class="text-center mb-5">
         <span class="badge bg-primary fs-5 px-5 py-3 shadow-lg rounded-pill">
@@ -144,8 +156,43 @@
     </div>
     {% endif %}
 </div>
-<!-- Recarga automática -->
+
+<!-- Toast container para mensajes -->
+<div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1100;"></div>
+
 <script>
-setTimeout(() => location.reload(true), 30000);
+// Inicializar estado del botón de notificaciones
+document.addEventListener('DOMContentLoaded', async function() {
+    const btn = document.getElementById('push-toggle-btn');
+    const statusText = document.getElementById('push-status-text');
+    
+    if (!btn || !window.PushNotifications) return;
+    
+    // Verificar si las notificaciones están soportadas
+    if (!PushNotifications.isSupported()) {
+        btn.classList.add('d-none');
+        statusText.textContent = 'Tu navegador no soporta notificaciones push';
+        statusText.classList.add('text-warning');
+        return;
+    }
+    
+    // Verificar estado actual
+    const status = await PushNotifications.checkStatus();
+    
+    if (status.subscribed) {
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-success');
+        btn.innerHTML = '<i class="bi bi-bell-fill me-2"></i>Notificaciones Activas';
+        btn.dataset.subscribed = 'true';
+        statusText.textContent = 'Recibirás alertas de nuevos pedidos';
+        statusText.classList.remove('text-muted');
+        statusText.classList.add('text-success');
+    } else if (status.permission === 'denied') {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-bell-slash me-2"></i>Notificaciones Bloqueadas';
+        statusText.textContent = 'Debes habilitar las notificaciones en tu navegador';
+        statusText.classList.add('text-danger');
+    }
+});
 </script>
 {% endblock %}

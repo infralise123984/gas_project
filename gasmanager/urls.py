@@ -79,4 +79,15 @@ urlpatterns = [
     path('sobres/historial/', views.historial_sobres, name='sobres_historial'),
     path('sobres/<int:sobre_id>/imprimir/', views.imprimir_sobre_diario, name='sobres_imprimir'),
     path('sobres/<int:sobre_id>/crear-nuevo/', views.crear_sobre_post_cierre, name='crear_sobre_post_cierre'),
+
+    # ────────────────────────────────────────────────
+    # PUSH NOTIFICATIONS (Web Push API)
+    # ────────────────────────────────────────────────
+    path('push/subscribe/', views.push_subscribe, name='push_subscribe'),
+    path('push/unsubscribe/', views.push_unsubscribe, name='push_unsubscribe'),
+    path('push/test/', views.push_test, name='push_test'),
+    path('push/status/', views.push_status, name='push_status'),
+    
+    # Service Worker debe servirse desde la raíz para tener scope completo
+    path('sw.js', views.service_worker, name='service_worker'),
 ]

@@ -270,6 +270,10 @@
     <main class="container py-4 flex-grow-1">
         {% block content %}{% endblock %}
     </main>
+
+    <!-- Toast container para notificaciones push y otros mensajes JS -->
+    <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1200;"></div>
+
 <!-- En base.html, justo antes del </body> o después del <main> -->
 
 {% if user.is_authenticated %}
@@ -370,14 +374,20 @@ document.addEventListener('click', function(e) {
         crossorigin="anonymous" defer></script>
         {% if user.is_authenticated and user.rol == "camionero" %}
     <script>
+    // Configuración de Push Notifications
+    window.VAPID_PUBLIC_KEY = '{{ vapid_public_key|default:"" }}';
+    window.AUTO_SUBSCRIBE_PUSH = true;
+    
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
-            navigator.serviceWorker.register('/static/sw.js')
+            // Registrar SW desde la raíz para tener scope completo
+            navigator.serviceWorker.register('/sw.js', { scope: '/' })
                 .then(reg => console.log('SW registrado OK → scope:', reg.scope))
                 .catch(err => console.error('Error registrando SW:', err));
         });
     }
     </script>
+    <script src="{% static 'js/push-notifications.js' %}" defer></script>
     {% endif %}
     {% block extra_js %}{% endblock %}
 </body>

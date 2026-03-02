@@ -4,6 +4,7 @@ mysqlclient==2.2.6
 python-dotenv==1.0.1
 openpyxl==3.1.5
 whitenoise==6.7.0
+pywebpush==2.2.0
 # Herramientas útiles en local
 # dj-database-url se puede instalar si quieres probar DATABASE_URL localmente
 dj-database-url==1.0.0
