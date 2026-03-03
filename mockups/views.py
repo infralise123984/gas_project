@@ -804,18 +804,27 @@ def transaccional_pedido(request):
             audit_logger.info(f"PEDIDO_CREATE | #{pedido.id} | By: {request.user.username}")
             
             # ══════════════════════════════════════════════════════
-            # NOTIFICACIONES PUSH A CAMIONEROS
-            # Solo para pedidos pendientes de teléfono/domicilio
+            # NOTIFICACIONES PUSH A CAMIONEROS (ASÍNCRONO)
+            # Se ejecuta en segundo plano para no bloquear la respuesta
             # ══════════════════════════════════════════════════════
             if pedido.estado == 'pendiente' and pedido.origen == 'telefono':
-                try:
-                    from .push_notifications import notificar_nuevo_pedido
-                    notificados = notificar_nuevo_pedido(pedido)
-                    if notificados > 0:
-                        audit_logger.info(f"PUSH_SENT | Pedido #{pedido.id} -> {notificados} camioneros notificados")
-                except Exception as e:
-                    # No fallar si las notificaciones fallan
-                    audit_logger.warning(f"PUSH_ERROR | Pedido #{pedido.id} | Error: {str(e)}")
+                import threading
+                
+                def enviar_notificaciones_async(pedido_id):
+                    try:
+                        from .push_notifications import notificar_nuevo_pedido
+                        from .models import Pedido
+                        pedido_obj = Pedido.objects.get(id=pedido_id)
+                        notificados = notificar_nuevo_pedido(pedido_obj)
+                        if notificados > 0:
+                            audit_logger.info(f"PUSH_SENT | Pedido #{pedido_id} -> {notificados} camioneros notificados")
+                    except Exception as e:
+                        audit_logger.warning(f"PUSH_ERROR | Pedido #{pedido_id} | Error: {str(e)}")
+                
+                # Ejecutar en hilo separado (no bloquea la respuesta)
+                thread = threading.Thread(target=enviar_notificaciones_async, args=(pedido.id,))
+                thread.daemon = True
+                thread.start()
             
             messages.success(request, f"¡Pedido #{pedido.id} registrado correctamente con {detalles_guardados} producto(s)!")
             return redirect("index")
