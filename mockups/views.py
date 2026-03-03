@@ -517,6 +517,10 @@ def gestionar_balones_lista(request):
     # Procesar POST para edición masiva de precios
     if request.method == "POST":
         cambios_realizados = False
+        
+        # Verificar si el formulario incluye campos de disponibilidad (checkboxes activo_*)
+        # Si no hay ningún checkbox en el form, mantener valores actuales de 'activo'
+        form_incluye_activo = any(k.startswith('activo_') for k in request.POST)
 
         for balon in balones:
             # Claves de los campos del formulario
@@ -529,7 +533,8 @@ def gestionar_balones_lista(request):
             nuevo_compra_str    = request.POST.get(compra_key)
             nuevo_local_str     = request.POST.get(local_key)
             nuevo_dom_str       = request.POST.get(dom_key)
-            nuevo_activo        = activo_key in request.POST
+            # Solo procesar 'activo' si el formulario incluye esos campos, sino mantener valor actual
+            nuevo_activo        = activo_key in request.POST if form_incluye_activo else balon.activo
 
             try:
                 nuevo_compra     = int(nuevo_compra_str) if nuevo_compra_str else balon.precio_compra
