@@ -256,7 +256,7 @@
                                                 <span class="fw-bold">{{ form.instance.get_tipo_pago_display }}</span>
                                             {% else %}
                                                 {{ form.tipo_pago }}
-                                                {{ form.DELETE }}
+                                                <span class="d-none">{{ form.DELETE }}</span>
                                             {% endif %}
                                         </td>
                                         <td class="align-middle">
@@ -325,7 +325,7 @@
                                                 <span>{{ form.instance.descripcion|default:"—" }}</span>
                                             {% else %}
                                                 {{ form.descripcion }}
-                                                {{ form.DELETE }}
+                                                <span class="d-none">{{ form.DELETE }}</span>
                                             {% endif %}
                                         </td>
                                         <td class="align-middle text-end">
