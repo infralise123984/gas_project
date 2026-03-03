@@ -3,17 +3,14 @@
 {% load humanize %}
 
 {% block content %}
-<div class="container-fluid px-3 py-4 bg-light" style="max-width: 540px; margin: 0 auto;">
+<div class="container-fluid px-3 py-4" style="max-width: 540px; margin: 0 auto; padding-bottom: 120px;">
 
-    <!-- Total siempre visible (sticky) -->
-    <div class="text-center mb-4 py-3 bg-white rounded-3 shadow sticky-top" style="top: 56px; z-index: 1000;">
-        <h2 class="fw-bold text-success mb-1" id="totalDisplay">$0</h2>
-        <small class="text-muted">Total venta en curso</small>
+    <!-- Total siempre visible (sticky) con gradiente -->
+    <div class="text-center mb-4 py-3 rounded-3 shadow sticky-top" 
+         style="top: 56px; z-index: 1000; background: linear-gradient(135deg, #198754 0%, #20c997 100%);">
+        <h2 class="fw-bold text-white mb-1" id="totalDisplay">$0</h2>
+        <small class="text-white-50">Total venta en curso</small>
     </div>
-
-    <h4 class="text-center fw-bold text-primary mb-4">
-        Venta Rápida Tarreo
-    </h4>
 
     {% if messages %}
     <div class="mb-3">
@@ -29,90 +26,127 @@
     <form method="post" id="ventaForm">
         {% csrf_token %}
 
-        <!-- Método de pago -->
-        <div class="mb-5">
-            <label class="form-label fw-bold text-center d-block fs-5 mb-3">
-                ¿Cómo pagó el cliente?
-            </label>
-            <div class="d-grid gap-2">
-                <button type="button" class="btn btn-outline-primary btn-lg pago-btn py-3 shadow-sm" data-value="efectivo">
-                    <i class="bi bi-cash-stack fs-4 me-2"></i>Efectivo
-                </button>
-                <button type="button" class="btn btn-outline-primary btn-lg pago-btn py-3 shadow-sm" data-value="tarjeta">
-                    <i class="bi bi-credit-card fs-4 me-2"></i>Tarjeta
-                </button>
+        <!-- ══════════════════════════════════════════════════════ -->
+        <!-- SECCIÓN 1: MÉTODO DE PAGO - Fondo azul claro -->
+        <!-- ══════════════════════════════════════════════════════ -->
+        <div class="rounded-4 p-3 mb-4" style="background: linear-gradient(180deg, #e7f1ff 0%, #f8f9fa 100%);">
+            <div class="d-flex align-items-center mb-3">
+                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" 
+                     style="width: 32px; height: 32px; font-size: 1rem;">1</div>
+                <h5 class="fw-bold text-primary mb-0">¿Cómo pagó?</h5>
+            </div>
+            <div class="row g-2">
+                <div class="col-6">
+                    <button type="button" class="btn btn-lg w-100 pago-btn py-3 d-flex flex-column align-items-center gap-1" 
+                            data-value="efectivo"
+                            style="border: 3px solid #198754; background: white; color: #198754;">
+                        <i class="bi bi-cash-stack fs-2"></i>
+                        <span class="fw-bold">Efectivo</span>
+                    </button>
+                </div>
+                <div class="col-6">
+                    <button type="button" class="btn btn-lg w-100 pago-btn py-3 d-flex flex-column align-items-center gap-1" 
+                            data-value="tarjeta"
+                            style="border: 3px solid #0d6efd; background: white; color: #0d6efd;">
+                        <i class="bi bi-credit-card fs-2"></i>
+                        <span class="fw-bold">Tarjeta</span>
+                    </button>
+                </div>
             </div>
             <input type="hidden" name="metodo_pago" id="metodo_pago" required>
         </div>
 
-        <!-- Balones -->
-        <h5 class="text-center fw-bold mb-4">¿Qué balones lleva?</h5>
-        <div class="row g-3" id="balonesContainer">
-            {% for balon in balones %}
-            <div class="">
-                <div class="balon-card text-center p-3 border rounded shadow-sm bg-white position-relative"
+        <!-- ══════════════════════════════════════════════════════ -->
+        <!-- SECCIÓN 2: BALONES - Fondo naranja claro -->
+        <!-- ══════════════════════════════════════════════════════ -->
+        <div class="rounded-4 p-3 mb-4" style="background: linear-gradient(180deg, #fff3e0 0%, #f8f9fa 100%);">
+            <div class="d-flex align-items-center mb-3">
+                <div class="rounded-circle bg-warning text-dark d-flex align-items-center justify-content-center me-2" 
+                     style="width: 40px; height: 40px; font-size: 1.3rem;">2</div>
+                <h4 class="fw-bold mb-0" style="color: #e65100 !important; font-size: 1.4rem;">¿Qué balones lleva?</h4>
+            </div>
+            <div class="d-flex flex-column gap-3" id="balonesContainer">
+                {% for balon in balones %}
+                <div class="balon-card p-3 rounded-4 position-relative"
                      data-id="{{ balon.id }}"
-                     data-precio="{{ balon.precio_domicilio|stringformat:'d' }}">
+                     data-precio="{{ balon.precio_domicilio|stringformat:'d' }}"
+                     style="border: 3px solid #dee2e6; background: white;">
 
-                    <div class="fs-5 fw-bold mb-1">
-                        {{ balon.nombre }}
-                        {% if balon.tipo_gas == 'catalitico' %}
-                            <span class="badge bg-warning text-dark ms-1">CAT</span>
-                        {% elif balon.tipo_gas == 'aluminio' %}
-                            <span class="badge bg-secondary ms-1">ALU</span>
-                        {% else %}
-                            <span class="badge bg-info text-dark ms-1">NORMAL</span>
-                        {% endif %}
-                    </div>
-                    <div class="small text-success fw-bold mb-2 fs-5">
-                        ${{ balon.precio_domicilio|floatformat:0|intcomma }}
+                    <div class="d-flex justify-content-between align-items-center">
+                        <!-- Nombre y tipo -->
+                        <div>
+                            <div class="fw-bold text-dark" style="font-size: 1.4rem;">
+                                {{ balon.nombre }}
+                            </div>
+                            {% if balon.tipo_gas == 'catalitico' %}
+                            <span class="badge rounded-pill" style="background: #ff6f00; font-size: 0.85rem;">CATALÍTICO</span>
+                            {% elif balon.tipo_gas == 'aluminio' %}
+                            <span class="badge bg-secondary rounded-pill" style="font-size: 0.85rem;">ALUMINIO</span>
+                            {% endif %}
+                        </div>
+                        <!-- Precio grande -->
+                        <div class="fw-bold text-end" style="color: #198754; font-size: 1.6rem;">
+                            ${{ balon.precio_domicilio|floatformat:0|intcomma }}
+                        </div>
                     </div>
 
-                    <!-- Contador (estructura original exacta) -->
-                    <div class="contador d-none d-flex justify-content-center align-items-center gap-3 mb-2">
-                        <button type="button" class="btn btn-danger btn-sm rounded-circle minus" style="width:50px; height:50px; font-size:1.5rem;">
+                    <!-- Contador grande -->
+                    <div class="contador d-none d-flex justify-content-center align-items-center gap-3 my-3">
+                        <button type="button" class="btn btn-danger rounded-circle minus d-flex align-items-center justify-content-center" 
+                                style="width: 60px; height: 60px; font-size: 1.8rem;">
                             <i class="bi bi-dash-lg"></i>
                         </button>
-                        <span class="fs-4 fw-bold qty">0</span>
-                        <button type="button" class="btn btn-success btn-sm rounded-circle plus" style="width:50px; height:50px; font-size:1.5rem;">
+                        <span class="fw-bold qty" style="font-size: 2.5rem; min-width: 60px; text-align: center;">0</span>
+                        <button type="button" class="btn btn-success rounded-circle plus d-flex align-items-center justify-content-center" 
+                                style="width: 60px; height: 60px; font-size: 1.8rem;">
                             <i class="bi bi-plus-lg"></i>
                         </button>
                     </div>
 
-                    <!-- Botón +1 rápido (original) -->
-                    <button type="button" class="btn btn-outline-secondary w-100 add-one py-2">
-                        +1 {{ balon.nombre }}
+                    <!-- Botón Agregar grande -->
+                    <button type="button" class="btn btn-warning w-100 add-one fw-bold mt-2" 
+                            style="font-size: 1.3rem; padding: 14px 20px; border-radius: 12px;">
+                        <i class="bi bi-plus-circle-fill me-2"></i>AGREGAR
                     </button>
 
-                    <!-- Indicador visual fuerte cuando está seleccionado -->
-                    <div class="selected-indicator position-absolute top-0 end-0 m-2 d-none">
-                        <i class="bi bi-check-circle-fill text-success fs-4 shadow"></i>
+                    <!-- Indicador visual cuando está seleccionado -->
+                    <div class="selected-indicator position-absolute bottom-0 end-0 m-2 d-none">
+                        <i class="bi bi-check-circle-fill text-success" style="font-size: 1.5rem;"></i>
                     </div>
                 </div>
+                {% empty %}
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-exclamation-circle fs-1 d-block mb-2"></i>
+                    No hay balones disponibles para venta
+                </div>
+                {% endfor %}
             </div>
-            {% empty %}
-            <div class="col-12 text-center text-muted py-5">
-                <i class="bi bi-exclamation-circle fs-1 d-block mb-2"></i>
-                No hay balones disponibles para venta
-            </div>
-            {% endfor %}
         </div>
 
-        <!-- Dirección opcional (mantengo tu campo) -->
-        <div class="my-4">
-            <label class="form-label fw-bold">Dirección o referencia (opcional)</label>
-            <textarea name="direccion_entrega" class="form-control" rows="2"
-                      placeholder="Ej: casa azul esquina Los Aromos (deja en blanco si es venta directa)">
-            </textarea>
+        <!-- ══════════════════════════════════════════════════════ -->
+        <!-- SECCIÓN 3: DIRECCIÓN (OPCIONAL) - Fondo gris -->
+        <!-- ══════════════════════════════════════════════════════ -->
+        <div class="rounded-4 p-3 mb-4" style="background: #f8f9fa;">
+            <div class="d-flex align-items-center mb-2">
+                <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center me-2" 
+                     style="width: 32px; height: 32px; font-size: 1rem;">3</div>
+                <h5 class="fw-bold text-secondary mb-0">Dirección <small class="fw-normal">(opcional)</small></h5>
+            </div>
+            <div class="input-group">
+                <span class="input-group-text bg-white"><i class="bi bi-geo-alt text-secondary"></i></span>
+                <textarea name="direccion_entrega" class="form-control" rows="2"
+                          placeholder="Ej: casa azul esquina Los Aromos"></textarea>
+            </div>
             <small class="form-text text-muted d-block mt-1">
-                Deja vacío si la entrega es en el mismo lugar (venta en camión).
+                <i class="bi bi-info-circle me-1"></i>Deja vacío si es venta directa en el camión.
             </small>
         </div>
 
-        <!-- Botón guardar (con sombra y fijo abajo para mejor uso móvil) -->
+        <!-- Botón guardar fijo abajo -->
         <div class="fixed-bottom bg-white p-3 shadow-lg border-top" style="z-index: 999;">
             <div class="container-fluid" style="max-width: 540px; margin: 0 auto;">
-                <button type="submit" class="btn btn-success btn-lg w-100 py-4 fs-4 shadow">
+                <button type="submit" class="btn btn-lg w-100 py-3 fs-5 shadow fw-bold"
+                        style="background: linear-gradient(135deg, #198754 0%, #20c997 100%); border: none; color: white;">
                     <i class="bi bi-check-circle-fill me-2"></i>Guardar Venta
                 </button>
             </div>
@@ -143,12 +177,14 @@ function actualizarTotal() {
         // ──── Mejora visual: resaltar cuando qty > 0 ────
         const indicator = card.querySelector('.selected-indicator');
         if (qty > 0) {
-            card.classList.add('border-success', 'border-3', 'shadow');
-            card.classList.remove('border', 'shadow-sm');
+            card.style.border = '4px solid #198754';
+            card.style.background = '#e8f5e9';
+            card.style.boxShadow = '0 4px 15px rgba(25, 135, 84, 0.4)';
             if (indicator) indicator.classList.remove('d-none');
         } else {
-            card.classList.remove('border-success', 'border-3', 'shadow');
-            card.classList.add('border', 'shadow-sm');
+            card.style.border = '3px solid #dee2e6';
+            card.style.background = 'white';
+            card.style.boxShadow = 'none';
             if (indicator) indicator.classList.add('d-none');
         }
 
@@ -179,11 +215,29 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Balón ID:', card.dataset.id, 'Precio:', card.dataset.precio);
     });
     
-    // Selección de método de pago
+    // Selección de método de pago con colores distintivos
     document.querySelectorAll('.pago-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.pago-btn').forEach(b => b.classList.remove('btn-primary', 'active'));
-            btn.classList.add('btn-primary', 'active');
+            // Resetear todos los botones
+            document.querySelectorAll('.pago-btn').forEach(b => {
+                b.classList.remove('active');
+                if (b.dataset.value === 'efectivo') {
+                    b.style.background = 'white';
+                    b.style.color = '#198754';
+                } else {
+                    b.style.background = 'white';
+                    b.style.color = '#0d6efd';
+                }
+            });
+            // Activar el seleccionado
+            btn.classList.add('active');
+            if (btn.dataset.value === 'efectivo') {
+                btn.style.background = '#198754';
+                btn.style.color = 'white';
+            } else {
+                btn.style.background = '#0d6efd';
+                btn.style.color = 'white';
+            }
             document.getElementById('metodo_pago').value = btn.dataset.value;
         });
     });
@@ -195,11 +249,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const contador = card.querySelector('.contador');
         const addBtn = card.querySelector('.add-one');
 
+        // Función para animar la card
+        function animarCard() {
+            card.classList.add('pulse');
+            setTimeout(() => card.classList.remove('pulse'), 200);
+        }
+
         // +1 rápido
         addBtn.addEventListener('click', () => {
             cantidades[id] = (cantidades[id] || 0) + 1;
             qtySpan.textContent = cantidades[id];
             contador.classList.remove('d-none');
+            animarCard();
             actualizarTotal();
         });
 
@@ -207,6 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
         card.querySelector('.plus')?.addEventListener('click', () => {
             cantidades[id] = (cantidades[id] || 0) + 1;
             qtySpan.textContent = cantidades[id];
+            animarCard();
             actualizarTotal();
         });
 
@@ -235,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let [id, qty] of Object.entries(cantidades)) {
             if (qty > 0) {
                 tieneProductos = true;
-                const nombre = document.querySelector(`.balon-card[data-id="${id}"] .fs-5.fw-bold`).textContent.trim();
+                const nombre = document.querySelector(`.balon-card[data-id="${id}"] .fw-bold.text-dark`).textContent.trim();
                 resumen += `  • ${qty} × ${nombre}\n`;
             }
         }
@@ -262,22 +324,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <style>
     .balon-card {
-        transition: all 0.25s ease;
+        transition: all 0.2s ease;
         cursor: pointer;
     }
+    .balon-card:active {
+        transform: scale(0.98);
+    }
+    .pago-btn {
+        transition: all 0.2s ease;
+        border-radius: 12px !important;
+    }
+    .pago-btn:active {
+        transform: scale(0.97);
+    }
     .contador .btn {
-        font-size: 1.6rem;
+        font-size: 1.2rem;
         line-height: 1;
     }
     .add-one {
-        font-size: 1.1rem;
+        border-radius: 8px !important;
     }
     .sticky-top {
-        background: rgba(255,255,255,0.97);
         backdrop-filter: blur(6px);
     }
     .selected-indicator {
         transition: all 0.2s ease;
+    }
+    /* Animación al agregar producto */
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.02); }
+        100% { transform: scale(1); }
+    }
+    .balon-card.pulse {
+        animation: pulse 0.2s ease;
     }
 </style>
 

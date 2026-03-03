@@ -84,24 +84,17 @@ self.addEventListener('push', (event) => {
         body: data.body,
         icon: data.icon || '/static/img/web-app-manifest-192x192.png',
         badge: data.badge || '/static/img/favicon-96x96.png',
-        tag: data.tag || 'gasfacil-notification',
-        renotify: true, // Vuelve a mostrar aunque el tag sea igual
+        tag: data.tag || `gasfacil-${Date.now()}`,
+        renotify: true,
+        timestamp: data.timestamp || Date.now(),
         data: data.data || { url: '/' },
-        vibrate: [200, 100, 200, 100, 200], // Vibración personalizada
-        requireInteraction: true, // La notificación permanece hasta que el usuario interactúe
-        actions: data.actions || [
-            {
-                action: 'ver',
-                title: 'Ver detalle',
-                icon: '/static/img/favicon-96x96.png'
-            },
-            {
-                action: 'cerrar',
-                title: 'Cerrar'
-            }
-        ],
-        // Sonido de notificación (cuando el navegador lo soporte)
+        vibrate: [200, 100, 200],
+        requireInteraction: true,
         silent: false,
+        actions: [
+            { action: 'ver', title: 'Ver detalle' },
+            { action: 'cerrar', title: 'Cerrar' }
+        ]
     };
 
     event.waitUntil(
