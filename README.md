@@ -147,4 +147,6 @@ El proyecto está configurado para Render con:
 
 ## Licencia
 
-Proyecto privado desarrollado para KIM GAS.
+Copyright © 2026 GasFácil. Todos los derechos reservados.
+
+Este software es propietario y confidencial. Ver archivo [LICENSE](LICENSE) para más detalles.
