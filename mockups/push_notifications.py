@@ -6,6 +6,7 @@ Permite enviar notificaciones a camioneros sobre nuevos pedidos y recordatorios.
 """
 import json
 import logging
+import time
 from django.conf import settings
 
 try:
@@ -54,14 +55,18 @@ def send_push_notification(subscription_info, title, body, url='/', tag='gasfaci
         return False, 'Claves VAPID no configuradas'
     
     # Construir payload de la notificación
+    # Tag único con timestamp para forzar heads-up en Android
+    unique_tag = f"{tag}-{int(time.time() * 1000)}"
+    
     payload = {
         'title': title,
         'body': body,
         'icon': '/static/img/web-app-manifest-192x192.png',
         'badge': '/static/img/favicon-96x96.png',
-        'tag': tag,
+        'tag': unique_tag,
         'renotify': True,  # Vuelve a notificar aunque tenga el mismo tag
         'requireInteraction': True,  # Mantiene la notificación visible hasta que el usuario interactúe
+        'timestamp': int(time.time() * 1000),  # Timestamp para prioridad
         'vibrate': [200, 100, 200, 100, 200],  # Patrón de vibración
         'data': {
             'url': url,
@@ -145,8 +150,6 @@ def notificar_nuevo_pedido(pedido):
     
     body = f"📍 {pedido.sector}\n{items}"
     url = "/entregas/"  # Vista de entregas del camionero
-    # Tag único con timestamp para forzar heads-up en Android
-    import time
     tag = f"pedido-{pedido.id}-{int(time.time())}"
     
     enviados = 0
