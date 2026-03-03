@@ -256,7 +256,7 @@
                                                 <span class="fw-bold">{{ form.instance.get_tipo_pago_display }}</span>
                                             {% else %}
                                                 {{ form.tipo_pago }}
-                                                <span class="d-none">{{ form.DELETE }}</span>
+                                                <span style="display:none">{{ form.DELETE }}</span>
                                             {% endif %}
                                         </td>
                                         <td class="align-middle">
@@ -325,7 +325,7 @@
                                                 <span>{{ form.instance.descripcion|default:"—" }}</span>
                                             {% else %}
                                                 {{ form.descripcion }}
-                                                <span class="d-none">{{ form.DELETE }}</span>
+                                                <span style="display:none">{{ form.DELETE }}</span>
                                             {% endif %}
                                         </td>
                                         <td class="align-middle text-end">
@@ -452,7 +452,7 @@
             <td class="align-middle">
                 {{ formset_pagos.empty_form.id }}
                 {{ formset_pagos.empty_form.tipo_pago }}
-                {{ formset_pagos.empty_form.DELETE }}
+                <span style="display:none">{{ formset_pagos.empty_form.DELETE }}</span>
             </td>
             <td class="align-middle">
                 {{ formset_pagos.empty_form.referencia }}
@@ -476,7 +476,7 @@
             <td class="align-middle">
                 {{ formset_gastos.empty_form.id }}
                 {{ formset_gastos.empty_form.descripcion }}
-                {{ formset_gastos.empty_form.DELETE }}
+                <span style="display:none">{{ formset_gastos.empty_form.DELETE }}</span>
             </td>
             <td class="align-middle text-end">
                 {{ formset_gastos.empty_form.monto }}
