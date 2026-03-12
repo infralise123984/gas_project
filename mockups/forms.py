@@ -14,19 +14,12 @@ class BalonSelectWidget(forms.Select):
         super().__init__(attrs)
         self.prices_dict = prices_dict or {}
     
-    def optgroups(self, name, value, attrs=None):
-        """Sobrescribir para agregar data attributes"""
-        groups = []
-        for index, group_name, subgroup in super().optgroups(name, value, attrs):
-            subgroup_list = []
-            for option_dict in subgroup:
-                option_value = option_dict.get('value', '')
-                if option_value and option_value in self.prices_dict:
-                    price = self.prices_dict[option_value]
-                    option_dict['attrs']['data-precio'] = str(price)
-                subgroup_list.append(option_dict)
-            groups.append((index, group_name, subgroup_list))
-        return groups
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        """Agregar data-precio a cada opción"""
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        if value and value in self.prices_dict:
+            option['attrs']['data-precio'] = str(self.prices_dict[value])
+        return option
 
 
 class DetallePedidoForm(forms.ModelForm):
@@ -52,8 +45,18 @@ class DetallePedidoForm(forms.ModelForm):
         user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
 
-        # Choices para balones y precios
-        balones = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
+        # Choices para balones ordenados como en los sobres: Normal→Catalítico→Aluminio, cada uno por peso desc
+        from django.db.models import Case, When, Value, IntegerField
+        balones = TipoBalon.objects.filter(activo=True).annotate(
+            tipo_orden=Case(
+                When(tipo_gas='normal', then=Value(0)),
+                When(tipo_gas='catalitico', then=Value(1)),
+                When(tipo_gas='aluminio', then=Value(2)),
+                default=Value(3),
+                output_field=IntegerField(),
+            )
+        ).order_by('tipo_orden', '-peso_neto_gas')
+        
         choices = [('', '— Seleccionar balón —')]
         prices_dict = {}
         
