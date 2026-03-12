@@ -76,14 +76,18 @@
                             <div class="text-danger small mt-1">{{ form.balon.errors }}</div>
                             {% endif %}
                         </div>
-                        <div class="col-6">
+                        <div class="col-4">
                             <label class="form-label">Cantidad <span class="text-danger">*</span></label>
                             {{ form.cantidad }}
                             {% if form.cantidad.errors %}
                             <div class="text-danger small mt-1">{{ form.cantidad.errors }}</div>
                             {% endif %}
                         </div>
-                        <div class="col-6 text-end">
+                        <div class="col-4">
+                            <label class="form-label">Precio Unit.</label>
+                            {{ form.precio_venta_unitario }}
+                        </div>
+                        <div class="col-4 text-end">
                             {% if forloop.counter0 == 0 %}
                             <button type="button" class="btn btn-outline-secondary btn-lg w-100" disabled>
                                 <i class="bi bi-lock-fill me-2"></i>Primera fila
@@ -112,11 +116,15 @@
                             <label class="form-label">Tipo de balón <span class="text-danger">*</span></label>
                             {{ formset.empty_form.balon }}
                         </div>
-                        <div class="col-6">
+                        <div class="col-4">
                             <label class="form-label">Cantidad <span class="text-danger">*</span></label>
                             {{ formset.empty_form.cantidad }}
                         </div>
-                        <div class="col-6 text-end">
+                        <div class="col-4">
+                            <label class="form-label">Precio Unit.</label>
+                            {{ formset.empty_form.precio_venta_unitario }}
+                        </div>
+                        <div class="col-4 text-end">
                             <button type="button" class="btn btn-outline-danger btn-lg w-100 remove-row">
                                 <i class="bi bi-trash3 me-2"></i>Quitar
                             </button>
@@ -166,6 +174,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let formIndex = parseInt(totalFormsInput.value) || 1;
 
+    // Función para configurar los listeners de cambio de balón
+    function setupBalonChangeListeners(row) {
+        const balonSelect = row.querySelector('.balon-select');
+        const precioInput = row.querySelector('.precio-display');
+        
+        if (balonSelect && precioInput) {
+            balonSelect.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                const precio = selectedOption.dataset.precio || '';
+                if (precio) {
+                    precioInput.value = precio;
+                } else {
+                    precioInput.value = '';
+                }
+            });
+        }
+    }
+
+    // Configurar listeners para filas existentes
+    container.querySelectorAll('.detalle-row').forEach(row => {
+        setupBalonChangeListeners(row);
+    });
+
     // Agregar nueva fila
     addButton.addEventListener('click', function() {
         const newRow = emptyFormTemplate.cloneNode(true);
@@ -177,13 +208,19 @@ document.addEventListener('DOMContentLoaded', function() {
         // Resetear valores
         const select = newRow.querySelector('select');
         const numberInput = newRow.querySelector('input[type="number"]');
+        const precioInput = newRow.querySelector('.precio-display');
         const deleteCheckbox = newRow.querySelector('input[name$="-DELETE"]');
         
         if (select) select.selectedIndex = 0;
         if (numberInput) numberInput.value = '1';
+        if (precioInput) precioInput.value = '';
         if (deleteCheckbox) deleteCheckbox.checked = false;
         
         container.appendChild(newRow);
+        
+        // Configurar listeners para la nueva fila
+        setupBalonChangeListeners(newRow);
+        
         formIndex++;
         totalFormsInput.value = formIndex;
         

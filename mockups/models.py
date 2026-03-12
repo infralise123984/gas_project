@@ -71,7 +71,7 @@ class TipoBalon(models.Model):
     )
 
     TIPOS_GAS = [
-        ("normal", "Normal"),
+        ("normal", "Clásico"),
         ("catalitico", "Catalítico"),
         ("aluminio", "Aluminio"),
     ]
