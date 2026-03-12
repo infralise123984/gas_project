@@ -968,7 +968,7 @@ def editar_pedido(request, pedido_id):
 
             # Recalcular totales
             pedido.calcular_totales()
-            return redirect('entregas_mias') 
+            return redirect('entregas_lista') 
 
         else:
             messages.error(request, "Por favor corrige los errores en el formulario.")
