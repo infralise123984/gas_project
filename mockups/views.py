@@ -968,12 +968,7 @@ def editar_pedido(request, pedido_id):
 
             # Recalcular totales
             pedido.calcular_totales()
-            if request.user.rol in ['telefonista', 'bodeguero']:
-                return redirect('pedidos_mios') 
-            elif request.user.rol == 'camionero':
-                return redirect('entregas_mias')  
-            else:
-                return redirect('reportes_ventas') 
+            return redirect('entregas_mias') 
 
         else:
             messages.error(request, "Por favor corrige los errores en el formulario.")
