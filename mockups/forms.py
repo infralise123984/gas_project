@@ -1,23 +1,50 @@
 # mockups/forms.py
 from django import forms
 from django.forms import inlineformset_factory, BaseInlineFormSet
+from django.utils.safestring import mark_safe
 from .models import Pedido, DetallePedido, TipoBalon, SobreDiario, LineaSobre, LineaPago, LineaGasto
 
 # Sectores definidos en Pedido.SECTORES (fuente única de verdad)
 SECTORES = [("", "— Seleccionar sector —")] + Pedido.SECTORES
 
 
+class BalonSelectWidget(forms.Select):
+    """Widget personalizado que agrega data-precio a cada opción"""
+    def __init__(self, attrs=None, prices_dict=None):
+        super().__init__(attrs)
+        self.prices_dict = prices_dict or {}
+    
+    def optgroups(self, name, value, attrs=None):
+        """Sobrescribir para agregar data attributes"""
+        groups = []
+        for index, group_name, subgroup in super().optgroups(name, value, attrs):
+            subgroup_list = []
+            for option_dict in subgroup:
+                option_value = option_dict.get('value', '')
+                if option_value and option_value in self.prices_dict:
+                    price = self.prices_dict[option_value]
+                    option_dict['attrs']['data-precio'] = str(price)
+                subgroup_list.append(option_dict)
+            groups.append((index, group_name, subgroup_list))
+        return groups
+
+
 class DetallePedidoForm(forms.ModelForm):
     class Meta:
         model = DetallePedido
-        fields = ['balon', 'cantidad']
+        fields = ['balon', 'cantidad', 'precio_venta_unitario']
         widgets = {
-            'balon': forms.Select(attrs={'class': 'form-select'}),
+            'balon': forms.Select(attrs={'class': 'form-select balon-select'}),
             'cantidad': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'min': 1,
                 'value': 1,
                 'style': 'width: 100px;',
+            }),
+            'precio_venta_unitario': forms.NumberInput(attrs={
+                'class': 'form-control precio-display',
+                'readonly': True,
+                'style': 'width: 120px; background-color: #f0f0f0;',
             }),
         }
 
@@ -25,22 +52,34 @@ class DetallePedidoForm(forms.ModelForm):
         user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
 
-        # Choices para balones
+        # Choices para balones y precios
         balones = TipoBalon.objects.filter(activo=True).order_by('peso_neto_gas')
         choices = [('', '— Seleccionar balón —')]
+        prices_dict = {}
+        
         for b in balones:
             if user and user.rol == 'bodeguero':
                 precio = b.precio_local
             else:
                 precio = b.precio_domicilio
+            
             precio_txt = f"${int(precio):,}".replace(',', '.')
-            choices.append((b.id, f"{b.nombre} - {precio_txt}"))
+            tipo_gas_display = b.get_tipo_gas_display()
+            choices.append((b.id, f"{b.nombre} - {tipo_gas_display} - {precio_txt}"))
+            prices_dict[str(b.id)] = int(precio)
+        
+        # Usar el widget personalizado con precios
+        self.fields['balon'].widget = BalonSelectWidget(
+            attrs={'class': 'form-select balon-select'},
+            prices_dict=prices_dict
+        )
         self.fields['balon'].choices = choices
         self.fields['cantidad'].initial = 1
         
         # No hacer required en el form, lo validaremos en el formset
         self.fields['balon'].required = False
         self.fields['cantidad'].required = False
+        self.fields['precio_venta_unitario'].required = False
 
 
 class BaseDetalleFormSet(BaseInlineFormSet):

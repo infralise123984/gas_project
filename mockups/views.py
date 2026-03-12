@@ -922,11 +922,10 @@ def editar_pedido(request, pedido_id):
                         detalle = detalle_form.save(commit=False)
                         detalle.pedido = pedido
                         
-                        # Si es un detalle nuevo (sin id), asignar precios
-                        if not detalle.pk:
-                            es_bodeguero = request.user.rol == "bodeguero"
-                            detalle.precio_venta_unitario = balon.precio_local if es_bodeguero else balon.precio_domicilio
-                            detalle.precio_compra_unitario = balon.precio_compra
+                        # Actualizar precios siempre (al crear o editar)
+                        es_bodeguero = request.user.rol == "bodeguero"
+                        detalle.precio_venta_unitario = balon.precio_local if es_bodeguero else balon.precio_domicilio
+                        detalle.precio_compra_unitario = balon.precio_compra
                         
                         detalle.save()
                         detalles_guardados += 1
