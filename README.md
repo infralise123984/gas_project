@@ -1,33 +1,152 @@
-# GasFácil
+# GasFácil - Sistema de Gestión para Distribuidores de Gas
 
-Sistema web para la gestión eficiente de pedidos, entregas, precios y reportes de un distribuidor de **gas licuado (GLP)**.  
-Reemplaza planillas de Excel y grupos de WhatsApp por una solución simple, segura y móvil-friendly. actualmente el nombre *GasFáci* es solamente un placeholder
+Sistema web progresivo (PWA) para la gestión integral de pedidos, entregas, inventario y reportes de un distribuidor de **gas licuado (GLP)**.
 
-## Estado actual (rama main v2)
-- Autenticación con roles: Telefonista, Bodeguero, Camionero, Jefe y Administrador  
-- Registro de pedidos a domicilio (telefonista) y ventas en local (bodeguero)  
-- Cálculo automático de monto según tipo de balón y cantidad  
-- Selección de sector y captura de dirección exacta (solo telefonistas)  
-- Vista de precios y disponibilidad de balones con historial automático de cambios  
-- Reporte de ventas con gráficos (pie chart de balones más vendidos) y tablas detalladas  
-- Consultas avanzadas de pedidos con filtros y paginación  
-- Interfaz responsiva con Bootstrap 5 (optimizada para móviles)  
-- Configuración de entorno con `.env` y preparación para despliegue en **Render.com**
+Reemplaza planillas de Excel y grupos de WhatsApp por una solución moderna, segura y optimizada para uso móvil. El nombre *GasFácil* es un placeholder - actualmente implementado para **KIM GAS Rancagua**.
 
-**Próximos pasos en testing**  
-- Vista completa del camionero (lista de pedidos pendientes/en ruta, botones para tomar y marcar entregado, diseño tipo app móvil)  
-- Seguimiento de metas mensuales en el reporte de ventas (progreso, alertas para no exceder)  
-- Exportación de reportes a CSV/PDF  
-- Gráficos interactivos adicionales (ventas diarias, por sector, por trabajador)
+---
 
-## Tecnologías utilizadas
-- **Backend**: Django 5.2 (Python 3.12)  
-- **Frontend**: Bootstrap 5 + Bootstrap Icons  
-- **Base de datos**: MySQL (desarrollo) / PostgreSQL (producción)  
-- **Gestión de entorno**: python-dotenv  
-- **Despliegue**: Preparado para Render.com (Web Service + PostgreSQL)
+## Funcionalidades Implementadas
 
-## Requisitos
-- Python 3.12+  
-- MySQL (o PostgreSQL)  
-- `pip install -r requirements.txt`
+### Gestión de Usuarios y Roles
+- **5 roles diferenciados**: Telefonista, Bodeguero, Camionero, Jefe y Administrador
+- Cada rol tiene acceso solo a las vistas que necesita
+- Creación de usuarios desde panel administrativo
+
+### Pedidos y Ventas
+- **Telefonista**: Registro de pedidos a domicilio con dirección, sector y múltiples balones
+- **Bodeguero**: Ventas en local (mostrador)
+- **Camionero**: Ventas en ruta (tarreo) con interfaz táctil optimizada
+- Cálculo automático de montos según tipo de balón y cantidad
+- Historial completo de cambios de estado
+
+### Vista Camionero (PWA)
+- Interfaz tipo app móvil, instalable en Android
+- Lista de entregas pendientes y en ruta
+- Botones grandes para tomar pedido, marcar en ruta y entregado
+- **Venta Tarreo**: Registro rápido de ventas en la calle con UI accesible para personas mayores
+- Notificaciones push cuando hay nuevos pedidos
+
+### Sistema de Sobres Diarios
+- Control de caja diario por trabajador
+- Registro de líneas de venta, gastos y pagos
+- Cierre de sobre con validación de cuadre
+- Historial y reportes de sobres
+
+### Notificaciones Push
+- Notificaciones en tiempo real a camioneros
+- Funciona incluso con la app cerrada (Service Worker)
+- Envío asíncrono para no bloquear la interfaz del telefonista
+
+### Reportes y Consultas
+- Reporte de ventas con gráficos (pie chart de balones más vendidos)
+- Consultas avanzadas de pedidos con filtros y paginación
+- Historial de precios de balones
+- Exportación a Excel (XLSX)
+
+### Gestión de Balones y Precios
+- Catálogo de tipos de balón (5kg, 11kg, 15kg, 45kg, catalítico, aluminio)
+- Precios diferenciados: local vs domicilio
+- Historial automático de cambios de precio
+
+### Auditoría y Seguridad
+- Log de todas las acciones críticas (crear, editar, eliminar)
+- Registro de quién hizo qué y cuándo
+- Tests de seguridad incluidos
+
+---
+
+## Tecnologías
+
+| Componente | Tecnología |
+|------------|------------|
+| Backend | Django 5.1 (Python 3.12) |
+| Frontend | Bootstrap 5 + Bootstrap Icons |
+| Base de datos | MySQL (dev) / PostgreSQL (prod) |
+| PWA | Service Worker + Web Push API |
+| Notificaciones | pywebpush (VAPID) |
+| Servidor prod | Gunicorn + WhiteNoise |
+| Hosting | Render.com |
+
+---
+
+## Instalación Local
+
+```bash
+# Clonar repositorio
+git clone https://github.com/infralise123984/gas_project.git
+cd gas_project
+
+# Crear entorno virtual
+python -m venv venv
+venv\Scripts\activate  # Windows
+# source venv/bin/activate  # Linux/Mac
+
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Configurar variables de entorno
+cp .env.example .env
+# Editar .env con tus credenciales
+
+# Migraciones
+python manage.py migrate
+
+# Crear superusuario
+python manage.py createsuperuser
+
+# Ejecutar servidor
+python manage.py runserver
+```
+
+---
+
+## Variables de Entorno (.env)
+
+```env
+SECRET_KEY=tu_clave_secreta
+DEBUG=True
+DATABASE_URL=mysql://user:pass@localhost:3306/gasfacil
+
+# Push Notifications (generar con: python generate_vapid.py)
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_ADMIN_EMAIL=mailto:admin@tudominio.com
+```
+
+---
+
+## Estructura del Proyecto
+
+```
+gas_project/
+├── gasmanager/          # Configuración Django (settings, urls)
+├── mockups/             # App principal
+│   ├── models.py        # Usuario, Pedido, TipoBalon, SobreDiario, etc.
+│   ├── views.py         # Vistas por rol
+│   ├── forms.py         # Formularios
+│   ├── push_notifications.py  # Sistema de notificaciones
+│   ├── templates/       # HTML (Bootstrap 5)
+│   ├── static/          # CSS, JS, manifest.json, sw.js
+│   └── management/      # Comandos personalizados
+├── requirements.txt
+└── manage.py
+```
+
+---
+
+## Despliegue en Render.com
+
+El proyecto está configurado para Render con:
+- `render.yaml` - Configuración de servicios
+- `build.sh` - Script de construcción
+- `Procfile` - Comando de inicio
+- `requirements-render.txt` - Dependencias de producción
+
+---
+
+## Licencia
+
+Copyright © 2026 GasFácil. Todos los derechos reservados.
+
+Este software es propietario y confidencial. Ver archivo [LICENSE](LICENSE) para más detalles.
