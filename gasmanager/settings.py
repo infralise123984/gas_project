@@ -184,7 +184,7 @@ if not DEBUG:
     X_FRAME_OPTIONS = 'DENY'
     
     # Expiración de sesión (8 horas de inactividad)
-    SESSION_COOKIE_AGE = 28800  # 8 horas
+    SESSION_COOKIE_AGE = 172800  # 8 horas
     SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Mantiene sesión aunque cierre el navegador
 
 # ──────────────────────────────────────────────────────────────
