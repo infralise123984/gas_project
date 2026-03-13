@@ -1993,7 +1993,9 @@ def reporte_sobres(request):
 
             for p in s.pagos.all():
                 monto = float(p.monto or 0)
-                total_no_ef += monto
+                # Solo contar como "no efectivo" si NO es efectivo
+                if p.tipo_pago != 'efectivo':
+                    total_no_ef += monto
                 label = TIPO_PAGO_DISPLAY.get(p.tipo_pago, p.tipo_pago)
                 pagos_por_tipo[label] = pagos_por_tipo.get(label, 0) + monto
 
@@ -2008,6 +2010,43 @@ def reporte_sobres(request):
             'balones_lista':     sorted(balones_dict.values(), key=lambda x: x['peso']),
             'count':             len(sobres_lista),
         }
+
+    # ═══════════════════════════════════════════════════════════
+    # 3a. AGRUPAR POR TRABAJADOR — para tarjetas individuales
+    # ═══════════════════════════════════════════════════════════
+    trabajadores_dict = {}  # trabajador_id (o 'bodega') → lista de sobres
+
+    for s in lista_todos:
+        clave = 'bodega' if s.tipo == 'bodega' else s.trabajador_id
+        if clave not in trabajadores_dict:
+            trabajadores_dict[clave] = []
+        trabajadores_dict[clave].append(s)
+
+    # Calcular métricas por trabajador
+    resumen_trabajadores = []
+    for clave, sobres_trab in trabajadores_dict.items():
+        metricas = calcular_metricas(sobres_trab)
+        
+        if clave == 'bodega':
+            nombre = 'Bodega/Local'
+            tipo_mostrar = 'bodega'
+            usuario_obj = None
+        else:
+            usuario_obj = Usuario.objects.get(id=clave)
+            nombre = usuario_obj.get_full_name() or usuario_obj.username
+            tipo_mostrar = 'camion'
+        
+        resumen_trabajadores.append({
+            'clave': clave,
+            'nombre': nombre,
+            'tipo': tipo_mostrar,
+            'usuario_obj': usuario_obj,
+            'sobres': sobres_trab,
+            **metricas  # expande todas las métricas
+        })
+
+    # Ordenar: bodega primero, luego camioneros por nombre
+    resumen_trabajadores.sort(key=lambda x: (x['tipo'] == 'camion', x['nombre']))
 
     m_bodega = calcular_metricas(lista_bodega)
     m_camion = calcular_metricas(lista_camion)
@@ -2050,6 +2089,49 @@ def reporte_sobres(request):
     dias_lista = sorted(dias_dict.values(), key=lambda x: x['fecha'])
 
     # ═══════════════════════════════════════════════════════════
+    # 5.5 GASTOS DESGLOSADOS — por trabajador y bodega
+    # ═══════════════════════════════════════════════════════════
+    gastos_por_trabajador = {}
+    gastos_globales = []
+
+    for s in lista_todos:
+        clave = 'bodega' if s.tipo == 'bodega' else s.trabajador_id
+        for gasto in s.gastos.all():
+            gasto_dict = {
+                'fecha': s.fecha_correspondiente,
+                'descripcion': gasto.descripcion,
+                'monto': float(gasto.monto or 0),
+                'nota': gasto.nota,
+                'trabajador_clave': clave,
+            }
+            gastos_globales.append(gasto_dict)
+            if clave not in gastos_por_trabajador:
+                gastos_por_trabajador[clave] = []
+            gastos_por_trabajador[clave].append(gasto_dict)
+
+    # Sumarizar gastos por trabajador
+    gastos_resumen = []
+    for clave, gastos_list in gastos_por_trabajador.items():
+        if clave == 'bodega':
+            nombre = 'Bodega/Local'
+        else:
+            try:
+                usuario_obj = Usuario.objects.get(id=clave)
+                nombre = usuario_obj.get_full_name() or usuario_obj.username
+            except:
+                nombre = f'Trabajador #{clave}'
+        
+        monto_total = sum(g['monto'] for g in gastos_list)
+        gastos_resumen.append({
+            'nombre': nombre,
+            'clave': clave,
+            'monto_total': monto_total,
+            'gastos': sorted(gastos_list, key=lambda x: x['fecha'], reverse=True),
+        })
+
+    gastos_resumen.sort(key=lambda x: x['monto_total'], reverse=True)
+
+    # ═══════════════════════════════════════════════════════════
     # 5. TABLA DETALLE — una fila por sobre
     # ═══════════════════════════════════════════════════════════
     sobres_tabla = []
@@ -2074,7 +2156,7 @@ def reporte_sobres(request):
             'declarado':         declarado,
             'gastos':            gastos_s,
             'no_efectivo':       no_ef_s,
-            'efectivo_estimado': declarado - gastos_s - no_ef_s,
+            'dinero_neto':       declarado,
             'km':                s.kilometraje_camion or 0,
         })
 
@@ -2090,7 +2172,7 @@ def reporte_sobres(request):
             'declarado':         sum(f['declarado']         for f in filas),
             'gastos':            sum(f['gastos']            for f in filas),
             'no_efectivo':       sum(f['no_efectivo']       for f in filas),
-            'efectivo_estimado': sum(f['efectivo_estimado'] for f in filas),
+            'dinero_neto':       sum(f['dinero_neto']       for f in filas),
             'km':                sum(f['km']                for f in filas),
         }
 
@@ -2128,6 +2210,9 @@ def reporte_sobres(request):
         'filtro_trabajador': filtro_trabajador,
         'camioneros':        camioneros,
 
+        # Resumen por trabajador (NEW)
+        'resumen_trabajadores': resumen_trabajadores,
+
         # Métricas globales
         'total_declarado':    total_declarado,
         'total_kilos':        total_kilos,
@@ -2146,6 +2231,10 @@ def reporte_sobres(request):
         'sobres_tabla': sobres_tabla,
         'sub_bodega':   sub_bodega,
         'sub_camion':   sub_camion,
+
+        # Gastos desglosados (NEW)
+        'gastos_resumen': gastos_resumen,
+        'gastos_globales': gastos_globales,
 
         # Gráficos
         'chart_dias_labels':    chart_dias_labels,

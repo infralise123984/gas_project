@@ -65,7 +65,7 @@
                                         <tr>
                                             <th class="ps-3">Nombre</th>
                                             <th class="text-center">Peso (kg)</th>
-                                            <th class="text-center">Tipo</th>
+                                            <!-- <th class="text-center">Tipo</th> -->
                                             <th class="text-end pe-3">Precio Compra</th>
                                             <th class="text-end pe-3">Precio Local</th>
                                             <th class="text-end pe-3">Precio Domicilio</th>
@@ -79,19 +79,19 @@
                                             <td class="ps-3 fw-semibold">
                                                 {{ balon.nombre }}
                                                 {% if balon.tipo_gas == 'catalitico' %}
-                                                    <span class="badge bg-warning text-dark ms-1">CAT</span>
+                                                    <span class="badge bg-success text-dark ms-1">CAT</span>
                                                 {% elif balon.tipo_gas == 'aluminio' %}
                                                     <span class="badge bg-secondary ms-1">ALU</span>
                                                 {% else %}
-                                                    <span class="badge bg-info text-dark ms-1">NORMAL</span>
+                                                    <span class="badge bg-info text-dark ms-1">CLASICO</span>
                                                 {% endif %}
                                             </td>
                                             <td class="text-center">{{ balon.peso_neto_gas }} kg</td>
-                                            <td class="text-center">
+                                            <!-- <td class="text-center">
                                                 <span class="badge {% if balon.tipo_gas == 'normal' %}bg-light text-dark{% elif balon.tipo_gas == 'catalitico' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
                                                     {{ balon.get_tipo_gas_display }}
                                                 </span>
-                                            </td>
+                                            </td> -->
                                             <td class="text-end pe-3">${{ balon.precio_compra|floatformat:0|intcomma }}</td>
                                             <td class="text-end pe-3">${{ balon.precio_local|floatformat:0|intcomma }}</td>
                                             <td class="text-end pe-3">${{ balon.precio_domicilio|floatformat:0|intcomma }}</td>

@@ -12,14 +12,14 @@
 {% block content %}
 <div class="container-fluid mt-4 mb-5 px-3" style="max-width: 1400px;">
 
-    <!-- Título y botón a reportes -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
-        <h2 class="text-primary fw-bold mb-0">
+    <!-- Título -->
+    <div class="mb-4">
+        <h2 class="text-primary fw-bold mb-3">
             <i class="bi bi-clipboard-data me-2"></i>Consultar Pedidos
         </h2>
         <div class="d-flex gap-2 flex-wrap">
             <a href="{% url 'reportes_ventas' %}" class="btn btn-outline-primary">
-                <i class="bi bi-graph-up me-2"></i>Reportes y Gráficos
+                <i class="bi bi-graph-up me-2"></i>Reportes
             </a>
             <a href="{% url 'precios_lista' %}" class="btn btn-outline-warning">
                 <i class="bi bi-tags me-2"></i>Precios
@@ -35,52 +35,59 @@
             <h5 class="mb-0"><i class="bi bi-funnel me-2"></i>Filtros de búsqueda</h5>
         </div>
         <div class="card-body">
-            <form method="get" id="filtrosForm" class="row g-3">
-                <!-- Búsqueda general -->
-                <div class="col-lg-5 col-md-6">
-                    <label class="form-label fw-bold">Búsqueda rápida</label>
-                    <input type="text" name="busqueda" class="form-control form-control-lg"
-                           placeholder="Dirección, sector, teléfono, nombre usuario, comentario..."
-                           value="{{ request.GET.busqueda|default:'' }}">
-                </div>
+            <form method="get" id="filtrosForm">
+                <div class="row g-3 mb-3">
+                    <!-- Búsqueda general -->
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Búsqueda rápida</label>
+                        <input type="text" name="busqueda" class="form-control form-control-lg"
+                               placeholder="Dirección, teléfono, nombre..."
+                               value="{{ request.GET.busqueda|default:'' }}">
+                        <small class="text-muted">Dirección, sector, teléfono, nombre usuario...</small>
+                    </div>
 
-                <!-- Rango de fechas -->
-                <div class="col-lg-4 col-md-6">
-                    <label class="form-label fw-bold">Rango de fechas</label>
-                    <input type="text" name="fechas" id="rangoFechas" class="form-control form-control-lg"
-                           placeholder="dd/mm/yyyy al dd/mm/yyyy"
-                           value="{{ request.GET.fechas|default:'' }}">
-                </div>
+                    <!-- Rango de fechas -->
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Rango de fechas</label>
+                        <input type="text" name="fechas" id="rangoFechas" class="form-control form-control-lg"
+                               placeholder="dd/mm/yyyy al dd/mm/yyyy"
+                               value="{{ request.GET.fechas|default:'' }}">
+                    </div>
 
-                <!-- Botones -->
-                <div class="col-lg-3 d-flex align-items-end gap-2">
-                    <button type="submit" class="btn btn-primary btn-lg flex-fill">
-                        <i class="bi bi-search"></i> Filtrar
-                    </button>
-                    <a href="{% url 'pedidos_consulta' %}" class="btn btn-outline-secondary btn-lg">
-                        Limpiar
-                    </a>
-                </div>
+                    <!-- Estado -->
+                    <div class="col-12 col-sm-6 col-md-4">
+                        <label class="form-label">Estado</label>
+                        <select name="estado" class="form-select form-select-lg">
+                            <option value="todos" {% if request.GET.estado == 'todos' or not request.GET.estado %}selected{% endif %}>Todos</option>
+                            {% for value, label in estados_choices %}
+                                <option value="{{ value }}" {% if request.GET.estado == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-                <!-- Filtros adicionales (estado y origen) -->
-                <div class="col-12 col-md-6 col-lg-4">
-                    <label class="form-label fw-bold">Estado</label>
-                    <select name="estado" class="form-select form-select-lg">
-                        <option value="todos" {% if request.GET.estado == 'todos' or not request.GET.estado %}selected{% endif %}>Todos</option>
-                        {% for value, label in estados_choices %}
-                            <option value="{{ value }}" {% if request.GET.estado == value %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+                    <!-- Origen -->
+                    <div class="col-12 col-sm-6 col-md-4">
+                        <label class="form-label">Origen</label>
+                        <select name="origen" class="form-select form-select-lg">
+                            <option value="todos" {% if request.GET.origen == 'todos' or not request.GET.origen %}selected{% endif %}>Todos</option>
+                            {% for value, label in origenes_choices %}
+                                <option value="{{ value }}" {% if request.GET.origen == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-                <div class="col-12 col-md-6 col-lg-4">
-                    <label class="form-label fw-bold">Origen</label>
-                    <select name="origen" class="form-select form-select-lg">
-                        <option value="todos" {% if request.GET.origen == 'todos' or not request.GET.origen %}selected{% endif %}>Todos</option>
-                        {% for value, label in origenes_choices %}
-                            <option value="{{ value }}" {% if request.GET.origen == value %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
+                    <!-- Botones -->
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">&nbsp;</label>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg flex-grow-1">
+                                <i class="bi bi-search"></i> Filtrar
+                            </button>
+                            <a href="{% url 'pedidos_consulta' %}" class="btn btn-outline-secondary btn-lg">
+                                Limpiar
+                            </a>
+                        </div>
+                    </div>
                 </div>
             </form>
         </div>
@@ -89,64 +96,60 @@
     <!-- Tabla de resultados -->
     {% if page_obj %}
     <div class="card shadow-sm">
-        <div class="card-header bg-light d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Resultados ({{ page_obj.paginator.count }} pedidos)</h5>
-            <button class="btn btn-sm btn-outline-success" onclick="exportarExcel()">
-                <i class="bi bi-filetype-xlsx me-1"></i> Exportar Excel
-            </button>
+        <div class="card-header bg-light border-bottom">
+            <div class="row align-items-center g-3">
+                <div class="col">
+                    <h5 class="mb-0">
+                        <i class="bi bi-list-ul me-2"></i>{{ page_obj.paginator.count }} Pedidos
+                    </h5>
+                </div>
+                <div class="col-auto">
+                    <button class="btn btn-sm btn-success" onclick="exportarExcel()">
+                        <i class="bi bi-download me-1"></i>Exportar Excel
+                    </button>
+                </div>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover table-striped mb-0">
+                <table class="table table-hover mb-0">
                     <thead class="table-dark">
                         <tr>
-                            <th>#</th>
+                            <th class="text-center">#</th>
                             <th>Fecha</th>
                             <th>Origen</th>
                             <th>Estado</th>
                             <th>Productos</th>
-                            <th>Monto</th>
+                            <th class="text-end">Monto</th>
                             <th>Registrado por</th>
-                            <th>Entregado por</th>
-                            <th></th>
+                            <th class="text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for pedido in page_obj %}
                         <tr>
-                            <td>{{ pedido.id }}</td>
-                            <td>{{ pedido.fecha|date:"d/m/Y H:i" }}</td>
+                            <td class="text-center text-muted">{{ pedido.id }}</td>
+                            <td><small>{{ pedido.fecha|date:"d/m/Y H:i" }}</small></td>
                             <td>{{ pedido.get_origen_display }}</td>
                             <td>
-                                <span class="badge bg-{% if pedido.estado == 'entregado' %}success{% elif pedido.estado == 'en_ruta' %}warning{% elif pedido.estado == 'pendiente' %}info{% else %}danger{% endif %}">
+                                <span class="badge {% if pedido.estado == 'entregado' %}bg-success{% elif pedido.estado == 'en_ruta' %}bg-warning text-dark{% elif pedido.estado == 'pendiente' %}bg-info{% else %}bg-danger{% endif %}">
                                     {{ pedido.get_estado_display }}
                                 </span>
                             </td>
-                            <td>
-                                <small>{{ pedido.resumen_productos }}</small>
-                            </td>
-                            <td class="fw-bold text-success">
-                                ${{ pedido.monto_total|floatformat:0|intcomma }}
-                            </td>
-                            <td>{{ pedido.registrador.get_full_name|default:pedido.registrador.username }}</td>
-                            <td>
-                                {% if pedido.entregador %}
-                                    {{ pedido.entregador.get_full_name|default:pedido.entregador.username }}
-                                {% else %}
-                                    —
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
+                            <td><small>{{ pedido.resumen_productos }}</small></td>
+                            <td class="text-end fw-bold text-success">${{ pedido.monto_total|floatformat:0|intcomma }}</td>
+                            <td><small>{{ pedido.registrador.get_full_name|default:pedido.registrador.username }}</small></td>
+                            <td class="text-center">
                                 <a href="{% url 'pedidos_detalle' pedido.id %}" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-eye"></i> Ver
+                                    <i class="bi bi-eye"></i>
                                 </a>
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="9" class="text-center py-5 text-muted">
-                                <i class="bi bi-search fs-1 d-block mb-3"></i>
-                                No se encontraron pedidos con los filtros actuales
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="bi bi-search fs-3 d-block mb-2"></i>
+                                <span>No se encontraron pedidos</span>
                             </td>
                         </tr>
                         {% endfor %}
@@ -162,7 +165,12 @@
         <ul class="pagination justify-content-center">
             {% if page_obj.has_previous %}
             <li class="page-item">
-                <a class="page-item" href="?page={{ page_obj.previous_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}">
+                <a class="page-link" href="?page=1{% if request.GET.busqueda %}&busqueda={{ request.GET.busqueda }}{% endif %}{% if request.GET.estado and request.GET.estado != 'todos' %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.origen and request.GET.origen != 'todos' %}&origen={{ request.GET.origen }}{% endif %}{% if request.GET.fechas %}&fechas={{ request.GET.fechas }}{% endif %}">
+                    Primera
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.busqueda %}&busqueda={{ request.GET.busqueda }}{% endif %}{% if request.GET.estado and request.GET.estado != 'todos' %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.origen and request.GET.origen != 'todos' %}&origen={{ request.GET.origen }}{% endif %}{% if request.GET.fechas %}&fechas={{ request.GET.fechas }}{% endif %}">
                     Anterior
                 </a>
             </li>
@@ -172,14 +180,19 @@
                 {% if page_obj.number == num %}
                 <li class="page-item active"><span class="page-link">{{ num }}</span></li>
                 {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
-                <li class="page-item"><a class="page-link" href="?page={{ num }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}">{{ num }}</a></li>
+                <li class="page-item"><a class="page-link" href="?page={{ num }}{% if request.GET.busqueda %}&busqueda={{ request.GET.busqueda }}{% endif %}{% if request.GET.estado and request.GET.estado != 'todos' %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.origen and request.GET.origen != 'todos' %}&origen={{ request.GET.origen }}{% endif %}{% if request.GET.fechas %}&fechas={{ request.GET.fechas }}{% endif %}">{{ num }}</a></li>
                 {% endif %}
             {% endfor %}
 
             {% if page_obj.has_next %}
             <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.urlencode %}&{{ request.GET.urlencode }}{% endif %}">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.busqueda %}&busqueda={{ request.GET.busqueda }}{% endif %}{% if request.GET.estado and request.GET.estado != 'todos' %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.origen and request.GET.origen != 'todos' %}&origen={{ request.GET.origen }}{% endif %}{% if request.GET.fechas %}&fechas={{ request.GET.fechas }}{% endif %}">
                     Siguiente
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.busqueda %}&busqueda={{ request.GET.busqueda }}{% endif %}{% if request.GET.estado and request.GET.estado != 'todos' %}&estado={{ request.GET.estado }}{% endif %}{% if request.GET.origen and request.GET.origen != 'todos' %}&origen={{ request.GET.origen }}{% endif %}{% if request.GET.fechas %}&fechas={{ request.GET.fechas }}{% endif %}">
+                    Última
                 </a>
             </li>
             {% endif %}
@@ -219,15 +232,13 @@ function exportarExcel() {
 </script>
 
 <style>
-    .table th, .table td {
-        vertical-align: middle;
-    }
-    .badge {
-        font-size: 0.9rem;
-    }
     @media (max-width: 768px) {
         .table-responsive {
             font-size: 0.9rem;
+        }
+
+        .btn-sm {
+            padding: 0.4rem 0.6rem;
         }
     }
 </style>
