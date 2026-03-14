@@ -57,26 +57,20 @@ security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
 
 
-# ──────────────────────────────────────────────────────────────
-# 2. FUNCIONES AUXILIARES (Utils)
-# ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 2. FUNCIONES AUXILIARES Y UTILIDADES
+# ══════════════════════════════════════════════════════════════
 
+# Zona horaria: convierte hora actual a Chile (America/Santiago)
 def now_chile():
-    """
-    Retorna la hora actual en zona horaria de Chile (America/Santiago).
-    Maneja automáticamente horario de verano/invierno.
-    Usar esta función en lugar de timezone.now() para timestamps de usuario.
-    """
+    """Retorna hora actual en zona horaria de Chile con ajuste automático de horario."""
     tz_chile = ZoneInfo('America/Santiago')
     return timezone.now().astimezone(tz_chile)
 
 
+# Zona horaria: obtiene fecha del día actual en Chile
 def today_chile():
-    """
-    Retorna la fecha actual en zona horaria de Chile.
-    Evita el problema de timezone.now().date() que devuelve fecha UTC.
-    Usar esta función en lugar de timezone.now().date() para fechas de usuario.
-    """
+    """Retorna fecha actual en Chile (evita problemas de UTC)."""
     return now_chile().date()
 
 
@@ -131,13 +125,9 @@ def parse_fecha_rango(fechas_str):
     except (ValueError, IndexError, AttributeError):
         return None, None, "", "", ""  
     
+# Control de acceso: valida que usuario tenga rol requerido
 def require_roles(request, roles, redirect_to="index", message="No tienes permiso para acceder a esta sección."):
-    """
-    Middleware a nivel de vista. 
-    Redirige si el usuario no tiene uno de los roles especificados en la lista 'roles'.
-    Retorna None si tiene permiso.
-    Registra intentos de acceso denegado en auditoría.
-    """
+    """Validar roles. Retorna None si está autorizado, sino redirige. Registra acceso denegado."""
     if request.user.rol not in roles:
         messages.error(request, message)
         
@@ -156,27 +146,31 @@ def require_roles(request, roles, redirect_to="index", message="No tienes permis
     return None
 
 
+# Formateo: obtiene nombre a mostrar
 def get_display_name(user):
-    """Retorna el nombre completo del usuario o '—' si es nulo."""
+    """Obtiene nombre completo o username. Retorna '—' si no existe."""
     if not user:
         return "—"
     nombre = (user.get_full_name() or "").strip()
     return nombre if nombre else user.username
 
 
-# ──────────────────────────────────────────────────────────────
-# 3. AUTENTICACIÓN Y VISTAS GENERALES
-# ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 3. AUTENTICACIÓN Y VISTAS PRINCIPALES
+# ══════════════════════════════════════════════════════════════
+
+# Página de inicio del sistema
 def index(request):
-    """Página de inicio / Dashboard principal."""
+    """Dashboard principal. Muestra opciones según rol del usuario."""
     context = {
         'hora_servidor': now_chile().isoformat(),  # ← Usando tu función local
     }
     return render(request, "index.html", context)
 
 
+# Autenticación: inicio de sesión
 def login_view(request):
-    """Gestiona el inicio de sesión de usuarios."""
+    """Autentica usuario, registra intento en auditoría."""
     if request.user.is_authenticated:
         return redirect("index")
 
@@ -221,8 +215,9 @@ def login_view(request):
     return render(request, "login.html")
 
 
+# Autenticación: cierre de sesión
 def logout_view(request):
-    """Cierra la sesión del usuario."""
+    """Cierra sesión e registra acción en auditoría."""
     # Guardar datos antes del logout para auditoría
     username = request.user.username if request.user.is_authenticated else 'Anónimo'
     user_obj = request.user if request.user.is_authenticated else None
@@ -242,15 +237,14 @@ def logout_view(request):
     return redirect("auth_login")
 
 
-# ──────────────────────────────────────────────────────────────
-# 4. GESTIÓN ADMINISTRATIVA (Usuarios y Precios)
-# ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 4. GESTIÓN ADMINISTRATIVA (Usuarios y Precios de Balones)
+# ══════════════════════════════════════════════════════════════
+
+# Admin: crear usuarios del sistema
 @login_required
 def crear_usuario(request):
-    """
-    Vista exclusiva para Admins.
-    Crea nuevos usuarios en el sistema con roles específicos.
-    """
+    """Crea nuevos usuarios con roles específicos. Solo Admin."""
     if not (request.user.rol == "admin" or request.user.is_superuser):
         messages.error(request, "No tienes permiso para crear usuarios.")
         return redirect("index")
@@ -488,18 +482,14 @@ def historial_precios(request):
     return render(request, 'historial_precios.html', context)
 
 
-# ──────────────────────────────────────────────────────────────
-# 4B. GESTIÓN DE BALONES (sin requerir admin)
-# ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 4B. GESTIÓN DE TIPOS DE BALÓN
+# ══════════════════════════════════════════════════════════════
 
+# Admin/Jefe/Bodeguero: ver lista de balones
 @login_required
 def gestionar_balones_lista(request):
-    """
-    Lista todos los tipos de balones con opción de crear y editar.
-    También permite editar precios masivamente.
-    Admin y jefe pueden además eliminar.
-    Acceso: admin, jefe, bodeguero.
-    """
+    """Listar todos los tipos de balones disponibles. Acceso: Admin/Jefe/Bodeguero."""
     resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para gestionar balones.")
     if resp:
         return resp
@@ -592,8 +582,10 @@ def gestionar_balones_lista(request):
     return render(request, 'gestionar_balones.html', context)
 
 
+# Admin/Jefe/Bodeguero: crear nuevo tipo de balón
 @login_required
 def gestionar_balones_crear(request):
+    """Crear nuevo tipo de balón en el sistema."""
     """
     Crea un nuevo tipo de balón desde la web.
     Acceso: admin, jefe, bodeguero.
@@ -627,8 +619,10 @@ def gestionar_balones_crear(request):
     return render(request, 'gestionar_balon_form.html', context)
 
 
+# Admin/Jefe/Bodeguero: editar tipo de balón existente
 @login_required
 def gestionar_balones_editar(request, balon_id):
+    """Modificar datos de un tipo de balón."""
     """
     Edita un tipo de balón existente desde la web.
     Acceso: admin, jefe, bodeguero.
@@ -687,8 +681,10 @@ def gestionar_balones_editar(request, balon_id):
     return render(request, 'gestionar_balon_form.html', context)
 
 
+# Admin/Jefe: eliminar tipo de balón
 @login_required
 def gestionar_balones_eliminar(request, balon_id):
+    """Eliminar un tipo de balón (confirmar primero)."""
     """
     Elimina un tipo de balón (solo si no tiene pedidos asociados).
     Solo para admin y jefe.
@@ -717,11 +713,14 @@ def gestionar_balones_eliminar(request, balon_id):
     return redirect("balones_lista")
 
 
-# ──────────────────────────────────────────────────────────────
-# 5. OPERACIONES TRANSACCIONALES (Registro de Ventas)
-# ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 5. OPERACIONES TRANSACCIONALES (Registro de Ventas/Pedidos)
+# ══════════════════════════════════════════════════════════════
+
+# Telefonista/Bodeguero: crear nuevo pedido
 @login_required
 def transaccional_pedido(request):
+    """Registrar nueva venta o pedido. Registra usuario, origen, estado inicial."""
     """
     Vista principal para Telefonistas y Bodegueros.
     Gestiona la creación de pedidos con sus detalles (inline formsets).
@@ -845,8 +844,10 @@ def transaccional_pedido(request):
     })
 
 
+# Telefonista/Bodeguero: editar pedido existente
 @login_required
 def editar_pedido(request, pedido_id):
+    """Modificar pedido pendiente/en_ruta. Solo registrador puede editar."""
     """
     Edición de pedidos con reglas específicas por rol:
     - Telefonista: solo sus propios pedidos
@@ -986,17 +987,16 @@ def editar_pedido(request, pedido_id):
     })
 
 
-# ──────────────────────────────────────────────────────────────
-# 6. GESTIÓN DE PEDIDOS POR ROL
-# ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 6. VISTAS DE PEDIDOS POR ROL DE USUARIO
+# ══════════════════════════════════════════════════════════════
 
-# --- Telefonista / Bodeguero ---
+# --- TELEFONISTA / BODEGUERO ---
+
+# Telefonista/Bodeguero: ver sus pedidos de hoy
 @login_required
 def mis_pedidos_hoy(request):
-    """
-    Muestra el historial de ventas del día actual para el usuario logueado.
-    Utiliza zona horaria de Chile para definir 'hoy'.
-    """
+    """Historial de ventas del día actual de este usuario. Excluye cancelados."""
     tz_chile = ZoneInfo('America/Santiago')
     ahora = timezone.now().astimezone(tz_chile)
     hoy = ahora.date()
@@ -1009,7 +1009,7 @@ def mis_pedidos_hoy(request):
         registrador=request.user,
         fecha__gte=inicio_dia,
         fecha__lte=fin_dia
-    ).select_related('registrador', 'entregador').prefetch_related('detalles__balon').order_by('-fecha')
+    ).exclude(estado='cancelado').select_related('registrador', 'entregador').prefetch_related('detalles__balon').order_by('-fecha')
 
     total_monto_hoy = pedidos_hoy.aggregate(total=Sum('monto_total'))['total'] or 0
 
@@ -1023,10 +1023,12 @@ def mis_pedidos_hoy(request):
     return render(request, "mis_pedidos_hoy.html", context)
 
 
-# --- Camionero ---
+# --- CAMIONERO ---
+
+# Camionero: ver sus entregas completadas hoy
 @login_required
 def mis_entregas_camionero(request):
-    """Historial simplificado de entregas realizadas por el camionero, limitado al día actual."""
+    """Ver entregas finalizadas por este camionero hoy."""
     resp = require_roles(request, ["camionero"], "index", "Solo camioneros pueden ver sus entregas.")
     if resp:
         return resp
@@ -1061,15 +1063,10 @@ def mis_entregas_camionero(request):
     return render(request, "mis_entregas_camionero.html", context)
 
 
+# Camionero: panel de entregas
 @login_required
 def camionero_entregas(request):
-    """
-    Panel de control del camionero.
-    Muestra:
-    - Pedidos pendientes de HOY (para tomar)
-    - Pedidos en ruta (asignados al usuario, sin límite de fecha por ahora)
-    - Pedidos entregados HOY
-    """
+    """Panel de control: entregas en rúta, pendientes y completadas hoy."""
     resp = require_roles(request, ["camionero", "admin"], "index", "Acceso restringido a camioneros.")
     if resp:
         return resp
@@ -1131,12 +1128,10 @@ def camionero_entregas(request):
     return render(request, "camionero_entregas.html", context)
 
 
+# Camionero: API para actualización dinámica
 @login_required
 def camionero_entregas_api(request):
-    """
-    API endpoint para actualización dinámica de entregas.
-    Devuelve el HTML parcial de las cards de pedidos.
-    """
+    """Endpoint AJAX: devuelve HTML actualizado de entregas en ruta."""
     resp = require_roles(request, ["camionero", "admin"], "index", "Acceso restringido.")
     if resp:
         return JsonResponse({'error': 'No autorizado'}, status=403)
@@ -1183,9 +1178,10 @@ def camionero_entregas_api(request):
     })
 
 
+# Camionero: tomar pedido asignado
 @login_required
 def camionero_tomar_pedido(request, pedido_id):
-    """Camionero toma posesión de un pedido pendiente y lo marca 'en_ruta'."""
+    """Camionero marca pedido como 'en_ruta' (asignado a él)."""
     resp = require_roles(request, ["camionero"], "index", "Solo camioneros pueden tomar pedidos.")
     if resp:
         return resp
@@ -1216,9 +1212,10 @@ def camionero_tomar_pedido(request, pedido_id):
     return redirect("entregas_lista")
 
 
+# Camionero: marcar pedido como entregado
 @login_required
 def camionero_marcar_entregado(request, pedido_id):
-    """Camionero marca un pedido 'en_ruta' como 'entregado'."""
+    """Camionero marca pedido como 'entregado'."""
     resp = require_roles(request, ["camionero"], "index", "Solo los camioneros pueden marcar entregas.")
     if resp:
         return resp
@@ -1249,9 +1246,10 @@ def camionero_marcar_entregado(request, pedido_id):
     return redirect("entregas_lista")
 
 
+# Camionero: cancelar entrega
 @login_required
 def camionero_cancelar_entrega(request, pedido_id):
-    """Camionero cancela una entrega que tenía en ruta."""
+    """Camionero devuelve pedido a 'pendiente' si no puede entregar."""
     resp = require_roles(request, ["camionero"], "camionero_entregas", "Solo camioneros pueden cancelar entregas.")
     if resp:
         return resp
@@ -1281,8 +1279,10 @@ def camionero_cancelar_entrega(request, pedido_id):
     return redirect("entregas_lista")
 
 
+# Telefonista: marcar venta como "tarreo" (prepago)
 @login_required
 def tarreo_pedido(request):
+    """Registrar venta prepagada sin entrega (puede ser entregada después)."""
     if request.user.rol != 'camionero':
         messages.error(request, "Acceso solo para camioneros.")
         return redirect('index')
@@ -1372,14 +1372,14 @@ def tarreo_pedido(request):
         'balones': balones,
     })
 # ──────────────────────────────────────────────────────────────
-# 7. REPORTES Y CONSULTAS (Admin/Jefe)
-# ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 7. REPORTES Y CONSULTAS DE PEDIDOS (Admin/Jefe)
+# ══════════════════════════════════════════════════════════════
+
+# Admin/Jefe: búsqueda avanzada de pedidos
 @login_required
 def consultas_pedidos(request):
-    """
-    Vista avanzada con filtros múltiples para buscar pedidos.
-    Incluye exportación a Excel y estadísticas rápidas.
-    """
+    """Búsqueda avanzada con filtros por estado, origen, fecha. Soporta exportación Excel."""
     resp = require_roles(request, ["jefe", "admin"], "index")
     if resp:
         return resp
@@ -1422,6 +1422,9 @@ def consultas_pedidos(request):
 
     if estado != "todos":
         queryset = queryset.filter(estado=estado)
+    else:
+        # Por defecto, excluir cancelados (usuario puede verlos si selecciona explícitamente)
+        queryset = queryset.exclude(estado='cancelado')
 
     if origen != "todos":
         queryset = queryset.filter(origen=origen)
@@ -1454,8 +1457,9 @@ def consultas_pedidos(request):
     return render(request, "consultas_pedidos.html", context)
 
 
+# Utilidad auxiliar: exportar pedidos a archivo Excel
 def exportar_pedidos_excel(queryset, rango_fechas):
-    """Genera un archivo Excel .xlsx basado en el queryset filtrado."""
+    """Genera archivo .xlsx con detalles de pedidos filtrados."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Pedidos"
@@ -1546,9 +1550,10 @@ def exportar_pedidos_excel(queryset, rango_fechas):
     return response
 
 
+# Admin/Jefe: dashboard de ventas completo
 @login_required
 def reporte_ventas(request):
-    """Dashboard de ventas completo y moderno."""
+    """Dashboard mensal: métricas, gráficos, análisis por balón, origen y trabajador."""
     resp = require_roles(request, ["jefe", "admin"], "index",
                          "Solo jefes y administradores pueden acceder a los reportes.")
     if resp:
@@ -1898,14 +1903,10 @@ def reporte_ventas(request):
     
     return render(request, "reporte_ventas.html", context)
 
+# Admin/Jefe: reporte de sobres diarios
 @login_required
 def reporte_sobres(request):
-    """
-    Reporte mensual de sobres diarios.
-    Foco: dinero ingresado, kilos vendidos y balones por tipo.
-    Resumen global del mes + tabla detalle + totales separados por tipo (bodega/camión).
-    Solo accesible para jefe y admin.
-    """
+    """Reporte mensual de sobres cerrados: dinero, kilos, gastos, pagos por tipo."""
     resp = require_roles(request, ["jefe", "admin"], "index",
                          "Solo jefes y administradores pueden acceder al reporte de sobres.")
     if resp:
@@ -2250,9 +2251,10 @@ def reporte_sobres(request):
     return render(request, "reporte_sobres.html", context)
 
 
+# Admin/Jefe: ver detalle de un pedido específico
 @login_required
 def detalle_pedido(request, pedido_id):
-    """Vista de detalle individual de un pedido."""
+    """Detalle completo de un pedido: productos, estado, historial de cambios."""
     resp = require_roles(request, ["jefe", "admin", "telefonista", "bodeguero", "camionero"], "index", "No tienes permiso para ver este pedido.")
     if resp:
         return resp
@@ -2277,11 +2279,14 @@ def detalle_pedido(request, pedido_id):
     return render(request, "detalle_pedido.html", context)
 
 
-# ──────────────────────────────────────────────────────────────
-# 8. GESTIÓN DE SOBRES DIARIOS (Cierre de Caja)
-# ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 8. GESTIÓN DE SOBRES DIARIOS (Cierre de Caja y Rendición)
+# ══════════════════════════════════════════════════════════════
+
+# Jefe/Bodeguero: listar sobres diarios creados
 @login_required
 def lista_sobres_diarios(request):
+    """Ver todos los sobres diarios creados, filtrados por fecha."""
     """
     Listado para seleccionar qué sobre abrir/editar (Bodega o Camionero).
     Si hay más de un sobre del día, muestra lista para elegir.
@@ -2310,10 +2315,10 @@ def lista_sobres_diarios(request):
         'sobres_camioneros': sobres_camioneros,
     })
 
-# CAMBIOS MÍNIMOS EN views.py - SOLO LO NECESARIO
-
+# Jefe/Bodeguero: editar sobre diario
 @login_required
 def editar_sobre_diario(request):
+    """Modificar monto declarado, gastos y notas de un sobre."""
     """
     Vista para editar un sobre diario.
     
@@ -2573,8 +2578,10 @@ def editar_sobre_diario(request):
 # 
 # ══════════════════════════════════════════════════════════════
 
+# Jefe/Bodeguero: crear nuevo sobre diario
 @login_required
 def crear_sobre_nuevo(request):
+    """Crear sobre para cierres de caja día a día."""
     """
     Vista para crear un nuevo sobre manualmente con fecha específica.
     OPCIONAL - Solo si necesitas crear sobres post-cierre.
@@ -2631,8 +2638,10 @@ def crear_sobre_nuevo(request):
     })
 
 
+# Jefe/Bodeguero: crear sobre para cierre posterior
 @login_required
 def crear_sobre_post_cierre(request, sobre_id):
+    """Crear nuevo sobre basado en uno anterior (para seguimiento)."""
     """
     Crea un nuevo sobre SOLO si el anterior está cerrado.
     Hereda: tipo, trabajador del sobre anterior.
@@ -2691,8 +2700,10 @@ def crear_sobre_post_cierre(request, sobre_id):
     return redirect(f"{reverse('sobres_editar')}?sobre_id={sobre_anterior.id}")
 
 
+# Jefe: historial de sobres
 @login_required
 def historial_sobres(request):
+    """Ver historial completo de sobres cerrados con métricas diarias."""
     """
     Historial de sobres diarios con filtro por fecha.
     Muestra sobres abiertos y cerrados, agrupados por tipo (bodega/camionero).
@@ -2745,8 +2756,10 @@ def historial_sobres(request):
 
     return render(request, 'historial_sobres.html', context)
 
+# Jefe/Bodeguero: imprimir sobre para descarga/impresión
 @login_required
 def imprimir_sobre_diario(request, sobre_id):
+    """Generar PDF o versión imprimible del sobre."""
     """
     Genera una página HTML optimizada para impresión del sobre diario.
     Formato compacto similar a Excel.
@@ -2816,8 +2829,10 @@ def imprimir_sobre_diario(request, sobre_id):
 
     return render(request, 'imprimir_sobre.html', context)
 
+# Jefe/Bodeguero: exportar sobre a Excel
 @login_required
 def exportar_sobre_excel(request, sobre_id):
+    """Exportar detalles de sobre a archivo .xlsx."""
     if request.user.rol not in ['bodeguero', 'jefe', 'admin', 'camionero']:
         messages.error(request, "No tienes permiso para exportar sobres.")
         return redirect('index')
@@ -3238,8 +3253,10 @@ def push_subscribe(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
+# Usuario: desuscribirse de notificaciones
 @login_required
 def push_unsubscribe(request):
+    """Desregistrar endpoint de suscripción."""
     """
     Desactiva la suscripción push del usuario actual.
     Endpoint: POST /push/unsubscribe/
@@ -3278,8 +3295,10 @@ def push_unsubscribe(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
+# Usuario: probar enviar notificación push
 @login_required
 def push_test(request):
+    """Enviar notificación de prueba al usuario actual."""
     """
     Envía una notificación de prueba al usuario actual.
     Solo para testing/debugging.
@@ -3298,8 +3317,10 @@ def push_test(request):
     })
 
 
+# Usuario: ver estado de suscripción push
 @login_required  
 def push_status(request):
+    """Obtener estado actual de suscripción push del usuario."""
     """
     Retorna el estado de las suscripciones push del usuario actual.
     Endpoint: GET /push/status/
@@ -3328,7 +3349,9 @@ def push_status(request):
     })
 
 
+# PWA: servir service worker para notificaciones offline
 def service_worker(request):
+    """Archivo service worker para soporte de notificaciones push del navegador."""
     """
     Sirve el Service Worker desde la raíz del sitio.
     Esto es necesario para que el SW tenga scope '/' y pueda
