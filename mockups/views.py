@@ -1009,7 +1009,7 @@ def mis_pedidos_hoy(request):
         registrador=request.user,
         fecha__gte=inicio_dia,
         fecha__lte=fin_dia
-    ).select_related('registrador', 'entregador').prefetch_related('detalles__balon').order_by('-fecha')
+    ).exclude(estado='cancelado').select_related('registrador', 'entregador').prefetch_related('detalles__balon').order_by('-fecha')
 
     total_monto_hoy = pedidos_hoy.aggregate(total=Sum('monto_total'))['total'] or 0
 
@@ -1422,6 +1422,9 @@ def consultas_pedidos(request):
 
     if estado != "todos":
         queryset = queryset.filter(estado=estado)
+    else:
+        # Por defecto, excluir cancelados (usuario puede verlos si selecciona explícitamente)
+        queryset = queryset.exclude(estado='cancelado')
 
     if origen != "todos":
         queryset = queryset.filter(origen=origen)
