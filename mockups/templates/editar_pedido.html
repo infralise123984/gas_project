@@ -77,10 +77,6 @@
                             <div class="text-danger small mt-1">{{ form.cantidad.errors|join:" " }}</div>
                             {% endif %}
                         </div>
-                        <div class="col-4">
-                            <label class="form-label fw-bold">Precio Unit.</label>
-                            {{ form.precio_venta_unitario }}
-                        </div>
                         <div class="col-4 text-end">
                             <button type="button" class="btn btn-outline-danger btn-sm remove-row">
                                 <i class="bi bi-trash"></i> Quitar
@@ -89,7 +85,10 @@
                     </div>
                     <!--  CRÍTICO: Campos hidden necesarios para el formset -->
                     {{ form.id }}
-                    <div style="display: none;">{{ form.DELETE }}</div>
+                    <div style="display: none;">
+                        {{ form.DELETE }}
+                        {{ form.precio_venta_unitario }}
+                    </div>
                 </div>
             </div>
             {% endfor %}
@@ -125,10 +124,6 @@
                             <label class="form-label fw-bold">Cantidad <span class="text-danger">*</span></label>
                             {{ formset.empty_form.cantidad }}
                         </div>
-                        <div class="col-4">
-                            <label class="form-label fw-bold">Precio Unit.</label>
-                            {{ formset.empty_form.precio_venta_unitario }}
-                        </div>
                         <div class="col-4 text-end">
                             <button type="button" class="btn btn-outline-danger btn-sm remove-row">
                                 <i class="bi bi-trash"></i> Quitar
@@ -136,7 +131,10 @@
                         </div>
                     </div>
                     <!-- Campos hidden para nuevas filas -->
-                    <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
+                    <div style="display: none;">
+                        {{ formset.empty_form.DELETE }}
+                        {{ formset.empty_form.precio_venta_unitario }}
+                    </div>
                 </div>
             </div>
         </div>
