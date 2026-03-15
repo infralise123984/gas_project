@@ -6,6 +6,7 @@ Reemplaza planillas de Excel y grupos de WhatsApp por una solución moderna, seg
 
 ---
 
+
 ## Funcionalidades Implementadas
 
 ### Gestión de Usuarios y Roles
