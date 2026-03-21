@@ -15,6 +15,9 @@ from django.urls import reverse
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from django.db import transaction
 
 # Modelos, consultas y paginación
 from django.db.models import Count, F, Q, Sum, Case, When, Value, IntegerField
@@ -265,11 +268,16 @@ def crear_usuario(request):
             messages.error(request, "Todos los campos obligatorios deben estar completos.")
         elif password1 != password2:
             messages.error(request, "Las contraseñas no coinciden.")
-        elif len(password1) < 8:
-            messages.error(request, "La contraseña debe tener al menos 8 caracteres.")
         elif Usuario.objects.filter(username=username).exists():
             messages.error(request, "Ya existe un usuario con ese nombre de usuario.")
         else:
+            # Validar contraseña con los validadores configurados en settings.py
+            try:
+                validate_password(password1)
+            except ValidationError as exc:
+                for error in exc.messages:
+                    messages.error(request, error)
+                return render(request, "crear_usuario.html", {"roles_choices": roles_choices})
             # Creación del usuario
             user = Usuario.objects.create_user(
                 username=username,
@@ -2477,7 +2485,11 @@ def editar_sobre_diario(request):
         # Actualizar campos adicionales del sobre
         if "kilometraje_camion" in request.POST:
             try:
-                sobre.kilometraje_camion = int(request.POST["kilometraje_camion"])
+                km = int(request.POST["kilometraje_camion"])
+                if 0 <= km <= 999999:
+                    sobre.kilometraje_camion = km
+                else:
+                    messages.warning(request, "Kilometraje fuera de rango (0–999999). Se guardó el valor anterior.")
             except (ValueError, TypeError):
                 sobre.kilometraje_camion = 0
         
@@ -2487,7 +2499,7 @@ def editar_sobre_diario(request):
             try:
                 sobre.fecha_correspondiente = datetime.strptime(fecha_correspondiente_str, "%Y-%m-%d").date()
             except ValueError:
-                pass
+                messages.warning(request, "Fecha correspondiente inválida. Se conservó la fecha anterior.")
 
         sobre.creado_por = request.user
         sobre.save()
@@ -2498,13 +2510,14 @@ def editar_sobre_diario(request):
             formset_pagos.is_valid(),
             formset_gastos.is_valid()
         ]):
-            # Guardar todos los formsets
-            formset_lineas.save()
-            formset_pagos.save()
-            formset_gastos.save()
+            # Guardar todos los formsets en una transacción atómica
+            with transaction.atomic():
+                formset_lineas.save()
+                formset_pagos.save()
+                formset_gastos.save()
 
-            # Recalcular totales del sobre
-            sobre.save()
+                # Recalcular totales del sobre
+                sobre.save()
 
             # Si se presionó el botón "Cerrar"
             if "cerrar" in request.POST:
@@ -3250,7 +3263,7 @@ def push_subscribe(request):
         return JsonResponse({'success': False, 'error': 'JSON inválido'}, status=400)
     except Exception as e:
         audit_logger.error(f"PUSH_SUBSCRIBE_ERROR | User: {request.user.username} | Error: {str(e)}")
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        return JsonResponse({'success': False, 'error': 'Error interno del servidor'}, status=500)
 
 
 # Usuario: desuscribirse de notificaciones
@@ -3292,7 +3305,8 @@ def push_unsubscribe(request):
         })
         
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        audit_logger.error(f"PUSH_UNSUBSCRIBE_ERROR | User: {request.user.username} | Error: {str(e)}")
+        return JsonResponse({'success': False, 'error': 'Error interno del servidor'}, status=500)
 
 
 # Usuario: probar enviar notificación push

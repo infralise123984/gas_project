@@ -11,6 +11,7 @@ python-dotenv==1.0.1           # .env para SECRET_KEY, DB_PASSWORD, etc. (seguri
 openpyxl==3.1.5                # Export a Excel/XLSX en consultas_pedidos/report_ventas (styles, utils, etc.)
 pywebpush==2.2.0               # Web Push Notifications para camioneros (notificar nuevos pedidos)
 dj-database-url==2.3.0         # Parseo de DATABASE_URL para Render y otros PaaS
+django-axes==7.0.1             # Protección contra fuerza bruta en el login (bloqueo por IP/usuario)
 
 # Opcionales comentados - agrégalos SOLO si implementamos algo nuevo
 # django-crispy-forms==2.3      # Si mejoramos forms con estilos más avanzados
