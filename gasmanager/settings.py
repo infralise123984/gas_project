@@ -60,7 +60,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.humanize',
     'mockups',
-    
+    'axes',
 ]
 
 MIDDLEWARE = [
@@ -72,6 +72,12 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'axes.middleware.AxesMiddleware',
+]
+
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
 ]
 
 ROOT_URLCONF = 'gasmanager.urls'
@@ -249,6 +255,15 @@ LOGGING = {
 LOGS_DIR = os.path.join(BASE_DIR, 'logs')
 if not os.path.exists(LOGS_DIR):
     os.makedirs(LOGS_DIR)
+
+# ──────────────────────────────────────────────────────────────
+# DJANGO-AXES: Protección contra fuerza bruta en login
+# ──────────────────────────────────────────────────────────────
+AXES_FAILURE_LIMIT = 5          # Bloquear tras 5 intentos fallidos
+AXES_COOLOFF_TIME = 1           # Desbloquear tras 1 hora
+AXES_LOCKOUT_TEMPLATE = None    # Usa el mecanismo de redirect por defecto
+AXES_RESET_ON_SUCCESS = True    # Resetear contador al login exitoso
+AXES_USERNAME_FORM_FIELD = 'username'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

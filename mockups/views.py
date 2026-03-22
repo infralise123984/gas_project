@@ -15,6 +15,9 @@ from django.urls import reverse
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from django.db import transaction
 
 # Modelos, consultas y paginación
 from django.db.models import Count, F, Q, Sum, Case, When, Value, IntegerField
@@ -265,11 +268,16 @@ def crear_usuario(request):
             messages.error(request, "Todos los campos obligatorios deben estar completos.")
         elif password1 != password2:
             messages.error(request, "Las contraseñas no coinciden.")
-        elif len(password1) < 8:
-            messages.error(request, "La contraseña debe tener al menos 8 caracteres.")
         elif Usuario.objects.filter(username=username).exists():
             messages.error(request, "Ya existe un usuario con ese nombre de usuario.")
         else:
+            # Validar contraseña con los validadores configurados en settings.py
+            try:
+                validate_password(password1)
+            except ValidationError as exc:
+                for error in exc.messages:
+                    messages.error(request, error)
+                return render(request, "crear_usuario.html", {"roles_choices": roles_choices})
             # Creación del usuario
             user = Usuario.objects.create_user(
                 username=username,
@@ -880,6 +888,16 @@ def editar_pedido(request, pedido_id):
 
     # Jefe y admin pueden editar cualquier pedido → no hay restricción adicional aquí
 
+    # URL de retorno según rol (usada en redirect al guardar y en botón Cancelar del template)
+    _redirect_map = {
+        'telefonista': 'pedidos_mios',
+        'bodeguero':   'pedidos_mios',
+        'camionero':   'entregas_mias',
+        'jefe':        'pedidos_consulta',
+        'admin':       'pedidos_consulta',
+    }
+    url_volver = _redirect_map.get(user_rol, 'index')
+
     # 2. Bloqueo general por estado (independiente del rol)
     if pedido.estado not in ['pendiente', 'en_ruta']:
         if pedido.estado == 'entregado':
@@ -911,25 +929,22 @@ def editar_pedido(request, pedido_id):
 
         if form_cabecera.is_valid() and formset.is_valid():
             form_cabecera.save()
-            
+
+            # Eliminar filas marcadas con DELETE (deleted_forms está disponible tras is_valid())
+            for form in formset.deleted_forms:
+                if form.instance.pk:
+                    form.instance.delete()
+
             # Guardar detalles con precios actualizados
+            es_bodeguero = request.user.rol == "bodeguero"
             detalles_guardados = 0
-            for detalle_form in formset:
-                if detalle_form.cleaned_data and not detalle_form.cleaned_data.get('DELETE', False):
-                    balon = detalle_form.cleaned_data.get('balon')
-                    cantidad = detalle_form.cleaned_data.get('cantidad')
-                    
-                    if balon and cantidad and cantidad > 0:
-                        detalle = detalle_form.save(commit=False)
-                        detalle.pedido = pedido
-                        
-                        # Actualizar precios siempre (al crear o editar)
-                        es_bodeguero = request.user.rol == "bodeguero"
-                        detalle.precio_venta_unitario = balon.precio_local if es_bodeguero else balon.precio_domicilio
-                        detalle.precio_compra_unitario = balon.precio_compra
-                        
-                        detalle.save()
-                        detalles_guardados += 1
+            instances = formset.save(commit=False)
+            for detalle in instances:
+                detalle.pedido = pedido
+                detalle.precio_venta_unitario = detalle.balon.precio_local if es_bodeguero else detalle.balon.precio_domicilio
+                detalle.precio_compra_unitario = detalle.balon.precio_compra
+                detalle.save()
+                detalles_guardados += 1
 
             # Detectar qué cambió (para historial claro)
             cambios = []
@@ -969,7 +984,8 @@ def editar_pedido(request, pedido_id):
 
             # Recalcular totales
             pedido.calcular_totales()
-            return redirect('entregas_lista') 
+            messages.success(request, f"Pedido #{pedido.id} actualizado correctamente.")
+            return redirect(url_volver)
 
         else:
             messages.error(request, "Por favor corrige los errores en el formulario.")
@@ -984,6 +1000,7 @@ def editar_pedido(request, pedido_id):
         'pedido': pedido,
         'form_cabecera': form_cabecera,
         'formset': formset,
+        'url_volver': url_volver,
     })
 
 
@@ -2477,7 +2494,11 @@ def editar_sobre_diario(request):
         # Actualizar campos adicionales del sobre
         if "kilometraje_camion" in request.POST:
             try:
-                sobre.kilometraje_camion = int(request.POST["kilometraje_camion"])
+                km = int(request.POST["kilometraje_camion"])
+                if 0 <= km <= 999999:
+                    sobre.kilometraje_camion = km
+                else:
+                    messages.warning(request, "Kilometraje fuera de rango (0–999999). Se guardó el valor anterior.")
             except (ValueError, TypeError):
                 sobre.kilometraje_camion = 0
         
@@ -2487,7 +2508,7 @@ def editar_sobre_diario(request):
             try:
                 sobre.fecha_correspondiente = datetime.strptime(fecha_correspondiente_str, "%Y-%m-%d").date()
             except ValueError:
-                pass
+                messages.warning(request, "Fecha correspondiente inválida. Se conservó la fecha anterior.")
 
         sobre.creado_por = request.user
         sobre.save()
@@ -2498,13 +2519,14 @@ def editar_sobre_diario(request):
             formset_pagos.is_valid(),
             formset_gastos.is_valid()
         ]):
-            # Guardar todos los formsets
-            formset_lineas.save()
-            formset_pagos.save()
-            formset_gastos.save()
+            # Guardar todos los formsets en una transacción atómica
+            with transaction.atomic():
+                formset_lineas.save()
+                formset_pagos.save()
+                formset_gastos.save()
 
-            # Recalcular totales del sobre
-            sobre.save()
+                # Recalcular totales del sobre
+                sobre.save()
 
             # Si se presionó el botón "Cerrar"
             if "cerrar" in request.POST:
@@ -3250,7 +3272,7 @@ def push_subscribe(request):
         return JsonResponse({'success': False, 'error': 'JSON inválido'}, status=400)
     except Exception as e:
         audit_logger.error(f"PUSH_SUBSCRIBE_ERROR | User: {request.user.username} | Error: {str(e)}")
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        return JsonResponse({'success': False, 'error': 'Error interno del servidor'}, status=500)
 
 
 # Usuario: desuscribirse de notificaciones
@@ -3292,7 +3314,8 @@ def push_unsubscribe(request):
         })
         
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        audit_logger.error(f"PUSH_UNSUBSCRIBE_ERROR | User: {request.user.username} | Error: {str(e)}")
+        return JsonResponse({'success': False, 'error': 'Error interno del servidor'}, status=500)
 
 
 # Usuario: probar enviar notificación push
