@@ -888,6 +888,16 @@ def editar_pedido(request, pedido_id):
 
     # Jefe y admin pueden editar cualquier pedido → no hay restricción adicional aquí
 
+    # URL de retorno según rol (usada en redirect al guardar y en botón Cancelar del template)
+    _redirect_map = {
+        'telefonista': 'pedidos_mios',
+        'bodeguero':   'pedidos_mios',
+        'camionero':   'entregas_mias',
+        'jefe':        'pedidos_consulta',
+        'admin':       'pedidos_consulta',
+    }
+    url_volver = _redirect_map.get(user_rol, 'index')
+
     # 2. Bloqueo general por estado (independiente del rol)
     if pedido.estado not in ['pendiente', 'en_ruta']:
         if pedido.estado == 'entregado':
@@ -919,25 +929,22 @@ def editar_pedido(request, pedido_id):
 
         if form_cabecera.is_valid() and formset.is_valid():
             form_cabecera.save()
-            
+
+            # Eliminar filas marcadas con DELETE (deleted_forms está disponible tras is_valid())
+            for form in formset.deleted_forms:
+                if form.instance.pk:
+                    form.instance.delete()
+
             # Guardar detalles con precios actualizados
+            es_bodeguero = request.user.rol == "bodeguero"
             detalles_guardados = 0
-            for detalle_form in formset:
-                if detalle_form.cleaned_data and not detalle_form.cleaned_data.get('DELETE', False):
-                    balon = detalle_form.cleaned_data.get('balon')
-                    cantidad = detalle_form.cleaned_data.get('cantidad')
-                    
-                    if balon and cantidad and cantidad > 0:
-                        detalle = detalle_form.save(commit=False)
-                        detalle.pedido = pedido
-                        
-                        # Actualizar precios siempre (al crear o editar)
-                        es_bodeguero = request.user.rol == "bodeguero"
-                        detalle.precio_venta_unitario = balon.precio_local if es_bodeguero else balon.precio_domicilio
-                        detalle.precio_compra_unitario = balon.precio_compra
-                        
-                        detalle.save()
-                        detalles_guardados += 1
+            instances = formset.save(commit=False)
+            for detalle in instances:
+                detalle.pedido = pedido
+                detalle.precio_venta_unitario = detalle.balon.precio_local if es_bodeguero else detalle.balon.precio_domicilio
+                detalle.precio_compra_unitario = detalle.balon.precio_compra
+                detalle.save()
+                detalles_guardados += 1
 
             # Detectar qué cambió (para historial claro)
             cambios = []
@@ -977,7 +984,8 @@ def editar_pedido(request, pedido_id):
 
             # Recalcular totales
             pedido.calcular_totales()
-            return redirect('entregas_lista') 
+            messages.success(request, f"Pedido #{pedido.id} actualizado correctamente.")
+            return redirect(url_volver)
 
         else:
             messages.error(request, "Por favor corrige los errores en el formulario.")
@@ -992,6 +1000,7 @@ def editar_pedido(request, pedido_id):
         'pedido': pedido,
         'form_cabecera': form_cabecera,
         'formset': formset,
+        'url_volver': url_volver,
     })
 
 

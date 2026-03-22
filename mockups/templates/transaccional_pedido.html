@@ -183,6 +183,15 @@ document.addEventListener('DOMContentLoaded', function() {
             balonSelect.addEventListener('change', function() {
                 const selectedOption = this.options[this.selectedIndex];
                 const precio = selectedOption.dataset.precio || '';
+
+                // Verificar duplicado después de actualizar el valor
+                if (this.value && isDuplicateBalon(this.value)) {
+                    alert('Este tipo de balón ya está en otra fila. Ajusta la cantidad en esa fila.');
+                    this.selectedIndex = 0;
+                    precioInput.value = '';
+                    return;
+                }
+
                 if (precio) {
                     precioInput.value = precio;
                 } else {
@@ -192,9 +201,34 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Devuelve los IDs de balones seleccionados en filas activas (no ocultas)
+    function getActiveBalonValues() {
+        const vals = [];
+        container.querySelectorAll('.detalle-row').forEach(row => {
+            if (row.style.display === 'none') return;
+            const sel = row.querySelector('.balon-select');
+            if (sel && sel.value) vals.push(sel.value);
+        });
+        return vals;
+    }
+
+    function isDuplicateBalon(value) {
+        return getActiveBalonValues().filter(v => v === value).length > 1;
+    }
+
     // Configurar listeners para filas existentes
     container.querySelectorAll('.detalle-row').forEach(row => {
         setupBalonChangeListeners(row);
+    });
+
+    // Validación anti-duplicado al enviar el formulario
+    document.getElementById('pedidoForm').addEventListener('submit', function(e) {
+        const vals = getActiveBalonValues();
+        const unique = new Set(vals);
+        if (vals.length !== unique.size) {
+            e.preventDefault();
+            alert('Hay tipos de balón repetidos. Elimina las filas duplicadas antes de guardar.');
+        }
     });
 
     // Agregar nueva fila

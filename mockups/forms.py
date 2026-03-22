@@ -87,16 +87,17 @@ class DetallePedidoForm(forms.ModelForm):
 
 class BaseDetalleFormSet(BaseInlineFormSet):
     def clean(self):
-        """Validación global: al menos un producto válido"""
+        """Validación global: al menos un producto válido y sin tipos de balón repetidos."""
         super().clean()
         
         if any(self.errors):
             return
             
         valid_count = 0
+        seen_balones = {}  # balon_id -> nombre, para detectar duplicados
         for form in self.forms:
             # Ignorar formularios vacíos o marcados para eliminación
-            if form.cleaned_data.get('DELETE', False):
+            if not form.cleaned_data or form.cleaned_data.get('DELETE', False):
                 continue
                 
             balon = form.cleaned_data.get('balon')
@@ -104,6 +105,12 @@ class BaseDetalleFormSet(BaseInlineFormSet):
             
             # Contar solo si tiene ambos campos válidos
             if balon and cantidad and cantidad > 0:
+                if balon.id in seen_balones:
+                    raise forms.ValidationError(
+                        f"El balón '{balon.nombre}' está repetido. "
+                        "Usa una sola fila y ajusta la cantidad."
+                    )
+                seen_balones[balon.id] = balon.nombre
                 valid_count += 1
         
         if valid_count < 1:
