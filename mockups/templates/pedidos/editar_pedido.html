@@ -1,24 +1,20 @@
 {% extends 'base.html' %}
-{% block title %}Nuevo Pedido - GasFácil{% endblock %}
+{% block title %}Editar Pedido #{{ pedido.id }} - GasFácil{% endblock %}
 
 {% block content %}
 <div class="container-fluid px-3 py-4" style="max-width: 540px; margin: 0 auto;">
 
     <h2 class="text-primary fw-bold text-center mb-4 fs-4">
-        {% if es_bodeguero %}
-            Venta en Local
-        {% else %}
-            Pedido a Domicilio
-        {% endif %}
+        Editar Pedido #{{ pedido.id }}
     </h2>
 
     <form method="post" id="pedidoForm">
         {% csrf_token %}
 
-        <!-- Mostrar errores globales del formset -->
+        <!-- Errores globales -->
         {% if formset.non_form_errors %}
         <div class="alert alert-danger mb-4">
-            <strong>⚠️ Errores:</strong>
+            <strong> Errores:</strong>
             <ul class="mb-0">
                 {% for error in formset.non_form_errors %}
                 <li>{{ error }}</li>
@@ -27,7 +23,7 @@
         </div>
         {% endif %}
 
-        <!-- Campos de cabecera -->
+        <!-- Cabecera: siempre mostrar sector y dirección en edición -->
         <div class="mb-4">
             <label class="form-label fw-bold fs-5">Método de pago <span class="text-danger">*</span></label>
             <div class="d-grid gap-2">
@@ -38,9 +34,8 @@
             {% endif %}
         </div>
 
-        {% if not es_bodeguero %}
         <div class="mb-4">
-            <label class="form-label fw-bold fs-5">Sector <span class="text-danger">*</span></label>
+            <label class="form-label fw-bold fs-5">Sector</label>
             {{ form_cabecera.sector }}
             {% if form_cabecera.sector.errors %}
             <div class="text-danger mt-1">{{ form_cabecera.sector.errors }}</div>
@@ -48,7 +43,7 @@
         </div>
 
         <div class="mb-4">
-            <label class="form-label fw-bold fs-5">Dirección / Referencia <span class="text-danger">*</span></label>
+            <label class="form-label fw-bold fs-5">Dirección / Referencia</label>
             {{ form_cabecera.direccion_entrega }}
             {% if form_cabecera.direccion_entrega.errors %}
             <div class="text-danger mt-1">{{ form_cabecera.direccion_entrega.errors }}</div>
@@ -57,7 +52,6 @@
                 Ej: Los Álamos 123, casa esquina roja, frente al colegio
             </small>
         </div>
-        {% endif %}
 
         <!-- Productos -->
         <h5 class="fw-bold mb-3 text-center fs-5">Productos</h5>
@@ -70,92 +64,88 @@
                 <div class="card-body p-3">
                     <div class="row g-2 align-items-end">
                         <div class="col-12">
-                            <label class="form-label">Tipo de balón <span class="text-danger">*</span></label>
+                            <label class="form-label fw-bold">Tipo de balón <span class="text-danger">*</span></label>
                             {{ form.balon }}
                             {% if form.balon.errors %}
-                            <div class="text-danger small mt-1">{{ form.balon.errors }}</div>
+                            <div class="text-danger small mt-1">{{ form.balon.errors|join:" " }}</div>
                             {% endif %}
                         </div>
                         <div class="col-4">
-                            <label class="form-label">Cantidad <span class="text-danger">*</span></label>
+                            <label class="form-label fw-bold">Cantidad <span class="text-danger">*</span></label>
                             {{ form.cantidad }}
                             {% if form.cantidad.errors %}
-                            <div class="text-danger small mt-1">{{ form.cantidad.errors }}</div>
+                            <div class="text-danger small mt-1">{{ form.cantidad.errors|join:" " }}</div>
                             {% endif %}
-                        </div>
-                        <div class="col-4">
-                            <label class="form-label">Precio Unit.</label>
-                            {{ form.precio_venta_unitario }}
                         </div>
                         <div class="col-4 text-end">
-                            {% if forloop.counter0 == 0 %}
-                            <button type="button" class="btn btn-outline-secondary btn-lg w-100" disabled>
-                                <i class="bi bi-lock-fill me-2"></i>Primera fila
+                            <button type="button" class="btn btn-outline-danger btn-sm remove-row">
+                                <i class="bi bi-trash"></i> Quitar
                             </button>
-                            {% else %}
-                            <button type="button" class="btn btn-outline-danger btn-lg w-100 remove-row">
-                                <i class="bi bi-trash3 me-2"></i>Quitar
-                            </button>
-                            {% endif %}
                         </div>
                     </div>
-                    <!-- Campos hidden necesarios -->
+                    <!--  CRÍTICO: Campos hidden necesarios para el formset -->
                     {{ form.id }}
-                    <div style="display: none;">{{ form.DELETE }}</div>
+                    <div style="display: none;">
+                        {{ form.DELETE }}
+                        {{ form.precio_venta_unitario }}
+                    </div>
                 </div>
             </div>
             {% endfor %}
         </div>
 
-        <!-- Template para nuevas filas -->
-        <div id="empty-form" style="display: none;">
+        <!-- Botón agregar -->
+        <div class="text-center mb-4">
+            <button type="button" id="add-row" class="btn btn-primary btn-lg w-100 py-3 fs-5">
+                <i class="bi bi-plus-circle me-2"></i> Agregar Producto
+            </button>
+        </div>
+
+        <!-- Acciones -->
+        <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-success btn-lg py-3 fs-5 shadow">
+                <i class="bi bi-save me-2"></i> Guardar Cambios
+            </button>
+            <a href="{% url url_volver %}" class="btn btn-outline-secondary btn-lg py-3 fs-5">
+                Cancelar
+            </a>
+        </div>
+
+        <!-- Template vacío para clonar -->
+        <div id="empty-form" style="display:none;">
             <div class="detalle-row card mb-3 shadow-sm border-0">
                 <div class="card-body p-3">
                     <div class="row g-2 align-items-end">
                         <div class="col-12">
-                            <label class="form-label">Tipo de balón <span class="text-danger">*</span></label>
+                            <label class="form-label fw-bold">Tipo de balón <span class="text-danger">*</span></label>
                             {{ formset.empty_form.balon }}
                         </div>
                         <div class="col-4">
-                            <label class="form-label">Cantidad <span class="text-danger">*</span></label>
+                            <label class="form-label fw-bold">Cantidad <span class="text-danger">*</span></label>
                             {{ formset.empty_form.cantidad }}
                         </div>
-                        <div class="col-4">
-                            <label class="form-label">Precio Unit.</label>
-                            {{ formset.empty_form.precio_venta_unitario }}
-                        </div>
                         <div class="col-4 text-end">
-                            <button type="button" class="btn btn-outline-danger btn-lg w-100 remove-row">
-                                <i class="bi bi-trash3 me-2"></i>Quitar
+                            <button type="button" class="btn btn-outline-danger btn-sm remove-row">
+                                <i class="bi bi-trash"></i> Quitar
                             </button>
                         </div>
                     </div>
-                    <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
+                    <!-- Campos hidden para nuevas filas -->
+                    <div style="display: none;">
+                        {{ formset.empty_form.DELETE }}
+                        {{ formset.empty_form.precio_venta_unitario }}
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="d-grid gap-2 mt-3 mb-5">
-            <button type="button" id="add-row" class="btn btn-outline-primary btn-lg">
-                <i class="bi bi-plus-circle me-2"></i>Agregar otro producto
-            </button>
-        </div>
-
-        <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-success btn-lg py-3 fs-5 shadow">
-                <i class="bi bi-check-circle me-2"></i>
-                {% if es_bodeguero %}Registrar Venta{% else %}Tomar Pedido{% endif %}
-            </button>
-            <a href="{% url 'index' %}" class="btn btn-outline-secondary btn-lg py-3 fs-5">
-                Cancelar
-            </a>
-        </div>
     </form>
 
 </div>
 
+<!-- JavaScript -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const container = document.getElementById('formset-container');
     const addButton = document.getElementById('add-row');
     const emptyFormDiv = document.getElementById('empty-form');
@@ -173,6 +163,21 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     let formIndex = parseInt(totalFormsInput.value) || 1;
+
+    // Devuelve los IDs de balones seleccionados en filas activas (no ocultas)
+    function getActiveBalonValues() {
+        const vals = [];
+        container.querySelectorAll('.detalle-row').forEach(row => {
+            if (row.style.display === 'none') return;
+            const sel = row.querySelector('.balon-select');
+            if (sel && sel.value) vals.push(sel.value);
+        });
+        return vals;
+    }
+
+    function isDuplicateBalon(value) {
+        return getActiveBalonValues().filter(v => v === value).length > 1;
+    }
 
     // Función para configurar los listeners de cambio de balón
     function setupBalonChangeListeners(row) {
@@ -201,21 +206,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Devuelve los IDs de balones seleccionados en filas activas (no ocultas)
-    function getActiveBalonValues() {
-        const vals = [];
-        container.querySelectorAll('.detalle-row').forEach(row => {
-            if (row.style.display === 'none') return;
-            const sel = row.querySelector('.balon-select');
-            if (sel && sel.value) vals.push(sel.value);
-        });
-        return vals;
-    }
-
-    function isDuplicateBalon(value) {
-        return getActiveBalonValues().filter(v => v === value).length > 1;
-    }
-
     // Configurar listeners para filas existentes
     container.querySelectorAll('.detalle-row').forEach(row => {
         setupBalonChangeListeners(row);
@@ -235,11 +225,9 @@ document.addEventListener('DOMContentLoaded', function() {
     addButton.addEventListener('click', function() {
         const newRow = emptyFormTemplate.cloneNode(true);
         
-        // Reemplazar __prefix__ con el índice actual
         newRow.innerHTML = newRow.innerHTML.replace(/__prefix__/g, formIndex);
         newRow.dataset.formIndex = formIndex;
         
-        // Resetear valores
         const select = newRow.querySelector('select');
         const numberInput = newRow.querySelector('input[type="number"]');
         const precioInput = newRow.querySelector('.precio-display');
@@ -262,29 +250,27 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Eliminar fila
+    let filaEliminarPendiente = null;
+
     container.addEventListener('click', function(e) {
         const removeBtn = e.target.closest('.remove-row');
         if (!removeBtn) return;
         
         const row = removeBtn.closest('.detalle-row');
-        const rowIndex = row.dataset.formIndex;
-        
-        if (rowIndex === "0") {
-            alert("No puedes eliminar la primera fila");
-            return;
+        filaEliminarPendiente = row;
+        const modal = new bootstrap.Modal(document.getElementById('modalEliminarProducto'));
+        modal.show();
+    });
+
+    document.getElementById('btnConfirmarEliminarProducto')?.addEventListener('click', function () {
+        if (!filaEliminarPendiente) return;
+        const deleteCheckbox = filaEliminarPendiente.querySelector('input[name$="-DELETE"]');
+        if (deleteCheckbox) {
+            deleteCheckbox.checked = true;
         }
-        
-        if (confirm('¿Eliminar este producto?')) {
-            // Marcar para eliminación
-            const deleteCheckbox = row.querySelector('input[name$="-DELETE"]');
-            if (deleteCheckbox) {
-                deleteCheckbox.checked = true;
-            }
-            
-            // Ocultar visualmente (no eliminar del DOM para que Django lo procese)
-            row.style.display = 'none';
-            console.log(`Fila ${rowIndex} marcada para eliminación`);
-        }
+        filaEliminarPendiente.style.display = 'none';
+        filaEliminarPendiente = null;
+        bootstrap.Modal.getInstance(document.getElementById('modalEliminarProducto')).hide();
     });
 
     console.log(`Formset inicializado con ${formIndex} formularios`);
@@ -292,17 +278,35 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
-    .detalle-row { 
-        transition: all 0.2s ease;
-    }
-    .detalle-row:hover {
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important;
-    }
-    .form-select:focus,
-    .form-control:focus {
+    .detalle-row { transition: all 0.2s ease; }
+    .detalle-row:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important; }
+    .form-select:focus, .form-control:focus {
         border-color: #0d6efd;
         box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25);
     }
 </style>
+
+<!-- Modal: Confirmar eliminación de producto -->
+<div class="modal fade" id="modalEliminarProducto" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-trash me-2"></i>Eliminar Producto
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">¿Deseas quitar este producto del pedido?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Volver</button>
+                <button type="button" class="btn btn-danger" id="btnConfirmarEliminarProducto">
+                    <i class="bi bi-trash me-1"></i>Sí, eliminar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% endblock %}

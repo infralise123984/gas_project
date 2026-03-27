@@ -215,7 +215,7 @@ def login_view(request):
             )
             security_logger.warning(f"LOGIN_FAIL | User: {username} | IP: {ip}")
 
-    return render(request, "login.html")
+    return render(request, "auth/login.html")
 
 
 # Autenticación: cierre de sesión
@@ -277,7 +277,7 @@ def crear_usuario(request):
             except ValidationError as exc:
                 for error in exc.messages:
                     messages.error(request, error)
-                return render(request, "crear_usuario.html", {"roles_choices": roles_choices})
+                return render(request, "auth/crear_usuario.html", {"roles_choices": roles_choices})
             # Creación del usuario
             user = Usuario.objects.create_user(
                 username=username,
@@ -422,7 +422,7 @@ def precios_balones(request):
         return redirect("precios_lista")
 
     # GET → mostrar formulario
-    return render(request, "precios_balones.html", {"balones": balones})
+    return render(request, "balones/precios_balones.html", {"balones": balones})
 
 @login_required
 def historial_precios(request):
@@ -487,7 +487,7 @@ def historial_precios(request):
         'title': 'Historial de Cambios de Precios' + (f' - {balon_seleccionado.nombre}' if balon_seleccionado else '')
     }
 
-    return render(request, 'historial_precios.html', context)
+    return render(request, 'balones/historial_precios.html', context)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -587,7 +587,7 @@ def gestionar_balones_lista(request):
         'puede_eliminar': request.user.rol in ['jefe', 'admin']
     }
     
-    return render(request, 'gestionar_balones.html', context)
+    return render(request, 'balones/gestionar_balones.html', context)
 
 
 # Admin/Jefe/Bodeguero: crear nuevo tipo de balón
@@ -624,7 +624,7 @@ def gestionar_balones_crear(request):
         'accion': 'Crear'
     }
     
-    return render(request, 'gestionar_balon_form.html', context)
+    return render(request, 'balones/gestionar_balon_form.html', context)
 
 
 # Admin/Jefe/Bodeguero: editar tipo de balón existente
@@ -686,7 +686,7 @@ def gestionar_balones_editar(request, balon_id):
         'accion': 'Editar'
     }
     
-    return render(request, 'gestionar_balon_form.html', context)
+    return render(request, 'balones/gestionar_balon_form.html', context)
 
 
 # Admin/Jefe: eliminar tipo de balón
@@ -777,7 +777,7 @@ def transaccional_pedido(request):
             if detalles_guardados == 0:
                 pedido.delete() # Deshacer cabecera si no hay detalles
                 messages.error(request, "Debes agregar al menos un producto válido.")
-                return render(request, "transaccional_pedido.html", {
+                return render(request, "pedidos/transaccional_pedido.html", {
                     "form_cabecera": form_cabecera,
                     "formset": formset,
                     "es_bodeguero": es_bodeguero,
@@ -845,7 +845,7 @@ def transaccional_pedido(request):
             form_kwargs={'user': request.user}
         )
 
-    return render(request, "transaccional_pedido.html", {
+    return render(request, "pedidos/transaccional_pedido.html", {
         "form_cabecera": form_cabecera,
         "formset": formset,
         "es_bodeguero": es_bodeguero,
@@ -892,7 +892,7 @@ def editar_pedido(request, pedido_id):
     _redirect_map = {
         'telefonista': 'pedidos_mios',
         'bodeguero':   'pedidos_mios',
-        'camionero':   'entregas_mias',
+        'camionero':   'entregas_lista',
         'jefe':        'pedidos_consulta',
         'admin':       'pedidos_consulta',
     }
@@ -996,7 +996,7 @@ def editar_pedido(request, pedido_id):
             form_kwargs={'user': request.user}
         )
 
-    return render(request, 'editar_pedido.html', {
+    return render(request, 'pedidos/editar_pedido.html', {
         'pedido': pedido,
         'form_cabecera': form_cabecera,
         'formset': formset,
@@ -1037,7 +1037,37 @@ def mis_pedidos_hoy(request):
         "fecha_hoy": hoy,
         "total_pedidos": pedidos_hoy.count(),
     }
-    return render(request, "mis_pedidos_hoy.html", context)
+    return render(request, "pedidos/mis_pedidos_hoy.html", context)
+
+
+@login_required
+def mis_pedidos_hoy_api(request):
+    """Endpoint AJAX: devuelve HTML actualizado de los pedidos del telefonista/bodeguero de hoy."""
+    if request.user.rol not in ['telefonista', 'bodeguero', 'admin', 'jefe']:
+        return JsonResponse({'error': 'No autorizado'}, status=403)
+
+    tz_chile = ZoneInfo('America/Santiago')
+    ahora = timezone.now().astimezone(tz_chile)
+    hoy = ahora.date()
+    inicio_dia = timezone.make_aware(datetime.combine(hoy, datetime.min.time()), timezone=tz_chile)
+    fin_dia = timezone.make_aware(datetime.combine(hoy, datetime.max.time()), timezone=tz_chile)
+
+    pedidos_hoy = Pedido.objects.filter(
+        registrador=request.user,
+        fecha__gte=inicio_dia,
+        fecha__lte=fin_dia
+    ).exclude(estado='cancelado').select_related('registrador', 'entregador').prefetch_related('detalles__balon').order_by('-fecha')
+
+    total_monto_hoy = pedidos_hoy.aggregate(total=Sum('monto_total'))['total'] or 0
+
+    context = {
+        'pedidos_hoy': pedidos_hoy,
+        'total_monto_hoy': total_monto_hoy,
+        'es_telefonista': request.user.rol == 'telefonista',
+        'user': request.user,
+    }
+    html = render(request, 'partials/_mis_pedidos_cards.html', context).content.decode('utf-8')
+    return JsonResponse({'html': html, 'count': pedidos_hoy.count()})
 
 
 # --- CAMIONERO ---
@@ -1077,7 +1107,35 @@ def mis_entregas_camionero(request):
         "total_monto_hoy": total_monto_hoy,
         "fecha_hoy": hoy,
     }
-    return render(request, "mis_entregas_camionero.html", context)
+    return render(request, "entregas/mis_entregas_camionero.html", context)
+
+
+@login_required
+def mis_entregas_camionero_api(request):
+    """Endpoint AJAX: devuelve HTML actualizado de entregas completadas hoy por el camionero."""
+    resp = require_roles(request, ['camionero'], 'index', 'Acceso restringido.')
+    if resp:
+        return JsonResponse({'error': 'No autorizado'}, status=403)
+
+    tz_chile = ZoneInfo('America/Santiago')
+    ahora = timezone.now().astimezone(tz_chile)
+    hoy = ahora.date()
+    inicio_dia = timezone.make_aware(datetime.combine(hoy, datetime.min.time()), timezone=tz_chile)
+    fin_dia = timezone.make_aware(datetime.combine(hoy, datetime.max.time()), timezone=tz_chile)
+
+    pedidos_hoy = Pedido.objects.filter(
+        entregador=request.user,
+        estado='entregado',
+        fecha__gte=inicio_dia,
+        fecha__lte=fin_dia
+    ).order_by('-fecha').prefetch_related('detalles__balon')
+
+    context = {
+        'pedidos_hoy': pedidos_hoy,
+        'total_monto_hoy': pedidos_hoy.aggregate(total=Sum('monto_total'))['total'] or 0,
+    }
+    html = render(request, 'partials/_mis_entregas_camionero_cards.html', context).content.decode('utf-8')
+    return JsonResponse({'html': html, 'count': pedidos_hoy.count()})
 
 
 # Camionero: panel de entregas
@@ -1142,7 +1200,7 @@ def camionero_entregas(request):
         "ahora": ahora,
     }
 
-    return render(request, "camionero_entregas.html", context)
+    return render(request, "entregas/camionero_entregas.html", context)
 
 
 # Camionero: API para actualización dinámica
@@ -1186,7 +1244,7 @@ def camionero_entregas_api(request):
     }
 
     # Renderizar template parcial
-    html = render(request, "_entregas_cards.html", context).content.decode('utf-8')
+    html = render(request, "partials/_entregas_cards.html", context).content.decode('utf-8')
     
     return JsonResponse({
         'html': html,
@@ -1263,6 +1321,65 @@ def camionero_marcar_entregado(request, pedido_id):
     return redirect("entregas_lista")
 
 
+# Telefonista: cancelar pedido pendiente (antes de que un camionero lo tome)
+@login_required
+def telefonista_cancelar_pedido(request, pedido_id):
+    """Cancela un pedido en estado 'pendiente' registrado por el telefonista."""
+    resp = require_roles(request, ["telefonista"], "pedidos_mios", "Solo telefonistas pueden usar esta acción.")
+    if resp:
+        return resp
+
+    if request.method != "POST":
+        return redirect("pedidos_mios")
+
+    pedido = get_object_or_404(Pedido, id=pedido_id)
+
+    # Solo puede cancelar sus propios pedidos
+    if pedido.registrador != request.user:
+        messages.error(request, "Solo puedes cancelar pedidos que tú registraste.")
+        return redirect("pedidos_mios")
+
+    # Solo se puede cancelar si aún no lo tomó un camionero
+    if pedido.estado != "pendiente":
+        messages.error(
+            request,
+            f"El pedido #{pedido.id} ya no está pendiente (estado: {pedido.get_estado_display()}). "
+            "Solo puedes cancelar pedidos que aún no hayan sido tomados por un camionero."
+        )
+        return redirect("pedidos_mios")
+
+    estado_anterior = pedido.estado
+    pedido.estado = "cancelado"
+    pedido.save()
+
+    HistorialEstadoPedido.objects.create(
+        pedido=pedido,
+        estado_anterior=estado_anterior,
+        estado_nuevo="cancelado",
+        cambiado_por=request.user,
+        fecha_cambio=timezone.now(),
+    )
+
+    HistorialCambioPedido.objects.create(
+        pedido=pedido,
+        usuario=request.user,
+        descripcion="Pedido cancelado por el telefonista (cliente desistió antes de la entrega)."
+    )
+
+    AuditoriaAccion.registrar(
+        request=request,
+        tipo='PEDIDO_CANCEL',
+        descripcion=f'Pedido #{pedido.id} cancelado por telefonista {request.user.username}',
+        objeto=pedido,
+        datos_anteriores={'estado': estado_anterior},
+        datos_nuevos={'estado': 'cancelado'}
+    )
+    audit_logger.info(f"PEDIDO_CANCEL | #{pedido.id} | By: {request.user.username}")
+
+    messages.warning(request, f"Pedido #{pedido.id} cancelado correctamente.")
+    return redirect("pedidos_mios")
+
+
 # Camionero: cancelar entrega
 @login_required
 def camionero_cancelar_entrega(request, pedido_id):
@@ -1320,7 +1437,7 @@ def tarreo_pedido(request):
 
         if not metodo_pago:
             messages.error(request, "Selecciona un método de pago.")
-            return render(request, 'tarreo.html', {'balones': balones})
+            return render(request, 'entregas/tarreo.html', {'balones': balones})
 
         # Dirección por defecto si está vacía
         direccion_final = direccion_ingresada if direccion_ingresada else "Tarreo / venta directa en camión"
@@ -1367,7 +1484,7 @@ def tarreo_pedido(request):
         if detalles_guardados == 0:
             pedido.delete()
             messages.error(request, "Debe agregar al menos un producto.")
-            return render(request, 'tarreo.html', {'balones': balones})
+            return render(request, 'entregas/tarreo.html', {'balones': balones})
 
         # Actualizar total en el pedido (si tienes el método calcular_totales)
         pedido.monto_total = total_monto
@@ -1385,7 +1502,7 @@ def tarreo_pedido(request):
         return redirect('entregas_mias')  # o 'entregas_lista'
 
     # GET
-    return render(request, 'tarreo.html', {
+    return render(request, 'entregas/tarreo.html', {
         'balones': balones,
     })
 # ──────────────────────────────────────────────────────────────
@@ -1471,7 +1588,7 @@ def consultas_pedidos(request):
         'origenes_choices': Pedido.ORIGENES,
         'filtros': request.GET,
     }
-    return render(request, "consultas_pedidos.html", context)
+    return render(request, 'pedidos/consultas_pedidos.html', context)
 
 
 # Utilidad auxiliar: exportar pedidos a archivo Excel
@@ -1918,7 +2035,7 @@ def reporte_ventas(request):
         'camioneros': Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name'),
     }
     
-    return render(request, "reporte_ventas.html", context)
+    return render(request, "reportes/reporte_ventas.html", context)
 
 # Admin/Jefe: reporte de sobres diarios
 @login_required
@@ -2265,7 +2382,7 @@ def reporte_sobres(request):
         'chart_pagos_data':     chart_pagos_data,
     }
 
-    return render(request, "reporte_sobres.html", context)
+    return render(request, "sobres/reporte_sobres.html", context)
 
 
 # Admin/Jefe: ver detalle de un pedido específico
@@ -2293,7 +2410,7 @@ def detalle_pedido(request, pedido_id):
         "pedido": pedido,
         "puede_editar": request.user.rol in ["jefe", "admin"],
     }
-    return render(request, "detalle_pedido.html", context)
+    return render(request, "pedidos/detalle_pedido.html", context)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2325,7 +2442,7 @@ def lista_sobres_diarios(request):
         fecha_correspondiente=hoy, tipo='camion'
     ).select_related('trabajador').order_by('trabajador__first_name', '-id'))
 
-    return render(request, 'lista_sobres.html', {
+    return render(request, 'sobres/lista_sobres.html', {
         'hoy': hoy,
         'camioneros': camioneros,
         'sobres_bodega': sobres_bodega,
@@ -2593,7 +2710,7 @@ def editar_sobre_diario(request):
         'hora_actual': f"{hora_actual}:{ahora_chile.minute:02d}",
     }
 
-    return render(request, 'sobres.html', context)
+    return render(request, 'sobres/sobres.html', context)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2654,7 +2771,7 @@ def crear_sobre_nuevo(request):
     hoy = today_chile()
     camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
 
-    return render(request, 'crear_sobre.html', {
+    return render(request, 'sobres/crear_sobre.html', {
         'hoy': hoy,
         'camioneros': camioneros,
     })
@@ -2776,7 +2893,7 @@ def historial_sobres(request):
         'camioneros_activos': camioneros_activos,
     }
 
-    return render(request, 'historial_sobres.html', context)
+    return render(request, 'sobres/historial_sobres.html', context)
 
 # Jefe/Bodeguero: imprimir sobre para descarga/impresión
 @login_required
@@ -2849,7 +2966,7 @@ def imprimir_sobre_diario(request, sobre_id):
         'total_kilos': total_kilos,
     }
 
-    return render(request, 'imprimir_sobre.html', context)
+    return render(request, 'sobres/imprimir_sobre.html', context)
 
 # Jefe/Bodeguero: exportar sobre a Excel
 @login_required

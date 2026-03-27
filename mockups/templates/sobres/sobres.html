@@ -406,7 +406,8 @@
                             <button type="submit" name="guardar" class="btn btn-primary btn-lg px-5">
                                 <i class="bi bi-save me-2"></i>Guardar Cambios
                             </button>
-                            <button type="submit" name="cerrar" class="btn btn-danger btn-lg px-5" onclick="return confirmarCierre()">
+                            <button type="button" class="btn btn-danger btn-lg px-5"
+                                    data-bs-toggle="modal" data-bs-target="#modalCerrarSobre">
                                 <i class="bi bi-lock-fill me-2"></i>Guardar y Cerrar Sobre
                             </button>
                             {% else %}
@@ -772,9 +773,7 @@ function agregarGasto() {
     updateTotals();
 }
 
-function confirmarCierre() {
-    return confirm('¿Está seguro de cerrar este sobre?\n\nUna vez cerrado, no podrá ser modificado.');
-}
+
 </script>
 
 <style>
@@ -916,5 +915,41 @@ function confirmarCierre() {
         </div>
     </div>
 </div>
+
+<!-- Modal: Confirmar cierre de sobre -->
+<div class="modal fade" id="modalCerrarSobre" tabindex="-1" aria-labelledby="modalCerrarSobreLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalCerrarSobreLabel">
+                    <i class="bi bi-lock-fill me-2"></i>Confirmar Cierre de Sobre
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-1">¿Estás seguro de que deseas <strong>cerrar y guardar</strong> este sobre?</p>
+                <p class="text-muted small mb-0">Una vez cerrado, no podrá ser modificado.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Volver</button>
+                <button type="button" class="btn btn-danger" id="btnConfirmarCierreSobre">
+                    <i class="bi bi-lock-fill me-1"></i>Sí, cerrar sobre
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('btnConfirmarCierreSobre').addEventListener('click', function () {
+    const form = document.getElementById('sobreForm');
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'cerrar';
+    input.value = '1';
+    form.appendChild(input);
+    form.submit();
+});
+</script>
 
 {% endblock %}  
