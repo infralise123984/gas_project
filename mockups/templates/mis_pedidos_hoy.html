@@ -116,6 +116,16 @@
                                     </a>
                                 {% endif %}
                             {% endif %}
+                            <!-- Botón Cancelar (solo telefonista, solo pedidos pendientes) -->
+                            {% if es_telefonista and pedido.estado == 'pendiente' and pedido.registrador == user %}
+                                <button type="button"
+                                        class="btn btn-outline-danger btn-sm mt-2 w-100"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#modalCancelarPedido"
+                                        data-pedido-id="{{ pedido.id }}">
+                                    <i class="bi bi-x-circle me-1"></i>Cancelar Pedido
+                                </button>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -138,4 +148,43 @@
     </div>
     {% endif %}
 </div>
+
+<!-- Modal de confirmación para cancelar pedido -->
+{% if es_telefonista %}
+<div class="modal fade" id="modalCancelarPedido" tabindex="-1" aria-labelledby="modalCancelarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalCancelarLabel">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Cancelar Pedido
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-1">¿Estás seguro de que deseas cancelar el <strong>Pedido #<span id="cancelarPedidoNumero">—</span></strong>?</p>
+                <p class="text-muted small mb-0">Esta acción no se puede deshacer. Úsala solo cuando el cliente haya llamado para desistir del pedido.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Volver</button>
+                <form id="formCancelarPedido" method="post" action="">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-x-circle me-1"></i>Sí, cancelar pedido
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const modalCancelar = document.getElementById('modalCancelarPedido');
+    modalCancelar.addEventListener('show.bs.modal', function (event) {
+        const btn = event.relatedTarget;
+        const pedidoId = btn.getAttribute('data-pedido-id');
+        document.getElementById('cancelarPedidoNumero').textContent = pedidoId;
+        document.getElementById('formCancelarPedido').action = '/pedidos/' + pedidoId + '/cancelar/';
+    });
+</script>
+{% endif %}
 {% endblock %}

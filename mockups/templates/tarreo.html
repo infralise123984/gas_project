@@ -293,12 +293,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let tieneProductos = false;
-        let resumen = 'Productos:\n';
+        let resumenHtml = '';
         for (let [id, qty] of Object.entries(cantidades)) {
             if (qty > 0) {
                 tieneProductos = true;
                 const nombre = document.querySelector(`.balon-card[data-id="${id}"] .fw-bold.text-dark`).textContent.trim();
-                resumen += `  • ${qty} × ${nombre}\n`;
+                resumenHtml += `<li>${qty} × ${nombre}</li>`;
             }
         }
 
@@ -308,16 +308,21 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Confirmación con resumen
-        const confirmMsg = 
-            `¿Guardar esta venta?\n\n` +
-            `Método de pago: ${document.querySelector('.pago-btn.active')?.textContent.trim() || '—'}\n` +
-            `${resumen}\n` +
-            `Total: ${document.getElementById('totalDisplay').textContent}`;
+        // Poblar el modal con el resumen antes de mostrarlo
+        const metodoPagoText = document.querySelector('.pago-btn.active')?.textContent.trim() || '—';
+        document.getElementById('modalTarreoMetodo').textContent = metodoPagoText;
+        document.getElementById('modalTarreoProductos').innerHTML = resumenHtml;
+        document.getElementById('modalTarreoTotal').textContent = document.getElementById('totalDisplay').textContent;
 
-        if (!confirm(confirmMsg)) {
-            e.preventDefault();
-        }
+        // Detener el submit y mostrar modal
+        e.preventDefault();
+        const modal = new bootstrap.Modal(document.getElementById('modalConfirmarVentaTarreo'));
+        modal.show();
+    });
+
+    document.getElementById('btnConfirmarVentaTarreo')?.addEventListener('click', function () {
+        bootstrap.Modal.getInstance(document.getElementById('modalConfirmarVentaTarreo')).hide();
+        document.getElementById('ventaForm').submit();
     });
 });
 </script>
@@ -360,5 +365,33 @@ document.addEventListener('DOMContentLoaded', () => {
         animation: pulse 0.2s ease;
     }
 </style>
+
+<!-- Modal: Confirmar venta tarreo -->
+<div class="modal fade" id="modalConfirmarVentaTarreo" tabindex="-1" aria-labelledby="modalTarreoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalTarreoLabel">
+                    <i class="bi bi-cart-check me-2"></i>Confirmar Venta
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">¿Guardar esta venta?</p>
+                <ul class="list-unstyled mb-2 ps-2" id="modalTarreoProductos"></ul>
+                <div class="border-top pt-2">
+                    <strong>Método de pago:</strong> <span id="modalTarreoMetodo"></span><br>
+                    <strong>Total:</strong> <span class="text-success fw-bold" id="modalTarreoTotal"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Volver</button>
+                <button type="button" class="btn btn-success" id="btnConfirmarVentaTarreo">
+                    <i class="bi bi-check-circle me-1"></i>Sí, guardar venta
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% endblock %}

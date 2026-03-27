@@ -39,6 +39,7 @@ urlpatterns = [
     path('pedidos/<int:pedido_id>/', views.detalle_pedido, name='pedidos_detalle'),
     path('pedidos/<int:pedido_id>/editar/', views.editar_pedido, name='pedidos_editar'),
     path('pedidos/mios/', views.mis_pedidos_hoy, name='pedidos_mios'),
+    path('pedidos/<int:pedido_id>/cancelar/', views.telefonista_cancelar_pedido, name='pedidos_cancelar'),
     path('pedidos/consulta/', views.consultas_pedidos, name='pedidos_consulta'),
 
     # ────────────────────────────────────────────────

@@ -262,6 +262,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Eliminar fila
+    let filaEliminarPendiente = null;
+
     container.addEventListener('click', function(e) {
         const removeBtn = e.target.closest('.remove-row');
         if (!removeBtn) return;
@@ -274,17 +276,20 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        if (confirm('¿Eliminar este producto?')) {
-            // Marcar para eliminación
-            const deleteCheckbox = row.querySelector('input[name$="-DELETE"]');
-            if (deleteCheckbox) {
-                deleteCheckbox.checked = true;
-            }
-            
-            // Ocultar visualmente (no eliminar del DOM para que Django lo procese)
-            row.style.display = 'none';
-            console.log(`Fila ${rowIndex} marcada para eliminación`);
+        filaEliminarPendiente = row;
+        const modal = new bootstrap.Modal(document.getElementById('modalEliminarProducto'));
+        modal.show();
+    });
+
+    document.getElementById('btnConfirmarEliminarProducto')?.addEventListener('click', function () {
+        if (!filaEliminarPendiente) return;
+        const deleteCheckbox = filaEliminarPendiente.querySelector('input[name$="-DELETE"]');
+        if (deleteCheckbox) {
+            deleteCheckbox.checked = true;
         }
+        filaEliminarPendiente.style.display = 'none';
+        filaEliminarPendiente = null;
+        bootstrap.Modal.getInstance(document.getElementById('modalEliminarProducto')).hide();
     });
 
     console.log(`Formset inicializado con ${formIndex} formularios`);
@@ -304,5 +309,28 @@ document.addEventListener('DOMContentLoaded', function() {
         box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25);
     }
 </style>
+
+<!-- Modal: Confirmar eliminación de producto -->
+<div class="modal fade" id="modalEliminarProducto" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-trash me-2"></i>Eliminar Producto
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">¿Deseas quitar este producto del pedido?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Volver</button>
+                <button type="button" class="btn btn-danger" id="btnConfirmarEliminarProducto">
+                    <i class="bi bi-trash me-1"></i>Sí, eliminar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% endblock %}
