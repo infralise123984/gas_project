@@ -49,18 +49,30 @@
 
         <!-- Acciones -->
         <div class="d-grid gap-2">
-            <form method="post" action="{% url 'entregas_entregado' pedido.id %}"
-                  onsubmit="return confirm('¿Marcar como entregado el pedido #{{ pedido.id }}?');">
+            <form id="form-entregado-{{ pedido.id }}" method="post" action="{% url 'entregas_entregado' pedido.id %}">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-success btn-lg w-100 py-4 fs-5 shadow rounded-3">
+                <button type="button" class="btn btn-success btn-lg w-100 py-4 fs-5 shadow rounded-3"
+                        data-bs-toggle="modal" data-bs-target="#modalAccionEntrega"
+                        data-form-id="form-entregado-{{ pedido.id }}"
+                        data-title="Marcar como Entregado"
+                        data-body="¿Confirmas que el Pedido #{{ pedido.id }} fue entregado correctamente?"
+                        data-header-class="bg-success"
+                        data-btn-class="btn-success"
+                        data-btn-text="Sí, marcar entregado">
                     <i class="bi bi-check-circle-fill me-2"></i> MARCAR ENTREGADO
                 </button>
             </form>
 
-            <form method="post" action="{% url 'entregas_cancelar' pedido.id %}"
-                  onsubmit="return confirm('¿Cancelar entrega del pedido #{{ pedido.id }}?');">
+            <form id="form-cancelar-{{ pedido.id }}" method="post" action="{% url 'entregas_cancelar' pedido.id %}">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-danger btn-lg w-100 py-4 fs-5 shadow rounded-3">
+                <button type="button" class="btn btn-danger btn-lg w-100 py-4 fs-5 shadow rounded-3"
+                        data-bs-toggle="modal" data-bs-target="#modalAccionEntrega"
+                        data-form-id="form-cancelar-{{ pedido.id }}"
+                        data-title="Cancelar Entrega"
+                        data-body="¿Cancelar la entrega del Pedido #{{ pedido.id }}? El pedido quedará como cancelado."
+                        data-header-class="bg-danger"
+                        data-btn-class="btn-danger"
+                        data-btn-text="Sí, cancelar entrega">
                     <i class="bi bi-x-circle-fill me-2"></i> CANCELAR ENTREGA
                 </button>
             </form>
@@ -117,10 +129,16 @@
 
         <!-- Botón tomar -->
         <div class="d-grid gap-2">
-            <form method="post" action="{% url 'entregas_tomar' pedido.id %}"
-                  onsubmit="return confirm('¿Tomar este pedido #{{ pedido.id }}?');">
+            <form id="form-tomar-{{ pedido.id }}" method="post" action="{% url 'entregas_tomar' pedido.id %}">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-primary btn-lg w-100 py-4 fs-5 shadow rounded-3">
+                <button type="button" class="btn btn-primary btn-lg w-100 py-4 fs-5 shadow rounded-3"
+                        data-bs-toggle="modal" data-bs-target="#modalAccionEntrega"
+                        data-form-id="form-tomar-{{ pedido.id }}"
+                        data-title="Tomar Pedido"
+                        data-body="¿Quieres tomar el Pedido #{{ pedido.id }} para entregarlo?"
+                        data-header-class="bg-primary"
+                        data-btn-class="btn-primary"
+                        data-btn-text="Sí, tomar pedido">
                     <i class="bi bi-arrow-right-circle-fill me-2"></i> TOMAR PEDIDO
                 </button>
             </form>
@@ -138,3 +156,5 @@
     <p class="text-muted fs-5">No hay entregas pendientes ni en ruta por ahora.</p>
 </div>
 {% endif %}
+
+

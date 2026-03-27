@@ -1,0 +1,67 @@
+{% load humanize %}
+
+<!-- Contador grande -->
+<div class="text-center mb-4">
+    <div class="badge bg-success fs-4 px-4 py-3 shadow">
+        {{ pedidos_hoy.count }} entrega{{ pedidos_hoy.count|pluralize:"s" }} hoy
+    </div>
+</div>
+
+<!-- Lista de entregas -->
+{% if pedidos_hoy %}
+    {% for pedido in pedidos_hoy %}
+    <div class="card shadow mb-4 border-success border-3">
+        <div class="card-body p-4 text-center">
+
+            <!-- Número de pedido grande -->
+            <h4 class="fw-bold mb-3 text-dark">Pedido #{{ pedido.id }}</h4>
+
+            <!-- Productos (lista clara) -->
+            <div class="mb-4">
+                <h5 class="fw-bold mb-2">Productos entregados:</h5>
+                <ul class="list-group list-group-flush">
+                    {% for detalle in pedido.detalles.all %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center fs-5">
+                        {{ detalle.cantidad }} × {{ detalle.balon.nombre }}
+                        <span class="badge bg-success fs-5">${{ detalle.subtotal|floatformat:0|intcomma }}</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-muted">Sin productos</li>
+                    {% endfor %}
+                </ul>
+                <div class="mt-3 fw-bold fs-4 text-success">
+                    Total: ${{ pedido.monto_total|floatformat:0|intcomma }}
+                </div>
+            </div>
+
+            <!-- Dirección -->
+            {% if pedido.direccion_entrega %}
+            <div class="mb-4">
+                <h5 class="fw-bold mb-2">Dirección:</h5>
+                <p class="fs-5 fw-semibold text-primary">{{ pedido.direccion_entrega|linebreaksbr }}</p>
+                {% if pedido.sector %}
+                <small class="text-muted">Sector: {{ pedido.sector }}</small>
+                {% endif %}
+            </div>
+            {% else %}
+            <p class="text-muted mb-4">Sin dirección específica (venta local o tarreo)</p>
+            {% endif %}
+
+            <!-- Fecha y hora -->
+            <small class="text-muted d-block">
+                Entregado: {{ pedido.fecha|date:"d/m/Y H:i" }}
+            </small>
+
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <!-- Mensaje cuando no hay entregas -->
+    <div class="alert alert-light text-center py-5 shadow-sm">
+        <i class="bi bi-check-circle-fill fs-1 text-success d-block mb-3"></i>
+        <h5 class="mb-2">Todo listo por hoy</h5>
+        <p class="text-muted mb-0">
+            No tienes entregas registradas para este día.
+        </p>
+    </div>
+{% endif %}

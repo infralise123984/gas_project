@@ -108,9 +108,13 @@
                                                         <i class="bi bi-pencil-square"></i> Editar
                                                     </a>
                                                     {% if puede_eliminar %}
-                                                    <a href="{% url 'balones_eliminar' balon.id %}" class="btn btn-outline-danger" title="Eliminar" onclick="return confirm('¿Estás seguro de que deseas eliminar este balón?\n\nSi tiene ventas registradas, no podrá ser eliminado.');">
+                                                    <button type="button" class="btn btn-outline-danger btn-sm" title="Eliminar"
+                                                            data-bs-toggle="modal" data-bs-target="#modalEliminarBalon"
+                                                            data-balon-id="{{ balon.id }}"
+                                                            data-balon-nombre="{{ balon.nombre }}"
+                                                            data-url="{% url 'balones_eliminar' balon.id %}">
                                                         <i class="bi bi-trash"></i> Eliminar
-                                                    </a>
+                                                    </button>
                                                     {% endif %}
                                                 </div>
                                             </td>
@@ -269,4 +273,41 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: Confirmar eliminación de balón -->
+<div class="modal fade" id="modalEliminarBalon" tabindex="-1" aria-labelledby="modalEliminarBalonLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalEliminarBalonLabel">
+                    <i class="bi bi-trash me-2"></i>Eliminar Balón
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-1">¿Estás seguro de que deseas eliminar el balón "<strong id="modalBalonNombre"></strong>"?</p>
+                <p class="text-muted small mb-0">Si tiene ventas registradas, no podrá ser eliminado.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Volver</button>
+                <a href="#" id="btnConfirmarEliminarBalon" class="btn btn-danger">
+                    <i class="bi bi-trash me-1"></i>Sí, eliminar balón
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const modal = document.getElementById('modalEliminarBalon');
+    if (!modal) return;
+    modal.addEventListener('show.bs.modal', function (e) {
+        const btn = e.relatedTarget;
+        document.getElementById('modalBalonNombre').textContent = btn.dataset.balonNombre;
+        document.getElementById('btnConfirmarEliminarBalon').href = btn.dataset.url;
+    });
+})();
+</script>
+
 {% endblock %}
