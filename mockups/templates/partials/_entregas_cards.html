@@ -157,49 +157,4 @@
 </div>
 {% endif %}
 
-<!-- Modal de confirmación compartido para acciones de entrega -->
-<div class="modal fade" id="modalAccionEntrega" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header text-white" id="modalAccionEntregaHeader">
-                <h5 class="modal-title" id="modalAccionEntregaTitulo">Confirmar</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-            </div>
-            <div class="modal-body">
-                <p class="mb-0" id="modalAccionEntregaCuerpo"></p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Volver</button>
-                <button type="button" class="btn" id="btnConfirmarAccionEntrega">Confirmar</button>
-            </div>
-        </div>
-    </div>
-</div>
 
-<script>
-(function () {
-    let pendingFormId = null;
-    const modal = document.getElementById('modalAccionEntrega');
-    if (!modal) return;
-
-    modal.addEventListener('show.bs.modal', function (e) {
-        const btn = e.relatedTarget;
-        pendingFormId = btn.dataset.formId;
-        document.getElementById('modalAccionEntregaTitulo').textContent = btn.dataset.title;
-        document.getElementById('modalAccionEntregaCuerpo').textContent = btn.dataset.body;
-
-        const header = document.getElementById('modalAccionEntregaHeader');
-        header.className = 'modal-header text-white ' + (btn.dataset.headerClass || 'bg-primary');
-
-        const confirmBtn = document.getElementById('btnConfirmarAccionEntrega');
-        confirmBtn.className = 'btn ' + (btn.dataset.btnClass || 'btn-primary');
-        confirmBtn.textContent = btn.dataset.btnText || 'Confirmar';
-    });
-
-    document.getElementById('btnConfirmarAccionEntrega').addEventListener('click', function () {
-        if (pendingFormId) {
-            document.getElementById(pendingFormId).submit();
-        }
-    });
-})();
-</script>
