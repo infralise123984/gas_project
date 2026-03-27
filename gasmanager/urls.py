@@ -39,6 +39,7 @@ urlpatterns = [
     path('pedidos/<int:pedido_id>/', views.detalle_pedido, name='pedidos_detalle'),
     path('pedidos/<int:pedido_id>/editar/', views.editar_pedido, name='pedidos_editar'),
     path('pedidos/mios/', views.mis_pedidos_hoy, name='pedidos_mios'),
+    path('pedidos/mios/api/', views.mis_pedidos_hoy_api, name='pedidos_mios_api'),
     path('pedidos/<int:pedido_id>/cancelar/', views.telefonista_cancelar_pedido, name='pedidos_cancelar'),
     path('pedidos/consulta/', views.consultas_pedidos, name='pedidos_consulta'),
 
@@ -48,6 +49,7 @@ urlpatterns = [
     path('entregas/', views.camionero_entregas, name='entregas_lista'),
     path('entregas/api/', views.camionero_entregas_api, name='entregas_api'),
     path('entregas/mias/', views.mis_entregas_camionero, name='entregas_mias'),
+    path('entregas/mias/api/', views.mis_entregas_camionero_api, name='entregas_mias_api'),
     path('entregas/<int:pedido_id>/tomar/', views.camionero_tomar_pedido, name='entregas_tomar'),
     path('entregas/<int:pedido_id>/entregado/', views.camionero_marcar_entregado, name='entregas_entregado'),
     path('entregas/<int:pedido_id>/cancelar/', views.camionero_cancelar_entrega, name='entregas_cancelar'),
