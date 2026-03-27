@@ -892,7 +892,7 @@ def editar_pedido(request, pedido_id):
     _redirect_map = {
         'telefonista': 'pedidos_mios',
         'bodeguero':   'pedidos_mios',
-        'camionero':   'entregas_mias',
+        'camionero':   'entregas_lista',
         'jefe':        'pedidos_consulta',
         'admin':       'pedidos_consulta',
     }
@@ -1261,6 +1261,65 @@ def camionero_marcar_entregado(request, pedido_id):
     )
     messages.success(request, f"¡Pedido #{pedido.id} marcado como ENTREGADO exitosamente!")
     return redirect("entregas_lista")
+
+
+# Telefonista: cancelar pedido pendiente (antes de que un camionero lo tome)
+@login_required
+def telefonista_cancelar_pedido(request, pedido_id):
+    """Cancela un pedido en estado 'pendiente' registrado por el telefonista."""
+    resp = require_roles(request, ["telefonista"], "pedidos_mios", "Solo telefonistas pueden usar esta acción.")
+    if resp:
+        return resp
+
+    if request.method != "POST":
+        return redirect("pedidos_mios")
+
+    pedido = get_object_or_404(Pedido, id=pedido_id)
+
+    # Solo puede cancelar sus propios pedidos
+    if pedido.registrador != request.user:
+        messages.error(request, "Solo puedes cancelar pedidos que tú registraste.")
+        return redirect("pedidos_mios")
+
+    # Solo se puede cancelar si aún no lo tomó un camionero
+    if pedido.estado != "pendiente":
+        messages.error(
+            request,
+            f"El pedido #{pedido.id} ya no está pendiente (estado: {pedido.get_estado_display()}). "
+            "Solo puedes cancelar pedidos que aún no hayan sido tomados por un camionero."
+        )
+        return redirect("pedidos_mios")
+
+    estado_anterior = pedido.estado
+    pedido.estado = "cancelado"
+    pedido.save()
+
+    HistorialEstadoPedido.objects.create(
+        pedido=pedido,
+        estado_anterior=estado_anterior,
+        estado_nuevo="cancelado",
+        cambiado_por=request.user,
+        fecha_cambio=timezone.now(),
+    )
+
+    HistorialCambioPedido.objects.create(
+        pedido=pedido,
+        usuario=request.user,
+        descripcion="Pedido cancelado por el telefonista (cliente desistió antes de la entrega)."
+    )
+
+    AuditoriaAccion.registrar(
+        request=request,
+        tipo='PEDIDO_CANCEL',
+        descripcion=f'Pedido #{pedido.id} cancelado por telefonista {request.user.username}',
+        objeto=pedido,
+        datos_anteriores={'estado': estado_anterior},
+        datos_nuevos={'estado': 'cancelado'}
+    )
+    audit_logger.info(f"PEDIDO_CANCEL | #{pedido.id} | By: {request.user.username}")
+
+    messages.warning(request, f"Pedido #{pedido.id} cancelado correctamente.")
+    return redirect("pedidos_mios")
 
 
 # Camionero: cancelar entrega
