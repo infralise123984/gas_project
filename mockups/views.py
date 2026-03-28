@@ -308,7 +308,7 @@ def crear_usuario(request):
             messages.success(request, f"Usuario '{user.get_full_name() or user.username}' creado correctamente con rol {user.get_rol_display()}.")
             return redirect("reportes_ventas")
 
-    return render(request, "crear_usuario.html", {"roles_choices": roles_choices})
+    return render(request, "auth/crear_usuario.html", {"roles_choices": roles_choices})
 
 @login_required
 def precios_balones(request):
