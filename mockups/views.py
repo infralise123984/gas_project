@@ -1026,16 +1026,17 @@ def mis_pedidos_hoy(request):
         registrador=request.user,
         fecha__gte=inicio_dia,
         fecha__lte=fin_dia
-    ).exclude(estado='cancelado').select_related('registrador', 'entregador').prefetch_related('detalles__balon').order_by('-fecha')
+    ).select_related('registrador', 'entregador').prefetch_related('detalles__balon').order_by('-fecha')
 
-    total_monto_hoy = pedidos_hoy.aggregate(total=Sum('monto_total'))['total'] or 0
+    pedidos_activos = pedidos_hoy.exclude(estado='cancelado')
+    total_monto_hoy = pedidos_activos.aggregate(total=Sum('monto_total'))['total'] or 0
 
     context = {
         "pedidos_hoy": pedidos_hoy,
         "total_monto_hoy": total_monto_hoy,
         "es_telefonista": request.user.rol == "telefonista",
         "fecha_hoy": hoy,
-        "total_pedidos": pedidos_hoy.count(),
+        "total_pedidos": pedidos_activos.count(),
     }
     return render(request, "pedidos/mis_pedidos_hoy.html", context)
 
@@ -1056,18 +1057,20 @@ def mis_pedidos_hoy_api(request):
         registrador=request.user,
         fecha__gte=inicio_dia,
         fecha__lte=fin_dia
-    ).exclude(estado='cancelado').select_related('registrador', 'entregador').prefetch_related('detalles__balon').order_by('-fecha')
+    ).select_related('registrador', 'entregador').prefetch_related('detalles__balon').order_by('-fecha')
 
-    total_monto_hoy = pedidos_hoy.aggregate(total=Sum('monto_total'))['total'] or 0
+    pedidos_activos = pedidos_hoy.exclude(estado='cancelado')
+    total_monto_hoy = pedidos_activos.aggregate(total=Sum('monto_total'))['total'] or 0
 
     context = {
         'pedidos_hoy': pedidos_hoy,
         'total_monto_hoy': total_monto_hoy,
+        'total_pedidos': pedidos_activos.count(),
         'es_telefonista': request.user.rol == 'telefonista',
         'user': request.user,
     }
     html = render(request, 'partials/_mis_pedidos_cards.html', context).content.decode('utf-8')
-    return JsonResponse({'html': html, 'count': pedidos_hoy.count()})
+    return JsonResponse({'html': html, 'count': pedidos_activos.count()})
 
 
 # --- CAMIONERO ---
@@ -1089,22 +1092,26 @@ def mis_entregas_camionero(request):
     inicio_dia = timezone.make_aware(datetime.combine(hoy, datetime.min.time()), timezone=tz_chile)
     fin_dia = timezone.make_aware(datetime.combine(hoy, datetime.max.time()), timezone=tz_chile)
     
-    # Filtrar solo entregas del día actual, entregadas por el usuario logueado
+    # Todos los pedidos asignados a este camionero hoy (incluye cancelados para visibilidad)
     pedidos_hoy = Pedido.objects.filter(
         entregador=request.user,
-        estado="entregado",
-        fecha__gte=inicio_dia,  # ← Filtro clave: desde inicio del día
-        fecha__lte=fin_dia      # ← Filtro clave: hasta fin del día
+        fecha__gte=inicio_dia,
+        fecha__lte=fin_dia
     ).order_by("-fecha").prefetch_related("detalles__balon")
-    
-    # Métricas diarias simples (opcional, para enriquecer la vista sin complejidad)
-    total_entregas_hoy = pedidos_hoy.count()
-    total_monto_hoy = pedidos_hoy.aggregate(total=Sum('monto_total'))['total'] or 0
-    
+
+    # Solo los entregados para cálculos y estadísticas
+    pedidos_entregados = pedidos_hoy.filter(estado='entregado')
+    total_entregas_hoy = pedidos_entregados.count()
+    total_monto_hoy = pedidos_entregados.aggregate(total=Sum('monto_total'))['total'] or 0
+    total_kilos_hoy = DetallePedido.objects.filter(
+        pedido__in=pedidos_entregados
+    ).aggregate(total=Sum(F('cantidad') * F('balon__peso_neto_gas')))['total'] or 0
+
     context = {
         "pedidos_hoy": pedidos_hoy,
         "total_entregas_hoy": total_entregas_hoy,
         "total_monto_hoy": total_monto_hoy,
+        "total_kilos_hoy": total_kilos_hoy,
         "fecha_hoy": hoy,
     }
     return render(request, "entregas/mis_entregas_camionero.html", context)
@@ -1125,17 +1132,25 @@ def mis_entregas_camionero_api(request):
 
     pedidos_hoy = Pedido.objects.filter(
         entregador=request.user,
-        estado='entregado',
         fecha__gte=inicio_dia,
         fecha__lte=fin_dia
     ).order_by('-fecha').prefetch_related('detalles__balon')
 
+    pedidos_entregados = pedidos_hoy.filter(estado='entregado')
+    total_entregas_hoy = pedidos_entregados.count()
+    total_monto_hoy = pedidos_entregados.aggregate(total=Sum('monto_total'))['total'] or 0
+    total_kilos_hoy = DetallePedido.objects.filter(
+        pedido__in=pedidos_entregados
+    ).aggregate(total=Sum(F('cantidad') * F('balon__peso_neto_gas')))['total'] or 0
+
     context = {
         'pedidos_hoy': pedidos_hoy,
-        'total_monto_hoy': pedidos_hoy.aggregate(total=Sum('monto_total'))['total'] or 0,
+        'total_entregas_hoy': total_entregas_hoy,
+        'total_monto_hoy': total_monto_hoy,
+        'total_kilos_hoy': total_kilos_hoy,
     }
     html = render(request, 'partials/_mis_entregas_camionero_cards.html', context).content.decode('utf-8')
-    return JsonResponse({'html': html, 'count': pedidos_hoy.count()})
+    return JsonResponse({'html': html, 'count': total_entregas_hoy})
 
 
 # Camionero: panel de entregas
@@ -1396,7 +1411,7 @@ def camionero_cancelar_entrega(request, pedido_id):
         )
         estado_anterior = pedido.estado
         pedido.estado = "cancelado"
-        pedido.entregador = None # Libera el camionero para que otro pueda tomarlo si fuera necesario (o quede cancelado)
+        # No se limpia entregador: el camionero sigue asignado para poder ver el pedido en su historial
         pedido.save()
 
         HistorialEstadoPedido.objects.create(
@@ -1406,6 +1421,23 @@ def camionero_cancelar_entrega(request, pedido_id):
             cambiado_por=request.user,
             fecha_cambio=timezone.now(),
         )
+
+        HistorialCambioPedido.objects.create(
+            pedido=pedido,
+            usuario=request.user,
+            descripcion=f"Entrega cancelada por el camionero {request.user.get_full_name() or request.user.username} (estaba en ruta)."
+        )
+
+        AuditoriaAccion.registrar(
+            request=request,
+            tipo='PEDIDO_CANCEL',
+            descripcion=f'Pedido #{pedido.id} cancelado por camionero {request.user.username} (estaba en ruta)',
+            objeto=pedido,
+            datos_anteriores={'estado': estado_anterior, 'entregador': request.user.username},
+            datos_nuevos={'estado': 'cancelado'}
+        )
+        audit_logger.info(f"PEDIDO_CANCEL | #{pedido.id} | By camionero: {request.user.username}")
+
         messages.warning(request, f"Pedido #{pedido.id} ha sido cancelado.")
     except Pedido.DoesNotExist:
         messages.error(request, "El pedido no está en ruta o no te pertenece.")

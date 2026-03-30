@@ -1,37 +1,57 @@
 {% load humanize %}
 
-<!-- Contador grande -->
-<div class="text-center mb-4">
-    <div class="badge bg-success fs-4 px-4 py-3 shadow">
-        {{ pedidos_hoy.count }} entrega{{ pedidos_hoy.count|pluralize:"s" }} hoy
+<!-- Contadores -->
+<div class="text-center mb-3 d-flex flex-wrap justify-content-center gap-2">
+    <div class="badge bg-success fs-5 px-4 py-2 shadow">
+        {{ total_entregas_hoy }} entrega{{ total_entregas_hoy|pluralize:"s" }} hoy
+    </div>
+    <div class="badge bg-primary fs-5 px-4 py-2 shadow">
+        ${{ total_monto_hoy|floatformat:0|intcomma }}
+    </div>
+    <div class="badge bg-secondary fs-5 px-4 py-2 shadow">
+        {{ total_kilos_hoy }} kg vendidos
     </div>
 </div>
 
 <!-- Lista de entregas -->
 {% if pedidos_hoy %}
     {% for pedido in pedidos_hoy %}
-    <div class="card shadow mb-4 border-success border-3">
-        <div class="card-body p-4 text-center">
+    <div class="card shadow mb-4 border-3 border-{% if pedido.estado == 'entregado' %}success{% elif pedido.estado == 'en_ruta' %}warning{% elif pedido.estado == 'cancelado' %}danger{% else %}info{% endif %}">
+        {% if pedido.estado == 'cancelado' %}
+        <div class="bg-danger text-white text-center fw-bold py-2 fs-5">
+            <i class="bi bi-x-circle-fill me-2"></i>PEDIDO CANCELADO
+        </div>
+        {% endif %}
+        <div class="card-body p-4 text-center{% if pedido.estado == 'cancelado' %} bg-danger bg-opacity-10{% endif %}">
 
             <!-- Número de pedido grande -->
-            <h4 class="fw-bold mb-3 text-dark">Pedido #{{ pedido.id }}</h4>
+            <h4 class="fw-bold mb-3 {% if pedido.estado == 'cancelado' %}text-danger{% else %}text-dark{% endif %}">Pedido #{{ pedido.id }}</h4>
 
             <!-- Productos (lista clara) -->
             <div class="mb-4">
-                <h5 class="fw-bold mb-2">Productos entregados:</h5>
+                <h5 class="fw-bold mb-2">Productos{% if pedido.estado != 'cancelado' %} entregados{% endif %}:</h5>
                 <ul class="list-group list-group-flush">
                     {% for detalle in pedido.detalles.all %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center fs-5">
+                    <li class="list-group-item d-flex justify-content-between align-items-center fs-5{% if pedido.estado == 'cancelado' %} bg-transparent{% endif %}">
                         {{ detalle.cantidad }} × {{ detalle.balon.nombre }}
-                        <span class="badge bg-success fs-5">${{ detalle.subtotal|floatformat:0|intcomma }}</span>
+                        <span class="badge fs-5 bg-{% if pedido.estado == 'cancelado' %}danger{% else %}success{% endif %}">${{ detalle.subtotal|floatformat:0|intcomma }}</span>
                     </li>
                     {% empty %}
                     <li class="list-group-item text-muted">Sin productos</li>
                     {% endfor %}
                 </ul>
+                {% if pedido.estado == 'cancelado' %}
+                <div class="mt-3 fw-bold fs-3 text-danger text-decoration-line-through">
+                    ${{ pedido.monto_total|floatformat:0|intcomma }}
+                </div>
+                <div class="fw-bold text-danger fs-5 mt-1">
+                    <i class="bi bi-x-circle-fill me-1"></i>NO COBRADO
+                </div>
+                {% else %}
                 <div class="mt-3 fw-bold fs-4 text-success">
                     Total: ${{ pedido.monto_total|floatformat:0|intcomma }}
                 </div>
+                {% endif %}
             </div>
 
             <!-- Dirección -->
@@ -49,7 +69,7 @@
 
             <!-- Fecha y hora -->
             <small class="text-muted d-block">
-                Entregado: {{ pedido.fecha|date:"d/m/Y H:i" }}
+                {% if pedido.estado == 'cancelado' %}Cancelado{% elif pedido.estado == 'en_ruta' %}En ruta desde{% else %}Entregado{% endif %}: {{ pedido.fecha|date:"d/m/Y H:i" }}
             </small>
 
         </div>
