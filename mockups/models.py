@@ -289,10 +289,14 @@ class DetallePedido(models.Model):
 
     @property
     def subtotal(self):
+        if self.precio_venta_unitario is None:
+            return None
         return self.precio_venta_unitario * self.cantidad
 
     @property
     def ganancia(self):
+        if self.precio_venta_unitario is None or self.precio_compra_unitario is None:
+            return None
         return (self.precio_venta_unitario - self.precio_compra_unitario) * self.cantidad
 
     def __str__(self):
