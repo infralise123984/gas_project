@@ -8,6 +8,8 @@ from datetime import date, datetime, time
 from json import dumps
 from calendar import monthrange
 from django.utils import timezone
+import uuid
+from django.views.decorators.cache import never_cache
 from zoneinfo import ZoneInfo
 from django.urls import reverse
 
@@ -727,6 +729,7 @@ def gestionar_balones_eliminar(request, balon_id):
 
 # Telefonista/Bodeguero: crear nuevo pedido
 @login_required
+@never_cache
 def transaccional_pedido(request):
     """Registrar nueva venta o pedido. Registra usuario, origen, estado inicial."""
     """
@@ -742,6 +745,13 @@ def transaccional_pedido(request):
     es_bodeguero = request.user.rol == "bodeguero"
 
     if request.method == "POST":
+        # Verificar token anti-duplicado
+        token_enviado = request.POST.get('form_token')
+        token_sesion = request.session.pop('form_token_pedido', None)
+        if not token_enviado or token_enviado != token_sesion:
+            messages.warning(request, "Este pedido ya fue registrado o el formulario expiró.")
+            return redirect("index")
+
         form_cabecera = PedidoCabeceraForm(request.POST)
         formset = DetalleFormSet(
             request.POST,
@@ -845,10 +855,13 @@ def transaccional_pedido(request):
             form_kwargs={'user': request.user}
         )
 
+    form_token = uuid.uuid4().hex
+    request.session['form_token_pedido'] = form_token
     return render(request, "pedidos/transaccional_pedido.html", {
         "form_cabecera": form_cabecera,
         "formset": formset,
         "es_bodeguero": es_bodeguero,
+        "form_token": form_token,
     })
 
 
@@ -1277,26 +1290,54 @@ def camionero_tomar_pedido(request, pedido_id):
         return resp
 
     try:
-        pedido = Pedido.objects.get(
-            id=pedido_id,
-            estado="pendiente",
-            entregador__isnull=True,
-            origen="telefono"
-        )
-        estado_anterior = pedido.estado
-        pedido.estado = "en_ruta"
-        pedido.entregador = request.user
-        pedido.save()
+        with transaction.atomic():
+            # select_for_update: bloquea la fila hasta que termine la transacción.
+            # Si dos camioneros intentan tomar el mismo pedido al mismo tiempo,
+            # el segundo espera y luego recibe DoesNotExist (ya fue modificado por el primero).
+            pedido = Pedido.objects.select_for_update().get(
+                id=pedido_id,
+                estado="pendiente",
+                entregador__isnull=True,
+                origen="telefono"
+            )
+            estado_anterior = pedido.estado
+            pedido.estado = "en_ruta"
+            pedido.entregador = request.user
+            pedido.save()
 
-        HistorialEstadoPedido.objects.create(
-            pedido=pedido,
-            estado_anterior=estado_anterior,
-            estado_nuevo="en_ruta",
-            cambiado_por=request.user,
-            fecha_cambio=timezone.now(),
-        )
+            HistorialEstadoPedido.objects.create(
+                pedido=pedido,
+                estado_anterior=estado_anterior,
+                estado_nuevo="en_ruta",
+                cambiado_por=request.user,
+                fecha_cambio=timezone.now(),
+            )
+
+            # Auditoría detallada: registro de quién tomó el pedido y desde qué IP
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
+            AuditoriaAccion.registrar(
+                request=request,
+                tipo='PEDIDO_UPDATE',
+                descripcion=f'Camionero {request.user.username} tomó Pedido #{pedido.id} (pendiente → en_ruta)',
+                objeto=pedido,
+                datos_anteriores={'estado': estado_anterior, 'entregador': None},
+                datos_nuevos={'estado': 'en_ruta', 'entregador': request.user.username}
+            )
+            audit_logger.info(
+                f"PEDIDO_TOMAR | #{pedido.id} | Camionero: {request.user.username} | IP: {ip}"
+            )
+
         messages.success(request, f"Pedido #{pedido.id} tomado. Dirígete al domicilio")
     except Pedido.DoesNotExist:
+        # Puede ser race condition (otro camionero lo tomó primero) o pedido inexistente
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
+        security_logger.warning(
+            f"PEDIDO_TOMAR_FAIL | Pedido #{pedido_id} no disponible | "
+            f"Camionero: {request.user.username} | IP: {ip} | "
+            f"(posible race condition o pedido ya tomado)"
+        )
         messages.error(request, "El pedido ya no está disponible o ya fue tomado.")
 
     return redirect("entregas_lista")
@@ -1311,13 +1352,30 @@ def camionero_marcar_entregado(request, pedido_id):
         return resp
 
     try:
-        pedido = Pedido.objects.get(
-            id=pedido_id,
-            estado="en_ruta",
-            entregador=request.user,
-            origen="telefono"
-        )
+        with transaction.atomic():
+            pedido = Pedido.objects.select_for_update().get(
+                id=pedido_id,
+                estado="en_ruta",
+                entregador=request.user,
+                origen="telefono"
+            )
     except Pedido.DoesNotExist:
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
+        # Log detallado: puede revelar si el entregador del pedido es otro camionero
+        try:
+            pedido_real = Pedido.objects.get(id=pedido_id)
+            security_logger.warning(
+                f"PEDIDO_ENTREGAR_FAIL | #{pedido_id} | "
+                f"Solicitado por: {request.user.username} | IP: {ip} | "
+                f"Estado real: {pedido_real.estado} | "
+                f"Entregador real: {pedido_real.entregador}"
+            )
+        except Pedido.DoesNotExist:
+            security_logger.warning(
+                f"PEDIDO_ENTREGAR_FAIL | #{pedido_id} no existe | "
+                f"Solicitado por: {request.user.username} | IP: {ip}"
+            )
         messages.error(request, "El pedido no existe, no está en ruta o no te pertenece.")
         return redirect("entregas_lista")
 
@@ -1331,6 +1389,20 @@ def camionero_marcar_entregado(request, pedido_id):
         estado_nuevo="entregado",
         cambiado_por=request.user,
         fecha_cambio=timezone.now(),
+    )
+
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
+    AuditoriaAccion.registrar(
+        request=request,
+        tipo='PEDIDO_UPDATE',
+        descripcion=f'Camionero {request.user.username} marcó Pedido #{pedido.id} como ENTREGADO',
+        objeto=pedido,
+        datos_anteriores={'estado': estado_anterior, 'entregador': request.user.username},
+        datos_nuevos={'estado': 'entregado', 'entregador': request.user.username}
+    )
+    audit_logger.info(
+        f"PEDIDO_ENTREGAR | #{pedido.id} | Camionero: {request.user.username} | IP: {ip}"
     )
     messages.success(request, f"¡Pedido #{pedido.id} marcado como ENTREGADO exitosamente!")
     return redirect("entregas_lista")
@@ -1447,6 +1519,7 @@ def camionero_cancelar_entrega(request, pedido_id):
 
 # Telefonista: marcar venta como "tarreo" (prepago)
 @login_required
+@never_cache
 def tarreo_pedido(request):
     """Registrar venta prepagada sin entrega (puede ser entregada después)."""
     if request.user.rol != 'camionero':
@@ -1464,6 +1537,13 @@ def tarreo_pedido(request):
     ).order_by('tipo_orden', '-peso_neto_gas')
 
     if request.method == 'POST':
+        # Verificar token anti-duplicado
+        token_enviado = request.POST.get('form_token')
+        token_sesion = request.session.pop('form_token_tarreo', None)
+        if not token_enviado or token_enviado != token_sesion:
+            messages.warning(request, "Esta venta ya fue registrada o el formulario expiró.")
+            return redirect('entregas_mias')
+
         metodo_pago = request.POST.get('metodo_pago')
         direccion_ingresada = request.POST.get('direccion_entrega', '').strip()
 
@@ -1534,8 +1614,11 @@ def tarreo_pedido(request):
         return redirect('entregas_mias')  # o 'entregas_lista'
 
     # GET
+    form_token = uuid.uuid4().hex
+    request.session['form_token_tarreo'] = form_token
     return render(request, 'entregas/tarreo.html', {
         'balones': balones,
+        'form_token': form_token,
     })
 # ──────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════

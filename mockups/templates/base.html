@@ -341,7 +341,7 @@
     </div>
     {% endif %}
 
-    <main class="container py-4 flex-grow-1">
+    <main class="container py-4 flex-grow-1" {% if user.is_authenticated and user.rol == 'camionero' %}style="padding-bottom: 90px !important;"{% endif %}>
         {% block content %}{% endblock %}
     </main>
 
@@ -375,21 +375,14 @@
     </button>
     {% endif %}
 
-    {% if user.rol == "camionero" %}
-    <a href="{% url 'entregas_tarreo' %}"
-       class="btn btn-success btn-lg rounded-circle shadow-lg d-flex align-items-center justify-content-center"
-       style="width: 60px; height: 60px;"
-       title="Nueva venta tarreo">
-        <i class="bi bi-truck fs-4"></i>
-    </a>
-    {% endif %}
-
+    {% if user.rol != "camionero" %}
     <a href="{% url 'index' %}"
        class="btn btn-primary btn-lg rounded-circle shadow-lg d-flex align-items-center justify-content-center"
        style="width: 60px; height: 60px;"
        title="Volver al inicio">
         <i class="bi bi-house-door-fill fs-4"></i>
     </a>
+    {% endif %}
 
 </div>
 
@@ -423,6 +416,43 @@ document.addEventListener('click', function(e) {
     }
 });
 </script>
+
+{% if user.rol == "camionero" %}
+<!-- Barra de navegación inferior para camionero -->
+<style>
+    .camionero-bottom-nav {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    .camionero-bottom-nav a {
+        -webkit-tap-highlight-color: rgba(0,0,0,0.08);
+    }
+</style>
+<nav class="fixed-bottom bg-white border-top shadow-lg camionero-bottom-nav" style="z-index: 1050;">
+    <div class="d-flex" style="height: 68px;">
+        <a href="{% url 'index' %}"
+           class="flex-fill d-flex flex-column align-items-center justify-content-center text-decoration-none {% if request.resolver_match.url_name == 'index' %}text-primary{% else %}text-secondary{% endif %}">
+            <i class="bi bi-house-door-fill fs-3"></i>
+            <span class="fw-semibold" style="font-size:0.7rem;">Inicio</span>
+        </a>
+        <a href="{% url 'entregas_lista' %}"
+           class="flex-fill d-flex flex-column align-items-center justify-content-center text-decoration-none {% if request.resolver_match.url_name == 'entregas_lista' %}text-primary{% else %}text-secondary{% endif %}">
+            <i class="bi bi-truck fs-3"></i>
+            <span class="fw-semibold" style="font-size:0.7rem;">Entregas</span>
+        </a>
+        <a href="{% url 'entregas_mias' %}"
+           class="flex-fill d-flex flex-column align-items-center justify-content-center text-decoration-none {% if request.resolver_match.url_name == 'entregas_mias' %}text-primary{% else %}text-secondary{% endif %}">
+            <i class="bi bi-check-circle-fill fs-3"></i>
+            <span class="fw-semibold" style="font-size:0.7rem;">Mis Entregas</span>
+        </a>
+        <a href="{% url 'entregas_tarreo' %}"
+           class="flex-fill d-flex flex-column align-items-center justify-content-center text-decoration-none text-white bg-success">
+            <i class="bi bi-bag-plus-fill fs-3"></i>
+            <span class="fw-bold" style="font-size:0.7rem;">Tarreo</span>
+        </a>
+    </div>
+</nav>
+{% endif %}
+
 {% endif %}
     <footer class="bg-light border-top mt-auto py-4">
         <div class="container text-center text-muted small">
