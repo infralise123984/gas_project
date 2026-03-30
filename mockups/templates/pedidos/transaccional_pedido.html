@@ -14,6 +14,7 @@
 
     <form method="post" id="pedidoForm">
         {% csrf_token %}
+        <input type="hidden" name="form_token" value="{{ form_token }}">
 
         <!-- Mostrar errores globales del formset -->
         {% if formset.non_form_errors %}

@@ -25,6 +25,7 @@
 
     <form method="post" id="ventaForm">
         {% csrf_token %}
+        <input type="hidden" name="form_token" value="{{ form_token }}">
 
         <!-- ══════════════════════════════════════════════════════ -->
         <!-- SECCIÓN 1: MÉTODO DE PAGO - Fondo azul claro -->
@@ -143,7 +144,7 @@
         </div>
 
         <!-- Botón guardar fijo abajo -->
-        <div class="fixed-bottom bg-white p-3 shadow-lg border-top" style="z-index: 999;">
+        <div class="fixed-bottom bg-white p-3 shadow-lg border-top" style="z-index: 1060; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)) !important; margin-bottom: 68px;">
             <div class="container-fluid" style="max-width: 540px; margin: 0 auto;">
                 <button type="submit" class="btn btn-lg w-100 py-3 fs-5 shadow fw-bold"
                         style="background: linear-gradient(135deg, #198754 0%, #20c997 100%); border: none; color: white;">
