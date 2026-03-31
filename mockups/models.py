@@ -187,6 +187,7 @@ class Pedido(models.Model):
         ("Villa Diego de Almagro",      "[SUR] Villa Diego de Almagro"),
         ("Villa Los Andes",             "[SUR] Villa Los Andes"),
         ("Condominio Brisas del Sur",   "[SUR] Condominio Brisas del Sur"),
+        ("Grecia","[SUR] Grecia"),
         
         # Sector Norte
         ("Villa Tuniche",               "[NORTE] Villa Tuniche"),
