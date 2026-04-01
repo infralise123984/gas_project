@@ -1,8 +1,8 @@
 // Service Worker para GasFácil - Notificaciones Push
 // Este archivo debe estar en la raíz del scope de la PWA
-// sw.js - Versión 1.1
+// sw.js - Versión 1.2
 
-const CACHE_NAME = 'gasfacil-v2';
+const CACHE_NAME = 'gasfacil-v3';
 const OFFLINE_URL = '/';
 
 // Archivos a cachear para funcionamiento offline
@@ -140,6 +140,23 @@ self.addEventListener('notificationclick', (event) => {
 // ─────────────────────────────────────────────────
 self.addEventListener('notificationclose', (event) => {
     console.log('[SW] Notificación cerrada:', event.notification.tag);
+});
+
+// ─────────────────────────────────────────────────
+// RENOVACIÓN DE SUSCRIPCIÓN PUSH
+// ─────────────────────────────────────────────────
+self.addEventListener('pushsubscriptionchange', (event) => {
+    console.warn('[SW] Suscripción push cambió o expiró');
+
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            clientList.forEach((client) => {
+                client.postMessage({
+                    type: 'PUSH_RESUBSCRIBE_REQUIRED'
+                });
+            });
+        })
+    );
 });
 
 // ─────────────────────────────────────────────────
