@@ -9,6 +9,7 @@
     const VAPID_PUBLIC_KEY = window.VAPID_PUBLIC_KEY || null;
     const PUSH_SUBSCRIBE_URL = '/push/subscribe/';
     const PUSH_UNSUBSCRIBE_URL = '/push/unsubscribe/';
+    const PUSH_STATUS_URL = '/push/status/';
 
     // ─────────────────────────────────────────────────
     // UTILIDADES
@@ -44,6 +45,59 @@
             }
         }
         return cookieValue;
+    }
+
+    function getSubscriptionKeys(subscription) {
+        return {
+            p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
+            auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
+        };
+    }
+
+    async function syncSubscriptionWithServer(subscription) {
+        const response = await fetch(PUSH_SUBSCRIBE_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                endpoint: subscription.endpoint,
+                keys: getSubscriptionKeys(subscription)
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Error al sincronizar suscripción');
+        }
+
+        return data;
+    }
+
+    async function getServerSubscriptionStatus() {
+        try {
+            const response = await fetch(PUSH_STATUS_URL, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                return { available: false, hasSubscriptions: false };
+            }
+
+            const data = await response.json();
+            return {
+                available: true,
+                hasSubscriptions: !!data.has_subscriptions,
+                count: data.subscription_count || 0
+            };
+        } catch (error) {
+            console.warn('[Push] No se pudo obtener estado del servidor:', error.message);
+            return { available: false, hasSubscriptions: false };
+        }
     }
 
     // ─────────────────────────────────────────────────
@@ -113,25 +167,10 @@
                 console.log('[Push] Suscripción existente encontrada');
             }
 
-            // Enviar suscripción al servidor
-            const response = await fetch(PUSH_SUBSCRIBE_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCookie('csrftoken')
-                },
-                body: JSON.stringify({
-                    endpoint: subscription.endpoint,
-                    keys: {
-                        p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
-                        auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
-                    }
-                })
-            });
+            // Enviar o reactivar suscripción en el servidor
+            const data = await syncSubscriptionWithServer(subscription);
 
-            const data = await response.json();
-            
-            if (response.ok && data.success) {
+            if (data.success) {
                 console.log('[Push] Suscripción guardada en servidor');
                 return { success: true, message: 'Notificaciones activadas correctamente' };
             } else {
@@ -192,10 +231,15 @@
             const permission = Notification.permission;
             const registration = await navigator.serviceWorker.ready;
             const subscription = await registration.pushManager.getSubscription();
+            const serverStatus = await getServerSubscriptionStatus();
+            const localSubscribed = !!subscription;
+            const subscribed = localSubscribed && (serverStatus.hasSubscriptions || !serverStatus.available);
             
             return {
                 supported: true,
-                subscribed: !!subscription,
+                subscribed: subscribed,
+                localSubscribed: localSubscribed,
+                serverSubscribed: serverStatus.hasSubscriptions,
                 permission: permission
             };
         } catch (error) {
@@ -217,14 +261,39 @@
         const registration = await navigator.serviceWorker.ready;
         console.log('[Push] Service Worker activo:', registration.active?.state);
 
-        // Verificar estado actual
         const status = await checkSubscriptionStatus();
         console.log('[Push] Estado actual:', status);
 
+        const localSubscription = await registration.pushManager.getSubscription();
+
+        if (window.AUTO_SUBSCRIBE_PUSH && status.permission === 'granted' && localSubscription) {
+            try {
+                await syncSubscriptionWithServer(localSubscription);
+                console.log('[Push] Suscripción local sincronizada con servidor');
+            } catch (error) {
+                console.warn('[Push] Falló sincronización inicial:', error.message);
+            }
+        }
+
         // Si es camionero y tiene permiso pero no está suscrito, suscribir automáticamente
-        if (status.permission === 'granted' && !status.subscribed && window.AUTO_SUBSCRIBE_PUSH) {
+        if (status.permission === 'granted' && (!status.localSubscribed || !status.serverSubscribed) && window.AUTO_SUBSCRIBE_PUSH) {
             console.log('[Push] Auto-suscribiendo...');
             await subscribeToPush();
+        }
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', async (event) => {
+                if (event?.data?.type !== 'PUSH_RESUBSCRIBE_REQUIRED') {
+                    return;
+                }
+
+                if (!window.AUTO_SUBSCRIBE_PUSH || Notification.permission !== 'granted') {
+                    return;
+                }
+
+                console.log('[Push] SW solicitó re-suscripción, ejecutando recuperación...');
+                await subscribeToPush();
+            });
         }
     }
 

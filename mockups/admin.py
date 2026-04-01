@@ -360,8 +360,7 @@ class PushSubscriptionAdmin(admin.ModelAdmin):
     search_fields = ('usuario__username', 'usuario__first_name', 'usuario__last_name', 'endpoint')
     readonly_fields = ('endpoint', 'p256dh', 'auth', 'user_agent', 'creada_el', 'actualizada_el')
     list_per_page = 25
-    date_hierarchy = 'creada_el'
-    
+
     def dispositivo(self, obj):
         """Muestra el tipo de dispositivo basado en el user agent."""
         if 'Mobile' in obj.user_agent or 'Android' in obj.user_agent or 'iPhone' in obj.user_agent:

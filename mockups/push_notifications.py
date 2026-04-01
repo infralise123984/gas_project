@@ -20,6 +20,39 @@ except ImportError:
 audit_logger = logging.getLogger('audit')
 
 
+def _ubicacion_pedido(pedido):
+    """
+    Retorna la ubicación legible para notificaciones.
+    Prioriza dirección de entrega y usa sector como fallback.
+    """
+    direccion = (pedido.direccion_entrega or '').strip()
+    if direccion:
+        return direccion
+
+    sector = (pedido.sector or '').strip()
+    if sector:
+        return sector
+
+    return 'Ubicación por confirmar'
+
+
+def _resumen_ubicaciones_pedidos(pedidos_qs, max_items=3, max_len=38):
+    """
+    Genera un resumen corto de direcciones para notificaciones agregadas.
+    """
+    ubicaciones = []
+    for pedido in pedidos_qs[:max_items]:
+        texto = _ubicacion_pedido(pedido)
+        if len(texto) > max_len:
+            texto = f"{texto[:max_len - 1].rstrip()}..."
+        ubicaciones.append(texto)
+
+    if not ubicaciones:
+        return 'Direcciones: sin detalle'
+
+    return f"Direcciones: {', '.join(ubicaciones)}"
+
+
 def get_vapid_keys():
     """
     Obtiene las claves VAPID desde settings.
@@ -148,12 +181,13 @@ def notificar_nuevo_pedido(pedido):
     else:
         items = "Ver detalles"
     
-    body = f"📍 {pedido.sector}\n{items}"
+    body = f"📍 {_ubicacion_pedido(pedido)}\n{items}"
     url = "/entregas/"  # Vista de entregas del camionero
     tag = f"pedido-{pedido.id}-{int(time.time())}"
     
     enviados = 0
     errores_suscripcion = []
+    errores_detalle = []
     
     for sub in suscripciones:
         subscription_info = {
@@ -177,11 +211,16 @@ def notificar_nuevo_pedido(pedido):
             enviados += 1
         elif error == 'subscription_expired':
             errores_suscripcion.append(sub.id)
+            ua_resumido = (sub.user_agent or 'sin_user_agent')[:80]
+            errores_detalle.append(f"{sub.usuario.username}|{ua_resumido}")
     
     # Desactivar suscripciones expiradas
     if errores_suscripcion:
         PushSubscription.objects.filter(id__in=errores_suscripcion).update(activa=False)
-        audit_logger.info(f"PUSH_CLEANUP | Desactivadas {len(errores_suscripcion)} suscripciones expiradas")
+        afectados = '; '.join(errores_detalle[:10])
+        audit_logger.info(
+            f"PUSH_CLEANUP | Desactivadas {len(errores_suscripcion)} suscripciones expiradas | Afectados: {afectados}"
+        )
     
     audit_logger.info(f"PUSH_PEDIDO | #{pedido.id} -> {enviados}/{suscripciones.count()} camioneros notificados")
     return enviados
@@ -215,7 +254,7 @@ def notificar_recordatorio_pendientes():
         usuario__rol='camionero',
         usuario__is_active=True,
         activa=True
-    )
+    ).select_related('usuario')
     
     if not suscripciones.exists():
         return {'enviados': 0, 'pedidos': pedidos_pendientes.count()}
@@ -224,14 +263,13 @@ def notificar_recordatorio_pendientes():
     count = pedidos_pendientes.count()
     title = f'⏰ {count} pedido{"s" if count > 1 else ""} pendiente{"s" if count > 1 else ""}'
     
-    # Listar sectores únicos
-    sectores = list(pedidos_pendientes.values_list('sector', flat=True).distinct()[:3])
-    body = f"Sectores: {', '.join(sectores)}"
-    if len(sectores) < pedidos_pendientes.values_list('sector', flat=True).distinct().count():
+    body = _resumen_ubicaciones_pedidos(pedidos_pendientes)
+    if count > 3:
         body += " y más..."
     
     enviados = 0
     errores = []
+    errores_detalle = []
     
     for sub in suscripciones:
         subscription_info = {
@@ -255,10 +293,16 @@ def notificar_recordatorio_pendientes():
             enviados += 1
         elif error == 'subscription_expired':
             errores.append(sub.id)
+            ua_resumido = (sub.user_agent or 'sin_user_agent')[:80]
+            errores_detalle.append(f"{sub.usuario.username}|{ua_resumido}")
     
     # Limpiar suscripciones expiradas
     if errores:
         PushSubscription.objects.filter(id__in=errores).update(activa=False)
+        afectados = '; '.join(errores_detalle[:10])
+        audit_logger.info(
+            f"PUSH_CLEANUP_RECORDATORIO | Desactivadas {len(errores)} suscripciones expiradas | Afectados: {afectados}"
+        )
     
     audit_logger.info(f"PUSH_RECORDATORIO | {count} pedidos -> {enviados} notificaciones enviadas")
     
