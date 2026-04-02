@@ -6,13 +6,18 @@
 {% block content %}
 <div class="container mt-4 mb-5 px-3">
 
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
-        <h2 class="text-primary fw-bold mb-0">
-            <i class="bi bi-history me-2"></i>Historial de Sobres
-        </h2>
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center mb-4 gap-3">
+        <div>
+            <h2 class="text-primary fw-bold mb-1">
+                <i class="bi bi-history me-2"></i>Historial de Sobres
+            </h2>
+            <p class="text-muted mb-0">
+                Revisa sobres abiertos y cerrados por fecha, con accesos rapidos para editar o imprimir.
+            </p>
+        </div>
         <div class="d-flex gap-2 flex-wrap">
             <a href="{% url 'sobres_lista' %}" class="btn btn-primary">
-                <i class="bi bi-arrow-left me-2"></i>Hoy
+                <i class="bi bi-journal-text me-2"></i>Sobres de Hoy
             </a>
             <a href="{% url 'reportes_ventas' %}" class="btn btn-outline-secondary">
                 <i class="bi bi-graph-up me-2"></i>Reportes
@@ -20,32 +25,45 @@
         </div>
     </div>
 
-    <!-- Selector de fecha -->
-    <div class="card shadow-sm border-0 mb-4">
+    <div class="card shadow-sm border-0 mb-4 bg-light-subtle">
         <div class="card-body p-4">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+                <div>
+                    <div class="text-uppercase small text-muted fw-semibold">Fecha consultada</div>
+                    <div class="fs-4 fw-bold text-primary">{{ fecha_seleccionada|date:"l d \d\e F \d\e Y"|title }}</div>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="{% url 'sobres_historial' %}?fecha={{ fecha_anterior|date:'Y-m-d' }}" class="btn btn-outline-primary">
+                        <i class="bi bi-chevron-left me-1"></i>Día anterior
+                    </a>
+                    <a href="{% url 'sobres_historial' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-calendar-day me-1"></i>Hoy
+                    </a>
+                    <a href="{% url 'sobres_historial' %}?fecha={{ fecha_siguiente|date:'Y-m-d' }}" class="btn btn-outline-primary">
+                        Día siguiente<i class="bi bi-chevron-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+
             <form method="get" class="row g-3 align-items-end">
                 <div class="col-md-5 col-lg-4">
                     <label class="form-label fw-bold">
-                        <i class="bi bi-calendar-event me-1"></i>Fecha de los sobres
+                        <i class="bi bi-calendar-event me-1"></i>Buscar otra fecha
                     </label>
                     <input type="date" name="fecha" class="form-control form-control-lg"
                            value="{{ fecha_seleccionada|default:hoy|date:'Y-m-d' }}">
                 </div>
                 <div class="col-md-4 col-lg-3 d-flex gap-2">
                     <button type="submit" class="btn btn-primary btn-lg flex-fill">
-                        <i class="bi bi-search"></i> Ver
+                        <i class="bi bi-search me-1"></i>Ver historial
                     </button>
                     <a href="{% url 'sobres_historial' %}" class="btn btn-outline-secondary btn-lg">
-                        <i class="bi bi-arrow-counterclockwise"></i> Hoy
+                        <i class="bi bi-arrow-counterclockwise"></i>
                     </a>
                 </div>
             </form>
         </div>
     </div>
-
-    <h4 class="text-center mb-4 fw-bold">
-        Sobres del día <span class="text-primary">{{ fecha_seleccionada|default:hoy|date|title }}</span>
-    </h4>
 
     {% if messages %}
     <div class="mb-4">
@@ -58,32 +76,108 @@
     </div>
     {% endif %}
 
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Sobres</div>
+                    <div class="fs-3 fw-bold text-primary">{{ total_sobres }}</div>
+                    <div class="small text-muted">Total en la fecha seleccionada</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Cerrados</div>
+                    <div class="fs-3 fw-bold text-success">{{ total_cerrados }}</div>
+                    <div class="small text-muted">Listos para consulta o impresion</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Abiertos</div>
+                    <div class="fs-3 fw-bold text-warning">{{ total_abiertos }}</div>
+                    <div class="small text-muted">Aun admiten ajustes o cierre</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Monto declarado</div>
+                    <div class="fs-3 fw-bold text-dark">${{ total_declarado|intcomma }}</div>
+                    <div class="small text-muted">Suma declarada del dia</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not total_sobres %}
+    <div class="card shadow-sm border-0 text-center py-5 mb-4">
+        <div class="card-body">
+            <i class="bi bi-inbox display-4 text-muted d-block mb-3"></i>
+            <h4 class="fw-bold mb-2">No hay sobres para esta fecha</h4>
+            <p class="text-muted mb-4">Puedes cambiar la fecha o ir al listado para crear un sobre correspondiente a este dia.</p>
+            <div class="d-flex justify-content-center gap-2 flex-wrap">
+                <a href="{% url 'sobres_lista' %}?fecha={{ fecha_seleccionada|date:'Y-m-d' }}" class="btn btn-primary">
+                    <i class="bi bi-plus-circle me-2"></i>Abrir sobres de esta fecha
+                </a>
+                <a href="{% url 'sobres_historial' %}" class="btn btn-outline-secondary">
+                    Volver a hoy
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- SOBRES DE BODEGA -->
     <div class="mb-5">
-        <h5 class="fw-bold text-primary mb-3">
-            <i class="bi bi-shop-window me-2"></i>Bodega (ventas locales)
-        </h5>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <h5 class="fw-bold text-primary mb-0">
+                <i class="bi bi-shop-window me-2"></i>Bodega
+            </h5>
+            <span class="badge text-bg-light border px-3 py-2">{{ total_bodega }} sobre{{ total_bodega|pluralize }}</span>
+        </div>
         {% for sobre in sobres_bodega %}
-        <div class="card mb-3 shadow-sm {% if sobre.cerrado %}border-success{% else %}border-warning{% endif %}">
-            <div class="card-body d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
-                <div>
-                    <h5 class="mb-1">
-                        Sobre Bodega {{ sobre.fecha_correspondiente|date:"d/m/Y" }}
-                        {% if sobre.cerrado %}
-                        <span class="badge bg-success ms-2">CERRADO</span>
-                        {% else %}
-                        <span class="badge bg-warning text-dark ms-2">ABIERTO</span>
-                        {% endif %}
-                    </h5>
-                    <small class="text-muted">
-                        <i class="bi bi-person me-1"></i>{{ sobre.creado_por.get_full_name|default:sobre.creado_por.username }}
-                        {% if sobre.declarado_el %}<i class="bi bi-clock ms-2 me-1"></i>{{ sobre.declarado_el|date:"H:i" }}{% endif %}
-                    </small>
+        <div class="card mb-3 shadow-sm border-0 overflow-hidden">
+            <div class="card-body py-3">
+                <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                            <h5 class="mb-0">Sobre Bodega #{{ sobre.id }}</h5>
+                            {% if sobre.cerrado %}
+                            <span class="badge bg-success">Cerrado</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Abierto</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-muted small d-flex flex-wrap gap-3 mb-2">
+                            <span><i class="bi bi-calendar-event me-1"></i>{{ sobre.fecha_correspondiente|date:"d/m/Y" }}</span>
+                            <span><i class="bi bi-person me-1"></i>{{ sobre.creado_por.get_full_name|default:sobre.creado_por.username|default:"Sin responsable" }}</span>
+                            <span><i class="bi bi-clock-history me-1"></i>Creado {{ sobre.fecha|date:"H:i" }}</span>
+                            {% if sobre.declarado_el %}<span><i class="bi bi-lock me-1"></i>Cerrado {{ sobre.declarado_el|date:"H:i" }}</span>{% endif %}
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 small">
+                            <span class="badge text-bg-light border">Lineas: {{ sobre.lineas.count }}</span>
+                            <span class="badge text-bg-light border">App: ${{ sobre.monto_calculado_app|intcomma }}</span>
+                            <span class="badge text-bg-light border">Declarado: ${{ sobre.monto_declarado|intcomma }}</span>
+                            <span class="badge {% if sobre.diferencia == 0 %}text-bg-success{% elif sobre.diferencia > 0 %}text-bg-warning{% else %}text-bg-danger{% endif %}">
+                                Diferencia: ${{ sobre.diferencia|intcomma }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap align-items-start">
+                        <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}" class="btn btn-primary btn-sm px-4">
+                            <i class="bi bi-pencil-square me-2"></i>Ver
+                        </a>
+                        <a href="{% url 'sobres_imprimir' sobre.id %}" class="btn btn-outline-secondary btn-sm px-4">
+                            <i class="bi bi-printer me-2"></i>Imprimir
+                        </a>
+                    </div>
                 </div>
-                <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}"
-                   class="btn btn-primary btn-sm px-4">
-                    <i class="bi bi-pencil-square me-2"></i>Ver / Editar
-                </a>
             </div>
         </div>
         {% empty %}
@@ -95,32 +189,69 @@
 
     <!-- SOBRES POR CAMIONERO -->
     <div class="mb-5">
-        <h5 class="fw-bold text-primary mb-3">
-            <i class="bi bi-truck me-2"></i>Camioneros
-        </h5>
-        {% for camionero, sobres in sobres_por_camionero.items %}
-        <div class="mb-4">
-            <h6 class="fw-semibold mb-3 text-dark ps-2 border-start border-primary border-3">
-                {{ camionero.get_full_name|default:camionero.username }}
-            </h6>
-            {% for sobre in sobres %}
-            <div class="card mb-2 shadow-sm {% if sobre.cerrado %}border-success{% else %}border-warning{% endif %}">
-                <div class="card-body d-flex justify-content-between align-items-center py-2 flex-wrap gap-2">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <h5 class="fw-bold text-primary mb-0">
+                <i class="bi bi-truck me-2"></i>Camioneros
+            </h5>
+            <span class="badge text-bg-light border px-3 py-2">{{ total_camion }} sobre{{ total_camion|pluralize }}</span>
+        </div>
+        {% for grupo in grupos_camioneros %}
+        <div class="card shadow-sm border-0 mb-4 overflow-hidden">
+            <div class="card-header bg-body-tertiary py-3">
+                <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 align-items-lg-center">
                     <div>
-                        <strong>Sobre {{ sobre.fecha_correspondiente|date:"d/m/Y" }}</strong>
-                        {% if sobre.cerrado %}
-                        <span class="badge bg-success ms-2">CERRADO</span>
-                        {% else %}
-                        <span class="badge bg-warning text-dark ms-2">ABIERTO</span>
-                        {% endif %}
+                        <h6 class="fw-bold mb-1">
+                            <i class="bi bi-person-badge me-2 text-primary"></i>{{ grupo.camionero.get_full_name|default:grupo.camionero.username }}
+                        </h6>
+                        <div class="small text-muted d-flex flex-wrap gap-2">
+                            <span>{{ grupo.total }} sobre{{ grupo.total|pluralize }}</span>
+                            <span>{{ grupo.cerrados }} cerrado{{ grupo.cerrados|pluralize }}</span>
+                            <span>{{ grupo.abiertos }} abierto{{ grupo.abiertos|pluralize }}</span>
+                            <span>Total declarado: ${{ grupo.total_declarado|intcomma }}</span>
+                        </div>
                     </div>
-                    <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}"
-                       class="btn btn-primary btn-sm px-4">
-                        <i class="bi bi-pencil-square me-2"></i>Ver / Editar
+                    <a href="{% url 'sobres_lista' %}?fecha={{ fecha_seleccionada|date:'Y-m-d' }}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-plus-circle me-2"></i>Abrir sobres de esta fecha
                     </a>
                 </div>
             </div>
-            {% endfor %}
+            <div class="card-body py-3">
+                {% for sobre in grupo.sobres %}
+                <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 {% if not forloop.last %}border-bottom pb-3 mb-3{% endif %}">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                            <strong>Sobre #{{ sobre.id }}</strong>
+                            {% if sobre.cerrado %}
+                            <span class="badge bg-success">Cerrado</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Abierto</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-muted small d-flex flex-wrap gap-3 mb-2">
+                            <span><i class="bi bi-calendar-event me-1"></i>{{ sobre.fecha_correspondiente|date:"d/m/Y" }}</span>
+                            <span><i class="bi bi-clock-history me-1"></i>Creado {{ sobre.fecha|date:"H:i" }}</span>
+                            {% if sobre.declarado_el %}<span><i class="bi bi-lock me-1"></i>Cerrado {{ sobre.declarado_el|date:"H:i" }}</span>{% endif %}
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 small">
+                            <span class="badge text-bg-light border">Lineas: {{ sobre.lineas.count }}</span>
+                            <span class="badge text-bg-light border">App: ${{ sobre.monto_calculado_app|intcomma }}</span>
+                            <span class="badge text-bg-light border">Declarado: ${{ sobre.monto_declarado|intcomma }}</span>
+                            <span class="badge {% if sobre.diferencia == 0 %}text-bg-success{% elif sobre.diferencia > 0 %}text-bg-warning{% else %}text-bg-danger{% endif %}">
+                                Diferencia: ${{ sobre.diferencia|intcomma }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap align-items-start">
+                        <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}" class="btn btn-primary btn-sm px-4">
+                            <i class="bi bi-pencil-square me-2"></i>Ver
+                        </a>
+                        <a href="{% url 'sobres_imprimir' sobre.id %}" class="btn btn-outline-secondary btn-sm px-4">
+                            <i class="bi bi-printer me-2"></i>Imprimir
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
         </div>
         {% empty %}
         <div class="alert alert-light text-center py-4">
@@ -136,9 +267,9 @@
         </h5>
 
         <div class="d-flex flex-wrap justify-content-center gap-3">
-            <a href="{% url 'sobres_lista' %}"
+            <a href="{% url 'sobres_lista' %}?fecha={{ fecha_seleccionada|date:'Y-m-d' }}"
                class="btn btn-success btn-lg px-5 py-3">
-                <i class="bi bi-arrow-right me-2"></i>Ir a Sobres de Hoy
+                <i class="bi bi-arrow-right me-2"></i>Abrir sobres de esta fecha
             </a>
         </div>
     </div>

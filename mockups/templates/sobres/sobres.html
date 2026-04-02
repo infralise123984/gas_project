@@ -133,6 +133,18 @@
                 </div>
                 {% endif %}
 
+                {% if not sobre.cerrado %}
+                <div class="alert alert-secondary d-flex align-items-center justify-content-between gap-3 mb-4 py-2 px-3 small"
+                     id="sobreSyncStatus"
+                     data-refresh-url="{% url 'sobres_refrescar' sobre.id %}">
+                    <span>
+                        <i class="bi bi-arrow-repeat me-2"></i>
+                        Sincronización automática activa. El sobre revisa pedidos nuevos cada 60 segundos.
+                    </span>
+                    <span class="fw-semibold text-nowrap" id="sobreSyncTimestamp">Última revisión: {{ hora_actual }}</span>
+                </div>
+                {% endif %}
+
                 <div class="row">
                     <!-- COLUMNA IZQUIERDA: VENTAS -->
                     <div class="col-lg-8">
@@ -153,6 +165,8 @@
                                 <tbody>
                                     {% for form in formset_lineas %}
                                     <tr data-index="{{ forloop.counter0 }}"
+                                        data-linea-id="{{ form.instance.id }}"
+                                        data-last-calculada="{{ form.instance.cantidad_calculada|default:0 }}"
                                         data-precio="{{ form.instance.precio_venta_unitario|unlocalize }}"
                                         data-peso="{{ form.instance.balon.peso_neto_gas|unlocalize }}">
                                         <td class="fw-bold align-middle">
@@ -173,6 +187,10 @@
                                         </td>
                                         <td class="text-center align-middle">
                                             {{ form.id }}
+                                            <input type="hidden"
+                                                   name="calc_snapshot_{{ form.instance.id }}"
+                                                   value="{{ form.instance.cantidad_calculada|default:0 }}"
+                                                   class="calc-snapshot-input">
                                             {% if sobre.cerrado %}
                                                 <span class="fw-bold">{{ form.instance.cantidad_declarada }}</span>
                                             {% else %}
@@ -656,13 +674,98 @@ function updateTotals() {
     }
 }
 
+function syncDeclaradaInputState(input) {
+    const row = input.closest('tr[data-linea-id]');
+    if (!row) return;
+
+    const currentCalc = parseInt(row.dataset.lastCalculada) || 0;
+    const currentValue = parseInt(input.value) || 0;
+    input.dataset.userEdited = currentValue === currentCalc ? '0' : '1';
+}
+
+function applyLineaSync(linea) {
+    const row = document.querySelector(`#sobreTable tbody tr[data-linea-id="${linea.id}"]`);
+    if (!row) return;
+
+    const calculadaCelda = row.querySelector('.calculada-celda');
+    const inputDeclarada = row.querySelector('input[name*="cantidad_declarada"]');
+    const snapshotInput = row.querySelector('.calc-snapshot-input');
+    const previousCalc = parseInt(row.dataset.lastCalculada) || 0;
+    const nextCalc = parseInt(linea.cantidad_calculada) || 0;
+
+    if (calculadaCelda) {
+        calculadaCelda.textContent = nextCalc;
+    }
+
+    if (inputDeclarada) {
+        const currentDeclarada = parseInt(inputDeclarada.value) || 0;
+        const userEdited = inputDeclarada.dataset.userEdited === '1';
+
+        if (!userEdited || currentDeclarada === previousCalc) {
+            inputDeclarada.value = parseInt(linea.cantidad_declarada) || 0;
+        }
+    }
+
+    row.dataset.lastCalculada = nextCalc;
+    if (snapshotInput) {
+        snapshotInput.value = nextCalc;
+    }
+
+    if (inputDeclarada) {
+        syncDeclaradaInputState(inputDeclarada);
+    }
+}
+
+async function refreshSobreDinamicamente() {
+    const syncStatus = document.getElementById('sobreSyncStatus');
+    if (!syncStatus) return;
+
+    try {
+        const response = await fetch(syncStatus.dataset.refreshUrl, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('No se pudo refrescar el sobre');
+        }
+
+        const data = await response.json();
+        if (!data.ok || data.cerrado) {
+            return;
+        }
+
+        data.lineas.forEach(applyLineaSync);
+        updateTotals();
+
+        const timestamp = document.getElementById('sobreSyncTimestamp');
+        if (timestamp && data.sincronizado_en) {
+            timestamp.textContent = `Última revisión: ${data.sincronizado_en}`;
+        }
+
+        syncStatus.classList.remove('alert-danger');
+        syncStatus.classList.add('alert-secondary');
+    } catch (error) {
+        const timestamp = document.getElementById('sobreSyncTimestamp');
+        if (timestamp) {
+            timestamp.textContent = 'Última revisión: error de conexión';
+        }
+        syncStatus.classList.remove('alert-secondary');
+        syncStatus.classList.add('alert-danger');
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════
 // EVENT LISTENERS
 // ══════════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
     // Agregar listeners a inputs de cantidad declarada
     document.querySelectorAll('input[name*="cantidad_declarada"]').forEach(input => {
+        syncDeclaradaInputState(input);
+        input.addEventListener('change', () => syncDeclaradaInputState(input));
         input.addEventListener('input', updateTotals);
+        input.addEventListener('input', () => syncDeclaradaInputState(input));
     });
     
     // Agregar listeners a inputs de montos
@@ -672,6 +775,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Calcular totales al cargar la página
     updateTotals();
+
+    if (document.getElementById('sobreSyncStatus')) {
+        window.setInterval(refreshSobreDinamicamente, 60000);
+    }
 });
 
 // ══════════════════════════════════════════════════════════════════
