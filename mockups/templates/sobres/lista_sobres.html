@@ -165,6 +165,7 @@
                     <input type="hidden" name="bodega" id="modalBodegaInput" value="">
                     <input type="hidden" name="camionero" id="modalCamioneroInput" value="">
                     <input type="hidden" name="fecha" id="modalFechaFinalInput" value="{{ fecha_filtro|date:'Y-m-d' }}">
+                    <input type="hidden" name="fecha_creacion" id="modalFechaCreacionInput" value="{{ fecha_filtro|date:'Y-m-d' }}">
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold d-block mb-2">¿A que dia corresponde el sobre?</label>
@@ -210,6 +211,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const modalBodegaInput = document.getElementById('modalBodegaInput');
     const modalCamioneroInput = document.getElementById('modalCamioneroInput');
     const modalFechaFinalInput = document.getElementById('modalFechaFinalInput');
+    const modalFechaCreacionInput = document.getElementById('modalFechaCreacionInput');
     const modalFechaOtraInput = document.getElementById('modalFechaOtraInput');
     const opcionFechaHoy = document.getElementById('opcionFechaHoy');
     const opcionFechaOtra = document.getElementById('opcionFechaOtra');
@@ -241,6 +243,7 @@ document.addEventListener('DOMContentLoaded', function() {
             modalTargetLabel.textContent = targetLabel;
             modalBodegaInput.value = tipo === 'bodega' ? '1' : '';
             modalCamioneroInput.value = tipo === 'camion' ? camioneroId : '';
+            modalFechaCreacionInput.value = fechaActual || hoy;
             modalFechaOtraInput.value = fechaActual || hoy;
             textoFechaHoy.textContent = `Usar la fecha de hoy (${hoy.split('-').reverse().join('/')}).`;
 

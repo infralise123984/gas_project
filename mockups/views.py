@@ -2699,6 +2699,19 @@ def lista_sobres_diarios(request):
         'sobres_camioneros': sobres_camioneros,
     })
 
+
+def get_rango_utc_para_fecha(fecha_objetivo):
+    """Retorna el inicio y fin del dia en UTC para una fecha Chile."""
+    tz_chile = ZoneInfo('America/Santiago')
+    tz_utc = ZoneInfo('UTC')
+
+    inicio_dia = datetime.combine(fecha_objetivo, time.min)
+    inicio_dia = timezone.make_aware(inicio_dia, tz_chile).astimezone(tz_utc)
+    fin_dia = datetime.combine(fecha_objetivo, time.max)
+    fin_dia = timezone.make_aware(fin_dia, tz_chile).astimezone(tz_utc)
+
+    return inicio_dia, fin_dia
+
 # Jefe/Bodeguero: editar sobre diario
 @login_required
 def editar_sobre_diario(request):
@@ -2733,6 +2746,7 @@ def editar_sobre_diario(request):
         es_bodega = request.GET.get('bodega') == '1'
         camionero_id = request.GET.get('camionero')
         fecha_query = (request.GET.get('fecha') or '').strip()
+        fecha_creacion_query = (request.GET.get('fecha_creacion') or '').strip()
         
         if es_bodega:
             tipo_sobre = 'bodega'
@@ -2752,13 +2766,33 @@ def editar_sobre_diario(request):
         except ValueError:
             messages.warning(request, "La fecha indicada no es valida. Se usara la fecha de hoy.")
             fecha_objetivo = today_chile()
+
+        try:
+            fecha_creacion_objetivo = (
+                datetime.strptime(fecha_creacion_query, "%Y-%m-%d").date()
+                if fecha_creacion_query else today_chile()
+            )
+        except ValueError:
+            messages.warning(request, "La fecha de creacion indicada no es valida. Se usara la fecha de hoy.")
+            fecha_creacion_objetivo = today_chile()
+
+        inicio_creacion, fin_creacion = get_rango_utc_para_fecha(fecha_creacion_objetivo)
         
-        # Buscar el sobre más reciente de esa fecha (puede estar abierto o cerrado)
-        sobre = SobreDiario.objects.filter(
+        sobres_candidatos = SobreDiario.objects.filter(
             fecha_correspondiente=fecha_objetivo,
             tipo=tipo_sobre,
             trabajador=trabajador
-        ).order_by('-id').first()  # El más reciente
+        )
+
+        # Preferir sobres creados en la jornada desde donde el usuario esta trabajando.
+        sobre = sobres_candidatos.filter(
+            fecha__gte=inicio_creacion,
+            fecha__lte=fin_creacion,
+        ).order_by('-fecha', '-id').first()
+
+        # Compatibilidad: si no existe uno creado en esa jornada, usar el mas reciente historico.
+        if not sobre:
+            sobre = sobres_candidatos.order_by('-fecha', '-id').first()
         
         if sobre:
             # Existe un sobre del día, usarlo (el usuario decide si crear otro)
