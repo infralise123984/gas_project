@@ -4,7 +4,7 @@
 # 1. IMPORTACIONES
 # ──────────────────────────────────────────────────────────────
 # Django core y utilidades
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from json import dumps
 from calendar import monthrange
 from django.utils import timezone
@@ -77,6 +77,124 @@ def today_chile():
     """Retorna fecha actual en Chile (evita problemas de UTC)."""
     return now_chile().date()
 
+def get_balones_activos_ordenados():
+    """Retorna los balones activos en el mismo orden usado por los sobres."""
+    return TipoBalon.objects.filter(activo=True).annotate(
+        tipo_orden=Case(
+            When(tipo_gas='normal', then=Value(0)),
+            When(tipo_gas='catalitico', then=Value(1)),
+            When(tipo_gas='aluminio', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    ).order_by('tipo_orden', '-peso_neto_gas')
+
+def get_pedidos_queryset_para_sobre(sobre):
+    """Construye el queryset de pedidos que alimenta el sobre."""
+    fecha_para_calcular = sobre.fecha_correspondiente or sobre.fecha.astimezone(ZoneInfo('America/Santiago')).date()
+    tz_chile = ZoneInfo('America/Santiago')
+    tz_utc = ZoneInfo('UTC')
+
+    inicio_dia = datetime.combine(fecha_para_calcular, time.min)
+    inicio_dia = timezone.make_aware(inicio_dia, tz_chile).astimezone(tz_utc)
+    fin_dia = datetime.combine(fecha_para_calcular, time.max)
+    fin_dia = timezone.make_aware(fin_dia, tz_chile).astimezone(tz_utc)
+
+    if sobre.tipo == 'bodega':
+        return Pedido.objects.filter(
+            fecha__gte=inicio_dia,
+            fecha__lte=fin_dia,
+            origen='local',
+            estado='entregado'
+        )
+
+    return Pedido.objects.filter(
+        fecha__gte=inicio_dia,
+        fecha__lte=fin_dia,
+        estado='entregado',
+        entregador=sobre.trabajador
+    )
+
+def sincronizar_sobre_desde_pedidos(sobre, crear_lineas_faltantes=True):
+    """
+    Refresca cantidades calculadas del sobre abierto usando los pedidos vigentes.
+    Si la cantidad declarada seguía igual a la calculada anterior, también la actualiza.
+    """
+    if not sobre.pk or sobre.cerrado:
+        return False
+
+    balones_activos = list(get_balones_activos_ordenados())
+    pedidos_qs = get_pedidos_queryset_para_sobre(sobre)
+    cantidades_por_balon = {
+        item['detalles__balon']: int(item['total'] or 0)
+        for item in pedidos_qs.values('detalles__balon').annotate(total=Sum('detalles__cantidad'))
+        if item['detalles__balon']
+    }
+
+    cambios = False
+    lineas_existentes = {
+        linea.balon_id: linea
+        for linea in sobre.lineas.select_related('balon')
+    }
+
+    with transaction.atomic():
+        for balon in balones_activos:
+            qty_calc = cantidades_por_balon.get(balon.id, 0)
+            linea = lineas_existentes.get(balon.id)
+
+            if not linea:
+                if not crear_lineas_faltantes:
+                    continue
+                precio = balon.precio_local if sobre.tipo == 'bodega' else balon.precio_domicilio
+                LineaSobre.objects.create(
+                    sobre=sobre,
+                    balon=balon,
+                    cantidad_calculada=qty_calc,
+                    cantidad_declarada=qty_calc,
+                    precio_venta_unitario=precio,
+                )
+                cambios = True
+                continue
+
+            old_calc = int(linea.cantidad_calculada or 0)
+            update_fields = []
+
+            if old_calc != qty_calc:
+                linea.cantidad_calculada = qty_calc
+                update_fields.append('cantidad_calculada')
+
+                if int(linea.cantidad_declarada or 0) == old_calc:
+                    linea.cantidad_declarada = qty_calc
+                    update_fields.append('cantidad_declarada')
+
+            if update_fields:
+                linea.save(update_fields=update_fields)
+                cambios = True
+
+        sobre.refresh_from_db()
+        monto_calculado_app = pedidos_qs.aggregate(total=Sum('monto_total'))['total'] or 0
+        monto_declarado = sum(
+            (linea.cantidad_declarada or 0) * (linea.precio_venta_unitario or 0)
+            for linea in sobre.lineas.all()
+        )
+        diferencia = monto_declarado - monto_calculado_app
+
+        sobre_update_fields = []
+        if sobre.monto_calculado_app != monto_calculado_app:
+            sobre.monto_calculado_app = monto_calculado_app
+            sobre_update_fields.append('monto_calculado_app')
+        if sobre.monto_declarado != monto_declarado:
+            sobre.monto_declarado = monto_declarado
+            sobre_update_fields.append('monto_declarado')
+        if sobre.diferencia != diferencia:
+            sobre.diferencia = diferencia
+            sobre_update_fields.append('diferencia')
+
+        if sobre_update_fields:
+            sobre.save(update_fields=sobre_update_fields)
+            cambios = True
+
+    return cambios
 
 def parse_fecha_rango(fechas_str):
     """
@@ -2534,7 +2652,7 @@ def detalle_pedido(request, pedido_id):
 # Jefe/Bodeguero: listar sobres diarios creados
 @login_required
 def lista_sobres_diarios(request):
-    """Ver todos los sobres diarios creados, filtrados por fecha."""
+    """Ver sobres operativos filtrados por fecha de creacion."""
     """
     Listado para seleccionar qué sobre abrir/editar (Bodega o Camionero).
     Si hay más de un sobre del día, muestra lista para elegir.
@@ -2544,20 +2662,38 @@ def lista_sobres_diarios(request):
         return redirect('index')
 
     hoy = today_chile()
+    fecha_filtro_str = (request.GET.get('fecha') or '').strip()
+    try:
+        fecha_filtro = datetime.strptime(fecha_filtro_str, "%Y-%m-%d").date() if fecha_filtro_str else hoy
+    except ValueError:
+        fecha_filtro = hoy
+        messages.warning(request, "La fecha indicada no es valida. Se mostro la fecha de hoy.")
+
     camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
-    
-    # Sobres de bodega del día
-    sobres_bodega = list(SobreDiario.objects.filter(
-        fecha_correspondiente=hoy, tipo='bodega'
-    ).order_by('-id'))
-    
-    # Sobres de camioneros del día (agrupados por trabajador)
-    sobres_camioneros = list(SobreDiario.objects.filter(
-        fecha_correspondiente=hoy, tipo='camion'
-    ).select_related('trabajador').order_by('trabajador__first_name', '-id'))
+
+    tz_chile = ZoneInfo('America/Santiago')
+    tz_utc = ZoneInfo('UTC')
+    inicio_dia = datetime.combine(fecha_filtro, time.min)
+    inicio_dia = timezone.make_aware(inicio_dia, tz_chile).astimezone(tz_utc)
+    fin_dia = datetime.combine(fecha_filtro, time.max)
+    fin_dia = timezone.make_aware(fin_dia, tz_chile).astimezone(tz_utc)
+
+    sobres_del_dia = SobreDiario.objects.filter(
+        fecha__gte=inicio_dia,
+        fecha__lte=fin_dia,
+    ).select_related('trabajador', 'creado_por').order_by('-fecha', '-id')
+
+    # Sobres de bodega creados en la fecha seleccionada
+    sobres_bodega = list(sobres_del_dia.filter(tipo='bodega'))
+
+    # Sobres de camioneros creados en la fecha seleccionada
+    sobres_camioneros = list(
+        sobres_del_dia.filter(tipo='camion').order_by('trabajador__first_name', '-fecha', '-id')
+    )
 
     return render(request, 'sobres/lista_sobres.html', {
         'hoy': hoy,
+        'fecha_filtro': fecha_filtro,
         'camioneros': camioneros,
         'sobres_bodega': sobres_bodega,
         'sobres_camioneros': sobres_camioneros,
@@ -2596,6 +2732,7 @@ def editar_sobre_diario(request):
     else:
         es_bodega = request.GET.get('bodega') == '1'
         camionero_id = request.GET.get('camionero')
+        fecha_query = (request.GET.get('fecha') or '').strip()
         
         if es_bodega:
             tipo_sobre = 'bodega'
@@ -2609,12 +2746,16 @@ def editar_sobre_diario(request):
             messages.error(request, "Parámetros inválidos. Use: ?sobre_id=123")
             return redirect('sobres_lista')
         
-        # Buscar sobre del día (abierto o cerrado) o crear uno nuevo
-        hoy = today_chile()
+        # Buscar sobre de la fecha solicitada (abierto o cerrado) o crear uno nuevo
+        try:
+            fecha_objetivo = datetime.strptime(fecha_query, "%Y-%m-%d").date() if fecha_query else today_chile()
+        except ValueError:
+            messages.warning(request, "La fecha indicada no es valida. Se usara la fecha de hoy.")
+            fecha_objetivo = today_chile()
         
-        # Buscar el sobre más reciente del día (puede estar abierto o cerrado)
+        # Buscar el sobre más reciente de esa fecha (puede estar abierto o cerrado)
         sobre = SobreDiario.objects.filter(
-            fecha_correspondiente=hoy,
+            fecha_correspondiente=fecha_objetivo,
             tipo=tipo_sobre,
             trabajador=trabajador
         ).order_by('-id').first()  # El más reciente
@@ -2623,13 +2764,13 @@ def editar_sobre_diario(request):
             # Existe un sobre del día, usarlo (el usuario decide si crear otro)
             creado = False
         else:
-            # No existe ningún sobre para hoy, crear uno nuevo
+            # No existe ningún sobre para esa fecha, crear uno nuevo
             sobre = SobreDiario.objects.create(
                 fecha=now_chile(),
                 tipo=tipo_sobre,
                 trabajador=trabajador,
                 creado_por=usuario,
-                fecha_correspondiente=hoy,
+                fecha_correspondiente=fecha_objetivo,
             )
             creado = True
         
@@ -2642,61 +2783,7 @@ def editar_sobre_diario(request):
     # ═══════════════════════════════════════════════════════════
     
     # Preparar datos para crear líneas (si es necesario)
-    balones_activos = TipoBalon.objects.filter(activo=True).annotate(
-        tipo_orden=Case(
-            When(tipo_gas='normal', then=Value(0)),
-            When(tipo_gas='catalitico', then=Value(1)),
-            When(tipo_gas='aluminio', then=Value(2)),
-            default=Value(3),
-            output_field=IntegerField(),
-        )
-    ).order_by('tipo_orden', '-peso_neto_gas')
-    fecha_para_calcular = sobre.fecha_correspondiente or sobre.fecha.date()
-    tz_chile = ZoneInfo('America/Santiago')
-    tz_utc = ZoneInfo('UTC')
-    
-    # Crear rango de tiempo en zona Chile para búsqueda correcta
-    inicio_dia = datetime.combine(fecha_para_calcular, time.min)
-    inicio_dia = timezone.make_aware(inicio_dia, tz_chile).astimezone(tz_utc)
-    fin_dia = datetime.combine(fecha_para_calcular, time.max)
-    fin_dia = timezone.make_aware(fin_dia, tz_chile).astimezone(tz_utc)
-    
-    # Verificar si el sobre tiene líneas
-    lineas_existentes = sobre.lineas.exists()
-    
-    if not lineas_existentes:
-        # No tiene líneas, crearlas ahora
-        for balon in balones_activos:
-            # Calcular cantidad real según pedidos del día
-            if tipo_sobre == 'bodega':
-                # Para bodega: buscar pedidos locales (venta en local) entregados en la fecha
-                qs_pedidos = Pedido.objects.filter(
-                    fecha__gte=inicio_dia,
-                    fecha__lte=fin_dia,
-                    origen='local',
-                    estado='entregado'
-                )
-            else:
-                # Para camión: buscar pedidos entregados por este camionero en la fecha
-                qs_pedidos = Pedido.objects.filter(
-                    fecha__gte=inicio_dia,
-                    fecha__lte=fin_dia,
-                    estado='entregado',
-                    entregador=trabajador
-                )
-            
-            # Contar cantidad de este balón en los pedidos
-            qty_calc = qs_pedidos.filter(detalles__balon=balon).aggregate(total=Sum('detalles__cantidad'))['total'] or 0
-
-            LineaSobre.objects.create(
-                sobre=sobre,
-                balon=balon,
-                cantidad_calculada=qty_calc,
-                cantidad_declarada=qty_calc,
-                precio_venta_unitario=(
-                    balon.precio_local if tipo_sobre == 'bodega' else balon.precio_domicilio
-                )
-            )
+    sincronizar_sobre_desde_pedidos(sobre)
 
     # Preparar los formsets
     formset_lineas = LineaSobreFormSet(
@@ -2744,12 +2831,42 @@ def editar_sobre_diario(request):
         sobre.creado_por = request.user
         sobre.save()
 
+        sincronizar_sobre_desde_pedidos(sobre)
+        formset_lineas = LineaSobreFormSet(
+            request.POST or None,
+            instance=sobre,
+            prefix='lineas'
+        )
+
         # Ahora sí validar y guardar los formsets
         if all([
             formset_lineas.is_valid(),
             formset_pagos.is_valid(),
             formset_gastos.is_valid()
         ]):
+            for form in formset_lineas.forms:
+                if not form.cleaned_data:
+                    continue
+
+                snapshot_key = f"calc_snapshot_{form.instance.id}"
+                snapshot_value = request.POST.get(snapshot_key)
+                if snapshot_value is None:
+                    continue
+
+                try:
+                    snapshot_calculada = int(snapshot_value)
+                except (TypeError, ValueError):
+                    continue
+
+                cantidad_declarada = form.cleaned_data.get('cantidad_declarada')
+                if cantidad_declarada is None:
+                    continue
+
+                if int(cantidad_declarada) == snapshot_calculada:
+                    cantidad_actual = int(form.instance.cantidad_calculada or 0)
+                    form.cleaned_data['cantidad_declarada'] = cantidad_actual
+                    form.instance.cantidad_declarada = cantidad_actual
+
             # Guardar todos los formsets en una transacción atómica
             with transaction.atomic():
                 formset_lineas.save()
@@ -2826,6 +2943,31 @@ def editar_sobre_diario(request):
 
     return render(request, 'sobres/sobres.html', context)
 
+@login_required
+def refrescar_sobre_diario(request, sobre_id):
+    """Sincroniza un sobre abierto con los pedidos y retorna sus cantidades actualizadas."""
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
+        return JsonResponse({'ok': False, 'error': 'Acceso no permitido.'}, status=403)
+
+    sobre = get_object_or_404(SobreDiario, id=sobre_id)
+
+    if sobre.cerrado:
+        return JsonResponse({'ok': True, 'cerrado': True, 'lineas': []})
+
+    sincronizar_sobre_desde_pedidos(sobre, crear_lineas_faltantes=False)
+    sobre.refresh_from_db()
+
+    lineas = list(
+        sobre.lineas.values('id', 'cantidad_calculada', 'cantidad_declarada')
+    )
+
+    return JsonResponse({
+        'ok': True,
+        'cerrado': False,
+        'lineas': lineas,
+        'monto_calculado_app': int(sobre.monto_calculado_app or 0),
+        'sincronizado_en': now_chile().strftime('%H:%M:%S'),
+    })
 
 # ══════════════════════════════════════════════════════════════
 # 
@@ -2972,11 +3114,6 @@ def historial_sobres(request):
     else:
         fecha_seleccionada = today_chile()
     
-    # Rango de fecha_correspondiente (principio a fin del día)
-    tz_chile = ZoneInfo('America/Santiago')
-    inicio_dia = timezone.make_aware(datetime.combine(fecha_seleccionada, time.min), tz_chile)
-    fin_dia = timezone.make_aware(datetime.combine(fecha_seleccionada, time.max), tz_chile)
-    
     # Filtrar sobres por fecha_correspondiente (la fecha lógica del sobre, no cuando se creó)
     todos_sobres = SobreDiario.objects.filter(
         fecha_correspondiente=fecha_seleccionada
@@ -2995,6 +3132,23 @@ def historial_sobres(request):
         if camionero not in sobres_por_camionero:
             sobres_por_camionero[camionero] = []
         sobres_por_camionero[camionero].append(sobre)
+
+    grupos_camioneros = []
+    for camionero, sobres in sobres_por_camionero.items():
+        cerrados = sum(1 for sobre in sobres if sobre.cerrado)
+        grupos_camioneros.append({
+            'camionero': camionero,
+            'sobres': sobres,
+            'total': len(sobres),
+            'cerrados': cerrados,
+            'abiertos': len(sobres) - cerrados,
+            'total_declarado': sum(int(sobre.monto_declarado or 0) for sobre in sobres),
+        })
+
+    total_sobres = todos_sobres.count()
+    total_cerrados = todos_sobres.filter(cerrado=True).count()
+    total_bodega = sobres_bodega.count()
+    total_camion = sobres_camionero.count()
     
     # Camioneros activos para crear nuevos sobres
     camioneros_activos = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
@@ -3002,9 +3156,18 @@ def historial_sobres(request):
     context = {
         'fecha_seleccionada': fecha_seleccionada,
         'hoy': today_chile(),
+        'fecha_anterior': fecha_seleccionada - timedelta(days=1),
+        'fecha_siguiente': fecha_seleccionada + timedelta(days=1),
         'sobres_bodega': sobres_bodega,
         'sobres_por_camionero': sobres_por_camionero,
+        'grupos_camioneros': grupos_camioneros,
         'camioneros_activos': camioneros_activos,
+        'total_sobres': total_sobres,
+        'total_cerrados': total_cerrados,
+        'total_abiertos': total_sobres - total_cerrados,
+        'total_bodega': total_bodega,
+        'total_camion': total_camion,
+        'total_declarado': sum(int(sobre.monto_declarado or 0) for sobre in todos_sobres),
     }
 
     return render(request, 'sobres/historial_sobres.html', context)

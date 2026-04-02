@@ -15,9 +15,20 @@
         </a>
     </div>
 
-    <p class="text-center text-muted mb-4">
-        Sobres del día {{ hoy|date:"d/m/Y" }}
-    </p>
+    <div class="card shadow-sm border-0 mb-4 bg-light-subtle">
+        <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div>
+                <div class="small text-uppercase text-muted fw-semibold mb-1">Contexto actual</div>
+                <div class="fs-5 fw-bold text-primary">Sobres creados el {{ fecha_filtro|date:"d/m/Y" }}</div>
+                <div class="text-muted small">Si hoy creas un sobre para una fecha anterior, igual aparecera aqui y mostrara claramente a que dia corresponde.</div>
+            </div>
+            {% if fecha_filtro != hoy %}
+            <div class="badge text-bg-light border px-3 py-2 align-self-start align-self-lg-center">
+                Viendo otra fecha de creacion
+            </div>
+            {% endif %}
+        </div>
+    </div>
 
     {% if messages %}
     <div class="mb-4">
@@ -35,9 +46,16 @@
         <div class="card-header bg-primary text-white py-3">
             <div class="d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-shop-window me-2"></i>Bodega (ventas locales)</h5>
-                <a href="{% url 'sobres_editar' %}?bodega=1" class="btn btn-light btn-sm">
-                    <i class="bi bi-plus-lg me-1"></i>Nuevo / Abrir
-                </a>
+                <button type="button"
+                        class="btn btn-light btn-sm js-abrir-sobre-modal"
+                        data-bs-toggle="modal"
+                        data-bs-target="#modalAbrirSobre"
+                        data-tipo="bodega"
+                        data-target-label="Bodega"
+                        data-fecha-actual="{{ fecha_filtro|date:'Y-m-d' }}"
+                        data-hoy="{{ hoy|date:'Y-m-d' }}">
+                        <i class="bi bi-plus-lg me-1"></i>Nuevo / Abrir
+                </button>
             </div>
         </div>
         
@@ -48,6 +66,9 @@
                 <div>
                     <strong>Sobre #{{ sobre.id }}</strong>
                     <small class="text-muted ms-2">{{ sobre.fecha|date:"H:i" }}</small>
+                    {% if sobre.fecha_correspondiente != fecha_filtro %}
+                    <span class="badge text-bg-light border ms-2">Corresponde a {{ sobre.fecha_correspondiente|date:"d/m" }}</span>
+                    {% endif %}
                     {% if sobre.cerrado %}
                     <span class="badge bg-success ms-2">Cerrado</span>
                     {% else %}
@@ -62,7 +83,7 @@
         </ul>
         {% else %}
         <div class="card-body text-center text-muted py-4">
-            Sin sobres hoy - Haz clic en "Nuevo / Abrir"
+            No hay sobres creados en esta fecha. Haz clic en "Nuevo / Abrir"
         </div>
         {% endif %}
     </div>
@@ -75,9 +96,17 @@
                 <h6 class="mb-0">
                     <i class="bi bi-truck me-2"></i>{{ camionero.get_full_name|default:camionero.username }}
                 </h6>
-                <a href="{% url 'sobres_editar' %}?camionero={{ camionero.id }}" class="btn btn-light btn-sm">
-                    <i class="bi bi-plus-lg me-1"></i>Nuevo / Abrir
-                </a>
+                <button type="button"
+                        class="btn btn-light btn-sm js-abrir-sobre-modal"
+                        data-bs-toggle="modal"
+                        data-bs-target="#modalAbrirSobre"
+                        data-tipo="camion"
+                        data-camionero-id="{{ camionero.id }}"
+                        data-target-label="{{ camionero.get_full_name|default:camionero.username }}"
+                        data-fecha-actual="{{ fecha_filtro|date:'Y-m-d' }}"
+                        data-hoy="{{ hoy|date:'Y-m-d' }}">
+                        <i class="bi bi-plus-lg me-1"></i>Nuevo / Abrir
+                </button>
             </div>
         </div>
         
@@ -88,6 +117,9 @@
                 <div>
                     <span>Sobre #{{ sobre.id }}</span>
                     <small class="text-muted ms-2">{{ sobre.fecha|date:"H:i" }}</small>
+                    {% if sobre.fecha_correspondiente != fecha_filtro %}
+                    <span class="badge text-bg-light border ms-2">Corresponde a {{ sobre.fecha_correspondiente|date:"d/m" }}</span>
+                    {% endif %}
                     {% if sobre.cerrado %}
                     <span class="badge bg-success ms-2">Cerrado</span>
                     {% else %}
@@ -113,4 +145,126 @@
     </div>
 
 </div>
+
+<div class="modal fade" id="modalAbrirSobre" tabindex="-1" aria-labelledby="modalAbrirSobreLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modalAbrirSobreLabel">
+                    <i class="bi bi-journal-plus me-2"></i>Abrir o crear sobre
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="get" action="{% url 'sobres_editar' %}" id="formAbrirSobreModal">
+                <div class="modal-body p-4">
+                    <p class="mb-3">
+                        Vas a abrir un sobre para <strong id="modalTargetLabel">Bodega</strong>.
+                        Si ya existe uno para la fecha elegida, se abrira ese sobre. Si no existe, se creara uno nuevo.
+                    </p>
+
+                    <input type="hidden" name="bodega" id="modalBodegaInput" value="">
+                    <input type="hidden" name="camionero" id="modalCamioneroInput" value="">
+                    <input type="hidden" name="fecha" id="modalFechaFinalInput" value="{{ fecha_filtro|date:'Y-m-d' }}">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold d-block mb-2">¿A que dia corresponde el sobre?</label>
+
+                        <label class="form-check border rounded p-3 mb-2 d-flex gap-2 align-items-start">
+                            <input class="form-check-input mt-1" type="radio" name="opcion_fecha_sobre" value="hoy" id="opcionFechaHoy">
+                            <span>
+                                <span class="fw-semibold d-block">Es de hoy</span>
+                                <span class="text-muted small" id="textoFechaHoy">Usar la fecha actual.</span>
+                            </span>
+                        </label>
+
+                        <label class="form-check border rounded p-3 d-flex gap-2 align-items-start">
+                            <input class="form-check-input mt-1" type="radio" name="opcion_fecha_sobre" value="otra" id="opcionFechaOtra">
+                            <span class="flex-grow-1">
+                                <span class="fw-semibold d-block">Es de dias anteriores o de otra fecha</span>
+                                <span class="text-muted small d-block mb-2">Elige la fecha logica del sobre para cargar los pedidos correctos.</span>
+                                <input type="date" class="form-control" id="modalFechaOtraInput" value="{{ fecha_filtro|date:'Y-m-d' }}">
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="alert alert-light border small mb-0">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Esto evita crear sobres por error y deja la fecha como parte del flujo de apertura.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-arrow-right-circle me-2"></i>Continuar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const modalElement = document.getElementById('modalAbrirSobre');
+    const modalTargetLabel = document.getElementById('modalTargetLabel');
+    const modalBodegaInput = document.getElementById('modalBodegaInput');
+    const modalCamioneroInput = document.getElementById('modalCamioneroInput');
+    const modalFechaFinalInput = document.getElementById('modalFechaFinalInput');
+    const modalFechaOtraInput = document.getElementById('modalFechaOtraInput');
+    const opcionFechaHoy = document.getElementById('opcionFechaHoy');
+    const opcionFechaOtra = document.getElementById('opcionFechaOtra');
+    const textoFechaHoy = document.getElementById('textoFechaHoy');
+    const formAbrirSobreModal = document.getElementById('formAbrirSobreModal');
+
+    function syncFechaObjetivo() {
+        if (opcionFechaOtra.checked) {
+            modalFechaOtraInput.removeAttribute('disabled');
+            modalFechaOtraInput.setAttribute('required', 'required');
+            modalFechaFinalInput.value = modalFechaOtraInput.value;
+        } else {
+            modalFechaOtraInput.setAttribute('disabled', 'disabled');
+            modalFechaOtraInput.removeAttribute('required');
+            modalFechaFinalInput.value = modalElement.dataset.today;
+        }
+    }
+
+    document.querySelectorAll('.js-abrir-sobre-modal').forEach(button => {
+        button.addEventListener('click', function() {
+            const targetLabel = this.dataset.targetLabel;
+            const tipo = this.dataset.tipo;
+            const camioneroId = this.dataset.camioneroId || '';
+            const fechaActual = this.dataset.fechaActual;
+            const hoy = this.dataset.hoy;
+            const usarFechaActual = fechaActual && fechaActual !== hoy;
+
+            modalElement.dataset.today = hoy;
+            modalTargetLabel.textContent = targetLabel;
+            modalBodegaInput.value = tipo === 'bodega' ? '1' : '';
+            modalCamioneroInput.value = tipo === 'camion' ? camioneroId : '';
+            modalFechaOtraInput.value = fechaActual || hoy;
+            textoFechaHoy.textContent = `Usar la fecha de hoy (${hoy.split('-').reverse().join('/')}).`;
+
+            if (usarFechaActual) {
+                opcionFechaOtra.checked = true;
+            } else {
+                opcionFechaHoy.checked = true;
+            }
+
+            syncFechaObjetivo();
+        });
+    });
+
+    opcionFechaHoy.addEventListener('change', syncFechaObjetivo);
+    opcionFechaOtra.addEventListener('change', syncFechaObjetivo);
+    modalFechaOtraInput.addEventListener('input', syncFechaObjetivo);
+
+    formAbrirSobreModal.addEventListener('submit', function(event) {
+        syncFechaObjetivo();
+        if (opcionFechaOtra.checked && !modalFechaOtraInput.value) {
+            event.preventDefault();
+            modalFechaOtraInput.focus();
+        }
+    });
+});
+</script>
 {% endblock %}
