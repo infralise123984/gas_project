@@ -1,11 +1,144 @@
 # mockups/forms.py
 from django import forms
+from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.validators import UnicodeUsernameValidator
+from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory, BaseInlineFormSet
 from django.utils.safestring import mark_safe
-from .models import Pedido, DetallePedido, TipoBalon, SobreDiario, LineaSobre, LineaPago, LineaGasto
+from .models import Pedido, DetallePedido, TipoBalon, SobreDiario, LineaSobre, LineaPago, LineaGasto, Usuario
 
 # Sectores definidos en Pedido.SECTORES (fuente única de verdad)
 SECTORES = [("", "— Seleccionar sector —")] + Pedido.SECTORES
+
+User = get_user_model()
+
+
+class CrearUsuarioSeguroForm(forms.Form):
+    username = forms.CharField(
+        label="Nombre de usuario",
+        max_length=150,
+        validators=[UnicodeUsernameValidator()],
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-lg',
+            'placeholder': 'Ej: juan.perez',
+            'maxlength': '150',
+            'autocomplete': 'off',
+        }),
+    )
+    telefono = forms.CharField(
+        label="Teléfono",
+        max_length=15,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-lg',
+            'placeholder': 'Ej: +56987654321',
+            'maxlength': '15',
+            'inputmode': 'tel',
+            'autocomplete': 'off',
+        }),
+    )
+    first_name = forms.CharField(
+        label="Nombre",
+        max_length=150,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-lg',
+            'placeholder': 'Ej: Juan',
+            'maxlength': '150',
+            'autocomplete': 'off',
+        }),
+    )
+    last_name = forms.CharField(
+        label="Apellido",
+        max_length=150,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-lg',
+            'placeholder': 'Ej: Pérez',
+            'maxlength': '150',
+            'autocomplete': 'off',
+        }),
+    )
+    rol = forms.ChoiceField(
+        label="Rol",
+        choices=[("", "— Seleccionar rol —")] + Usuario.ROLES,
+        widget=forms.Select(attrs={
+            'class': 'form-select form-select-lg',
+        }),
+    )
+    password1 = forms.CharField(
+        label="Contraseña",
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control form-control-lg',
+            'autocomplete': 'new-password',
+        }),
+    )
+    password2 = forms.CharField(
+        label="Repetir contraseña",
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control form-control-lg',
+            'autocomplete': 'new-password',
+        }),
+    )
+    admin_password = forms.CharField(
+        label="Tu contraseña actual",
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control form-control-lg',
+            'autocomplete': 'current-password',
+        }),
+        help_text="Confirma tu propia contraseña para autorizar la creación del usuario.",
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.request_user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+
+    def clean_username(self):
+        username = (self.cleaned_data.get('username') or '').strip()
+        if User.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError("Ya existe un usuario con ese nombre de usuario.")
+        return username
+
+    def clean_telefono(self):
+        telefono = (self.cleaned_data.get('telefono') or '').strip()
+        if not telefono:
+            return ''
+        if not telefono.replace('+', '', 1).isdigit():
+            raise forms.ValidationError("Ingresa un teléfono válido usando solo números y un '+' opcional al inicio.")
+        if not 8 <= len(telefono.replace('+', '', 1)) <= 15:
+            raise forms.ValidationError("El teléfono debe tener entre 8 y 15 dígitos.")
+        if User.objects.filter(telefono=telefono).exists():
+            raise forms.ValidationError("Ya existe un usuario con ese teléfono.")
+        return telefono
+
+    def clean(self):
+        cleaned_data = super().clean()
+        password1 = cleaned_data.get('password1')
+        password2 = cleaned_data.get('password2')
+        admin_password = cleaned_data.get('admin_password')
+
+        if password1 and password2 and password1 != password2:
+            self.add_error('password2', "Las contraseñas no coinciden.")
+
+        if self.request_user and admin_password and not self.request_user.check_password(admin_password):
+            self.add_error('admin_password', "La contraseña actual no es correcta.")
+
+        if password1:
+            candidate_user = User(
+                username=cleaned_data.get('username', ''),
+                first_name=cleaned_data.get('first_name', ''),
+                last_name=cleaned_data.get('last_name', ''),
+            )
+            try:
+                validate_password(password1, user=candidate_user)
+            except ValidationError as exc:
+                self.add_error('password1', exc)
+
+        return cleaned_data
 
 
 class BalonSelectWidget(forms.Select):

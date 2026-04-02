@@ -187,9 +187,11 @@ class Pedido(models.Model):
         ("Villa Diego de Almagro",      "[SUR] Villa Diego de Almagro"),
         ("Villa Los Andes",             "[SUR] Villa Los Andes"),
         ("Condominio Brisas del Sur",   "[SUR] Condominio Brisas del Sur"),
+        ("Villa Shiaponi",              "[SUR] Villa Shiaponi"),
         ("Grecia","[SUR] Grecia"),
         
         # Sector Norte
+        ("villa las cañadas",            "[NORTE] Villa Las Cañadas"),
         ("Villa Tuniche",               "[NORTE] Villa Tuniche"),
         ("Villa Araucaria",             "[NORTE] Villa Araucaria"),
         ("Villa La Leonera",            "[NORTE] Villa La Leonera"),

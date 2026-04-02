@@ -17,8 +17,6 @@ from django.urls import reverse
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.password_validation import validate_password
-from django.core.exceptions import ValidationError
 from django.db import transaction
 
 # Modelos, consultas y paginación
@@ -34,6 +32,7 @@ from openpyxl.utils import get_column_letter   # ← AGREGAR ESTA LÍNEA
 
 # App local
 from .forms import (
+    CrearUsuarioSeguroForm,
     DetallePedidoForm, 
     PedidoCabeceraForm, 
     DetalleFormSet, 
@@ -250,67 +249,67 @@ def logout_view(request):
 @login_required
 def crear_usuario(request):
     """Crea nuevos usuarios con roles específicos. Solo Admin."""
-    if not (request.user.rol == "admin" or request.user.is_superuser):
-        messages.error(request, "No tienes permiso para crear usuarios.")
-        return redirect("index")
+    if not request.user.is_superuser:
+        resp = require_roles(request, ["admin"], "index", "No tienes permiso para crear usuarios.")
+        if resp:
+            return resp
 
-    roles_choices = Usuario.ROLES
+    form = CrearUsuarioSeguroForm(request.POST or None, user=request.user)
 
     if request.method == "POST":
-        username = request.POST.get("username")
-        first_name = request.POST.get("first_name", "")
-        last_name = request.POST.get("last_name", "")
-        telefono = request.POST.get("telefono", "")
-        rol = request.POST.get("rol")
-        password1 = request.POST.get("password1")
-        password2 = request.POST.get("password2")
+        if form.is_valid():
+            data = form.cleaned_data
+            with transaction.atomic():
+                user = Usuario.objects.create_user(
+                    username=data['username'],
+                    first_name=data.get('first_name', ''),
+                    last_name=data.get('last_name', ''),
+                    telefono=data.get('telefono') or None,
+                    rol=data['rol'],
+                    password=data['password1'],
+                )
+                user.is_active = True
+                user.save(update_fields=['is_active'])
 
-        # Validaciones
-        if not all([username, rol, password1, password2]):
-            messages.error(request, "Todos los campos obligatorios deben estar completos.")
-        elif password1 != password2:
-            messages.error(request, "Las contraseñas no coinciden.")
-        elif Usuario.objects.filter(username=username).exists():
-            messages.error(request, "Ya existe un usuario con ese nombre de usuario.")
-        else:
-            # Validar contraseña con los validadores configurados en settings.py
-            try:
-                validate_password(password1)
-            except ValidationError as exc:
-                for error in exc.messages:
-                    messages.error(request, error)
-                return render(request, "auth/crear_usuario.html", {"roles_choices": roles_choices})
-            # Creación del usuario
-            user = Usuario.objects.create_user(
-                username=username,
-                first_name=first_name,
-                last_name=last_name,
-                telefono=telefono or None,
-                rol=rol,
-                password=password1,
-            )
-            user.is_active = True
-            user.save()
-            
-            # Auditoría: Usuario creado
             AuditoriaAccion.registrar(
                 request=request,
                 tipo='USER_CREATE',
-                descripcion=f'Usuario creado: {username} con rol {rol}',
+                descripcion=f"Usuario creado: {user.username} con rol {user.rol}",
                 objeto=user,
                 datos_nuevos={
-                    'username': username,
-                    'nombre': f'{first_name} {last_name}',
-                    'rol': rol,
-                    'telefono': telefono
+                    'username': user.username,
+                    'nombre': user.get_full_name(),
+                    'rol': user.rol,
+                    'telefono': user.telefono,
                 }
             )
-            audit_logger.info(f"USER_CREATE | New: {username} | By: {request.user.username}")
-            
+            audit_logger.info(f"USER_CREATE | New: {user.username} | By: {request.user.username}")
+
             messages.success(request, f"Usuario '{user.get_full_name() or user.username}' creado correctamente con rol {user.get_rol_display()}.")
             return redirect("reportes_ventas")
 
-    return render(request, "auth/crear_usuario.html", {"roles_choices": roles_choices})
+        attempted_username = (request.POST.get('username') or '').strip()[:150]
+        attempted_role = (request.POST.get('rol') or '').strip()[:20]
+        allowed_roles = {role for role, _ in Usuario.ROLES}
+        invalid_admin_confirmation = 'admin_password' in form.errors
+        invalid_role_attempt = bool(attempted_role) and attempted_role not in allowed_roles
+
+        if invalid_admin_confirmation or invalid_role_attempt:
+            AuditoriaAccion.registrar(
+                request=request,
+                tipo='SUSPICIOUS',
+                descripcion='Intento sensible rechazado durante creación de usuario.',
+                datos_nuevos={
+                    'username': attempted_username,
+                    'rol': attempted_role,
+                    'errores': form.errors.get_json_data(),
+                }
+            )
+        security_logger.warning(
+            f"USER_CREATE_REJECTED | By: {request.user.username} | Username: {attempted_username or '-'} | Errors: {form.errors.as_json()}"
+        )
+
+    return render(request, "auth/crear_usuario.html", {"form": form})
 
 @login_required
 def precios_balones(request):

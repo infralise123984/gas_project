@@ -30,20 +30,31 @@
             <div class="card shadow-lg border-0">
                 <div class="card-header bg-primary text-white text-center py-4">
                     <h4 class="mb-0 fw-bold">Formulario de Registro de Usuario</h4>
-                    <small>Solo accesible para Jefe y Administrador</small>
+                    <small>Solo accesible para Administrador</small>
                 </div>
 
                 <div class="card-body p-5">
                     <form method="post">
                         {% csrf_token %}
 
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger" role="alert">
+                            {% for error in form.non_field_errors %}
+                            <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
                         <div class="row g-4">
                             <!-- Nombre de usuario -->
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Nombre de usuario <span
                                         class="text-danger">*</span></label>
-                                <input type="text" name="username" class="form-control form-control-lg"
-                                    placeholder="Ej: juan.perez" maxlength="150" required>
+                                <input type="text" name="username" class="form-control form-control-lg{% if form.username.errors %} is-invalid{% endif %}"
+                                    placeholder="Ej: juan.perez" maxlength="150" required value="{{ form.username.value|default_if_none:'' }}">
+                                {% for error in form.username.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
                                 <small class="text-muted">Máximo 150 caracteres. Solo letras, números y @ . + -
                                     _</small>
                             </div>
@@ -51,45 +62,74 @@
                             <!-- Teléfono (opcional) -->
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Teléfono</label>
-                                <input type="text" name="telefono" class="form-control form-control-lg"
-                                    placeholder="Ej: +56987654321" maxlength="15">
+                                <input type="text" name="telefono" class="form-control form-control-lg{% if form.telefono.errors %} is-invalid{% endif %}"
+                                    placeholder="Ej: +56987654321" maxlength="15" value="{{ form.telefono.value|default_if_none:'' }}">
+                                {% for error in form.telefono.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
                             </div>
 
                             <!-- Nombre y Apellido -->
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Nombre</label>
-                                <input type="text" name="first_name" class="form-control form-control-lg"
-                                    placeholder="Ej: Juan" maxlength="150">
+                                <input type="text" name="first_name" class="form-control form-control-lg{% if form.first_name.errors %} is-invalid{% endif %}"
+                                    placeholder="Ej: Juan" maxlength="150" value="{{ form.first_name.value|default_if_none:'' }}">
+                                {% for error in form.first_name.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
                             </div>
 
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Apellido</label>
-                                <input type="text" name="last_name" class="form-control form-control-lg"
-                                    placeholder="Ej: Pérez" maxlength="150">
+                                <input type="text" name="last_name" class="form-control form-control-lg{% if form.last_name.errors %} is-invalid{% endif %}"
+                                    placeholder="Ej: Pérez" maxlength="150" value="{{ form.last_name.value|default_if_none:'' }}">
+                                {% for error in form.last_name.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
                             </div>
 
                             <!-- Rol -->
                             <div class="col-12">
                                 <label class="form-label fw-bold">Rol <span class="text-danger">*</span></label>
-                                <select name="rol" class="form-select form-select-lg" required>
+                                <select name="rol" class="form-select form-select-lg{% if form.rol.errors %} is-invalid{% endif %}" required>
                                     <option value="">— Seleccionar rol —</option>
-                                    {% for valor, texto in roles_choices %}
-                                    <option value="{{ valor }}">{{ texto }}</option>
+                                    {% for valor, texto in form.fields.rol.choices %}
+                                    {% if valor %}
+                                    <option value="{{ valor }}" {% if form.rol.value == valor %}selected{% endif %}>{{ texto }}</option>
+                                    {% endif %}
                                     {% endfor %}
                                 </select>
+                                {% for error in form.rol.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
                             </div>
 
                             <!-- Contraseñas -->
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Contraseña <span class="text-danger">*</span></label>
-                                <input type="password" name="password1" class="form-control form-control-lg" required>
+                                <input type="password" name="password1" class="form-control form-control-lg{% if form.password1.errors %} is-invalid{% endif %}" required>
+                                {% for error in form.password1.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
                                 <small class="text-muted">Mínimo 8 caracteres. No puede ser muy común.</small>
                             </div>
 
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Repetir contraseña <span
                                         class="text-danger">*</span></label>
-                                <input type="password" name="password2" class="form-control form-control-lg" required>
+                                <input type="password" name="password2" class="form-control form-control-lg{% if form.password2.errors %} is-invalid{% endif %}" required>
+                                {% for error in form.password2.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Confirma tu contraseña <span class="text-danger">*</span></label>
+                                <input type="password" name="admin_password" class="form-control form-control-lg{% if form.admin_password.errors %} is-invalid{% endif %}" required>
+                                {% for error in form.admin_password.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                                <small class="text-muted">Esto evita que una sesión abierta pueda crear usuarios sin revalidar al administrador.</small>
                             </div>
                         </div>
 
@@ -106,7 +146,7 @@
             </div>
 
             <div class="text-center mt-4 text-muted small">
-                Los usuarios creados aquí podrán iniciar sesión inmediatamente con las credenciales ingresadas.
+                Los usuarios creados aquí podrán iniciar sesión inmediatamente con las credenciales ingresadas una vez confirmada la contraseña del administrador.
             </div>
         </div>
     </div>
