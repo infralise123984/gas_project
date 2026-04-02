@@ -201,6 +201,39 @@ class AuthorizationTests(TestCase):
         self.client.login(username='admin1', password='TestPass123!')
         response = self.client.get(reverse('auth_crear_usuario'))
         self.assertEqual(response.status_code, 200)
+
+    def test_admin_must_confirm_own_password_to_create_user(self):
+        """Crear usuario exige confirmar la contraseña actual del admin"""
+        self.client.login(username='admin1', password='TestPass123!')
+        response = self.client.post(reverse('auth_crear_usuario'), {
+            'username': 'nuevo_usuario',
+            'first_name': 'Nuevo',
+            'last_name': 'Usuario',
+            'telefono': '+56911111111',
+            'rol': 'telefonista',
+            'password1': 'ClaveSegura123!',
+            'password2': 'ClaveSegura123!',
+            'admin_password': 'incorrecta',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username='nuevo_usuario').exists())
+        self.assertContains(response, 'La contraseña actual no es correcta.')
+
+    def test_admin_can_create_user_with_password_confirmation(self):
+        """Admin puede crear usuario si confirma su contraseña actual"""
+        self.client.login(username='admin1', password='TestPass123!')
+        response = self.client.post(reverse('auth_crear_usuario'), {
+            'username': 'nuevo_usuario_ok',
+            'first_name': 'Nuevo',
+            'last_name': 'Usuario',
+            'telefono': '+56922222222',
+            'rol': 'telefonista',
+            'password1': 'ClaveSegura123!',
+            'password2': 'ClaveSegura123!',
+            'admin_password': 'TestPass123!',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(User.objects.filter(username='nuevo_usuario_ok', rol='telefonista').exists())
     
     def test_camionero_cannot_edit_prices(self):
         """Camionero no debe poder gestionar precios (solo jefe/admin/bodeguero)"""
