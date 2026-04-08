@@ -17,7 +17,7 @@
     <link rel="icon" type="image/png" sizes="512x512" href="{% static 'img/web-app-manifest-512x512.png' %}">
     <link rel="manifest" href="{% static 'manifest.json' %}">
 
-    <title>{% block title %}Kim Gas{% endblock %}</title>
+    <title>{% block title %}ValGas {% endblock %}</title>
 
     <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
     
@@ -33,10 +33,17 @@
     <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js">
 
     <style>
-        body {
-            padding-top: 56px;
+        html {
+            height: 100%;
+        }
 
+        body {
+            min-height: 100vh;
+            min-height: 100dvh;
+            padding-top: 56px;
             background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
         }
         @supports (padding-top: env(safe-area-inset-top)) {
             body {
@@ -55,8 +62,13 @@
             }
         }
 
+        main.container {
+            flex: 1 0 auto;
+        }
+
         .footer {
             padding: 20px 0;
+            flex-shrink: 0;
         }
         @media (display-mode: standalone),
         (display-mode: fullscreen) {
@@ -257,6 +269,12 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'sectores_lista' or request.resolver_match.url_name == 'sectores_crear' or request.resolver_match.url_name == 'sectores_editar' %}active{% endif %}"
+                            href="{% url 'sectores_lista' %}">
+                            <i class="bi bi-geo-alt"></i> Sectores
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'pedidos_consulta' %}active{% endif %}"
                             href="{% url 'pedidos_consulta' %}">
                             <i class="bi bi-search"></i> Consultar Pedidos
@@ -437,7 +455,7 @@ document.addEventListener('click', function(e) {
         <a href="{% url 'entregas_lista' %}"
            class="flex-fill d-flex flex-column align-items-center justify-content-center text-decoration-none {% if request.resolver_match.url_name == 'entregas_lista' %}text-primary{% else %}text-secondary{% endif %}">
             <i class="bi bi-truck fs-3"></i>
-            <span class="fw-semibold" style="font-size:0.7rem;">Entregas</span>
+            <span class="fw-semibold" style="font-size:0.7rem;">Entregas Pendientes</span>
         </a>
         <a href="{% url 'entregas_mias' %}"
            class="flex-fill d-flex flex-column align-items-center justify-content-center text-decoration-none {% if request.resolver_match.url_name == 'entregas_mias' %}text-primary{% else %}text-secondary{% endif %}">
@@ -454,7 +472,7 @@ document.addEventListener('click', function(e) {
 {% endif %}
 
 {% endif %}
-    <footer class="bg-light border-top mt-auto py-4">
+    <footer class="footer bg-light border-top mt-auto py-4">
         <div class="container text-center text-muted small">
             © 2025-2026 Kim Gas - Todos los derechos reservados
         </div>

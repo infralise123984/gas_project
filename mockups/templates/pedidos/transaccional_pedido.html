@@ -2,15 +2,24 @@
 {% block title %}Nuevo Pedido - GasFácil{% endblock %}
 
 {% block content %}
-<div class="container-fluid px-3 py-4" style="max-width: 540px; margin: 0 auto;">
+<div class="container-fluid px-3 py-4" style="max-width: {% if es_bodeguero %}1180px{% else %}540px{% endif %}; margin: 0 auto;">
 
-    <h2 class="text-primary fw-bold text-center mb-4 fs-4">
-        {% if es_bodeguero %}
-            Venta en Local
-        {% else %}
-            Pedido a Domicilio
-        {% endif %}
-    </h2>
+    <div class="mb-4 {% if es_bodeguero %}text-start{% else %}text-center{% endif %}">
+        <h2 class="text-primary fw-bold mb-2 fs-3">
+            {% if es_bodeguero %}
+                Carga de Venta Local
+            {% else %}
+                Pedido a Domicilio
+            {% endif %}
+        </h2>
+        <p class="text-muted mb-0 {% if not es_bodeguero %}mx-auto{% endif %}" {% if not es_bodeguero %}style="max-width:460px;"{% endif %}>
+            {% if es_bodeguero %}
+                Registra el total vendido por tipo de balón. La idea es cargar rápido una venta acumulada y revisar de un vistazo todos los balones agregados.
+            {% else %}
+                Ingresa la información del pedido y agrega los balones solicitados.
+            {% endif %}
+        </p>
+    </div>
 
     <form method="post" id="pedidoForm">
         {% csrf_token %}
@@ -28,118 +37,271 @@
         </div>
         {% endif %}
 
-        <!-- Campos de cabecera -->
-        <div class="mb-4">
-            <label class="form-label fw-bold fs-5">Método de pago <span class="text-danger">*</span></label>
-            <div class="d-grid gap-2">
-                {{ form_cabecera.metodo_pago }}
-            </div>
-            {% if form_cabecera.metodo_pago.errors %}
-            <div class="text-danger mt-1">{{ form_cabecera.metodo_pago.errors }}</div>
-            {% endif %}
-        </div>
+        <div class="row g-4 align-items-start">
+            <div class="{% if es_bodeguero %}col-lg-8{% else %}col-12{% endif %}">
+                <!-- Campos de cabecera -->
+                <div class="card shadow-sm border-0 mb-4 {% if es_bodeguero %}pedido-panel{% endif %}">
+                    <div class="card-body p-3 p-md-4">
+                        <div class="row g-3 align-items-end">
+                            <div class="{% if es_bodeguero %}col-md-6{% else %}col-12{% endif %}">
+                                <label class="form-label fw-bold {% if es_bodeguero %}mb-2{% else %}fs-5{% endif %}">Método de pago <span class="text-danger">*</span></label>
+                                <div class="{% if es_bodeguero %}compact-select-wrap{% else %}d-grid gap-2{% endif %}">
+                                    {{ form_cabecera.metodo_pago }}
+                                </div>
+                                {% if form_cabecera.metodo_pago.errors %}
+                                <div class="text-danger mt-1">{{ form_cabecera.metodo_pago.errors }}</div>
+                                {% endif %}
+                                {% if es_bodeguero %}
+                                <small class="text-muted d-block mt-2">Detalle secundario para bodega. Lo principal aqui es registrar bien las cantidades por balón.</small>
+                                {% endif %}
+                            </div>
 
-        {% if not es_bodeguero %}
-        <div class="mb-4">
-            <label class="form-label fw-bold fs-5">Sector <span class="text-danger">*</span></label>
-            {{ form_cabecera.sector }}
-            {% if form_cabecera.sector.errors %}
-            <div class="text-danger mt-1">{{ form_cabecera.sector.errors }}</div>
-            {% endif %}
-        </div>
+                            {% if not es_bodeguero %}
+                            <div class="col-12">
+                                <label class="form-label fw-bold fs-5">Sector <span class="text-danger">*</span></label>
+                                {{ form_cabecera.sector }}
+                                {% if form_cabecera.sector.errors %}
+                                <div class="text-danger mt-1">{{ form_cabecera.sector.errors }}</div>
+                                {% endif %}
+                            </div>
 
-        <div class="mb-4">
-            <label class="form-label fw-bold fs-5">Dirección / Referencia <span class="text-danger">*</span></label>
-            {{ form_cabecera.direccion_entrega }}
-            {% if form_cabecera.direccion_entrega.errors %}
-            <div class="text-danger mt-1">{{ form_cabecera.direccion_entrega.errors }}</div>
-            {% endif %}
-            <small class="form-text text-muted d-block mt-1">
-                Ej: Los Álamos 123, casa esquina roja, frente al colegio
-            </small>
-        </div>
-        {% endif %}
-
-        <!-- Productos -->
-        <h5 class="fw-bold mb-3 text-center fs-5">Productos</h5>
-
-        {{ formset.management_form }}
-
-        <div id="formset-container">
-            {% for form in formset %}
-            <div class="detalle-row card mb-3 shadow-sm border-0" data-form-index="{{ forloop.counter0 }}">
-                <div class="card-body p-3">
-                    <div class="row g-2 align-items-end">
-                        <div class="col-12">
-                            <label class="form-label">Tipo de balón <span class="text-danger">*</span></label>
-                            {{ form.balon }}
-                            {% if form.balon.errors %}
-                            <div class="text-danger small mt-1">{{ form.balon.errors }}</div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold fs-5">Dirección / Referencia <span class="text-danger">*</span></label>
+                                {{ form_cabecera.direccion_entrega }}
+                                {% if form_cabecera.direccion_entrega.errors %}
+                                <div class="text-danger mt-1">{{ form_cabecera.direccion_entrega.errors }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted d-block mt-1">
+                                    Ej: Los Álamos 123, casa esquina roja, frente al colegio
+                                </small>
+                            </div>
                             {% endif %}
                         </div>
-                        <div class="col-4">
-                            <label class="form-label">Cantidad <span class="text-danger">*</span></label>
-                            {{ form.cantidad }}
-                            {% if form.cantidad.errors %}
-                            <div class="text-danger small mt-1">{{ form.cantidad.errors }}</div>
-                            {% endif %}
-                        </div>
-                        <div class="col-4">
-                            <label class="form-label">Precio Unit.</label>
-                            {{ form.precio_venta_unitario }}
-                        </div>
-                        <div class="col-4 text-end">
-                            {% if forloop.counter0 == 0 %}
-                            <button type="button" class="btn btn-outline-secondary btn-lg w-100" disabled>
-                                <i class="bi bi-lock-fill me-2"></i>Primera fila
-                            </button>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                    <div>
+                        <h5 class="fw-bold mb-1 fs-5">Productos</h5>
+                        <p class="text-muted small mb-0">
+                            {% if es_bodeguero %}
+                                Agrega una fila por tipo de balón. Evita repetir el mismo balón en varias filas.
                             {% else %}
-                            <button type="button" class="btn btn-outline-danger btn-lg w-100 remove-row">
-                                <i class="bi bi-trash3 me-2"></i>Quitar
-                            </button>
+                                Agrega los balones solicitados para este pedido.
                             {% endif %}
+                        </p>
+                    </div>
+                    {% if es_bodeguero %}
+                    <div class="badge text-bg-light border px-3 py-2">Vista optimizada para carga masiva</div>
+                    {% endif %}
+                </div>
+
+                {{ formset.management_form }}
+
+                <div id="formset-container">
+                    {% for form in formset %}
+                    <div class="detalle-row card mb-3 shadow-sm border-0 {% if es_bodeguero %}detalle-row-bodega{% endif %}" data-form-index="{{ forloop.counter0 }}">
+                        <div class="card-body p-3 p-md-4">
+                            {% if es_bodeguero %}
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge rounded-pill text-bg-primary">Fila {{ forloop.counter }}</span>
+                                    <span class="text-muted small">Carga de balón</span>
+                                </div>
+                                {% if forloop.counter0 == 0 %}
+                                <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Puedes dejar esta fila como base y agregar más abajo.</span>
+                                {% else %}
+                                <button type="button" class="btn btn-outline-danger btn-sm remove-row">
+                                    <i class="bi bi-trash3 me-1"></i>Quitar
+                                </button>
+                                {% endif %}
+                            </div>
+                            <div class="row g-3 align-items-end">
+                                <div class="col-lg-9">
+                                    <label class="form-label">Tipo de balón <span class="text-danger">*</span></label>
+                                    {{ form.balon }}
+                                    {% if form.balon.errors %}
+                                    <div class="text-danger small mt-1">{{ form.balon.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-6 col-lg-3">
+                                    <label class="form-label">Cantidad <span class="text-danger">*</span></label>
+                                    <div class="cantidad-control">
+                                        <button type="button" class="btn btn-outline-danger cantidad-btn cantidad-btn-decrement" data-action="decrement" aria-label="Restar una unidad">
+                                            <i class="bi bi-dash-lg"></i>
+                                        </button>
+                                        {{ form.cantidad }}
+                                        <button type="button" class="btn btn-outline-success cantidad-btn cantidad-btn-increment" data-action="increment" aria-label="Sumar una unidad">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    </div>
+                                    {% if form.cantidad.errors %}
+                                    <div class="text-danger small mt-1">{{ form.cantidad.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="d-none">
+                                    {{ form.precio_venta_unitario }}
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="row g-3 align-items-end">
+                                <div class="col-12">
+                                    <label class="form-label">Tipo de balón <span class="text-danger">*</span></label>
+                                    {{ form.balon }}
+                                    {% if form.balon.errors %}
+                                    <div class="text-danger small mt-1">{{ form.balon.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Cantidad <span class="text-danger">*</span></label>
+                                    <div class="cantidad-control">
+                                        <button type="button" class="btn btn-outline-danger cantidad-btn cantidad-btn-decrement" data-action="decrement" aria-label="Restar una unidad">
+                                            <i class="bi bi-dash-lg"></i>
+                                        </button>
+                                        {{ form.cantidad }}
+                                        <button type="button" class="btn btn-outline-success cantidad-btn cantidad-btn-increment" data-action="increment" aria-label="Sumar una unidad">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    </div>
+                                    {% if form.cantidad.errors %}
+                                    <div class="text-danger small mt-1">{{ form.cantidad.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="d-none">
+                                    {{ form.precio_venta_unitario }}
+                                </div>
+                                <div class="col-12">
+                                    {% if forloop.counter0 == 0 %}
+                                    <button type="button" class="btn btn-outline-secondary w-100 py-2 telefonista-action-btn" disabled>
+                                        <i class="bi bi-lock-fill me-2"></i>Primera fila
+                                    </button>
+                                    {% else %}
+                                    <button type="button" class="btn btn-outline-danger w-100 py-2 telefonista-action-btn remove-row">
+                                        <i class="bi bi-trash3 me-2"></i>Quitar
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            {{ form.id }}
+                            <div style="display: none;">{{ form.DELETE }}</div>
                         </div>
                     </div>
-                    <!-- Campos hidden necesarios -->
-                    {{ form.id }}
-                    <div style="display: none;">{{ form.DELETE }}</div>
+                    {% endfor %}
                 </div>
-            </div>
-            {% endfor %}
-        </div>
 
-        <!-- Template para nuevas filas -->
-        <div id="empty-form" style="display: none;">
-            <div class="detalle-row card mb-3 shadow-sm border-0">
-                <div class="card-body p-3">
-                    <div class="row g-2 align-items-end">
-                        <div class="col-12">
-                            <label class="form-label">Tipo de balón <span class="text-danger">*</span></label>
-                            {{ formset.empty_form.balon }}
-                        </div>
-                        <div class="col-4">
-                            <label class="form-label">Cantidad <span class="text-danger">*</span></label>
-                            {{ formset.empty_form.cantidad }}
-                        </div>
-                        <div class="col-4">
-                            <label class="form-label">Precio Unit.</label>
-                            {{ formset.empty_form.precio_venta_unitario }}
-                        </div>
-                        <div class="col-4 text-end">
-                            <button type="button" class="btn btn-outline-danger btn-lg w-100 remove-row">
-                                <i class="bi bi-trash3 me-2"></i>Quitar
-                            </button>
+                <!-- Template para nuevas filas -->
+                <div id="empty-form" style="display: none;">
+                    <div class="detalle-row card mb-3 shadow-sm border-0 {% if es_bodeguero %}detalle-row-bodega{% endif %}">
+                        <div class="card-body p-3 p-md-4">
+                            {% if es_bodeguero %}
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge rounded-pill text-bg-primary fila-badge">Nueva fila</span>
+                                    <span class="text-muted small">Carga de balón</span>
+                                </div>
+                                <button type="button" class="btn btn-outline-danger btn-sm remove-row">
+                                    <i class="bi bi-trash3 me-1"></i>Quitar
+                                </button>
+                            </div>
+                            <div class="row g-3 align-items-end">
+                                <div class="col-lg-9">
+                                    <label class="form-label">Tipo de balón <span class="text-danger">*</span></label>
+                                    {{ formset.empty_form.balon }}
+                                </div>
+                                <div class="col-6 col-lg-3">
+                                    <label class="form-label">Cantidad <span class="text-danger">*</span></label>
+                                    <div class="cantidad-control">
+                                        <button type="button" class="btn btn-outline-danger cantidad-btn cantidad-btn-decrement" data-action="decrement" aria-label="Restar una unidad">
+                                            <i class="bi bi-dash-lg"></i>
+                                        </button>
+                                        {{ formset.empty_form.cantidad }}
+                                        <button type="button" class="btn btn-outline-success cantidad-btn cantidad-btn-increment" data-action="increment" aria-label="Sumar una unidad">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="d-none">
+                                    {{ formset.empty_form.precio_venta_unitario }}
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="row g-3 align-items-end">
+                                <div class="col-12">
+                                    <label class="form-label">Tipo de balón <span class="text-danger">*</span></label>
+                                    {{ formset.empty_form.balon }}
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Cantidad <span class="text-danger">*</span></label>
+                                    <div class="cantidad-control">
+                                        <button type="button" class="btn btn-outline-danger cantidad-btn cantidad-btn-decrement" data-action="decrement" aria-label="Restar una unidad">
+                                            <i class="bi bi-dash-lg"></i>
+                                        </button>
+                                        {{ formset.empty_form.cantidad }}
+                                        <button type="button" class="btn btn-outline-success cantidad-btn cantidad-btn-increment" data-action="increment" aria-label="Sumar una unidad">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="d-none">
+                                    {{ formset.empty_form.precio_venta_unitario }}
+                                </div>
+                                <div class="col-12">
+                                    <button type="button" class="btn btn-outline-danger w-100 py-2 telefonista-action-btn remove-row">
+                                        <i class="bi bi-trash3 me-2"></i>Quitar
+                                    </button>
+                                </div>
+                            </div>
+                            {% endif %}
+                            <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
                         </div>
                     </div>
-                    <div style="display: none;">{{ formset.empty_form.DELETE }}</div>
+                </div>
+
+                <div class="d-grid gap-2 mt-3 mb-5">
+                    <button type="button" id="add-row" class="btn btn-outline-primary btn-lg {% if es_bodeguero %}py-3{% endif %}">
+                        <i class="bi bi-plus-circle me-2"></i>{% if es_bodeguero %}Agregar otro tipo de balón{% else %}Agregar otro producto{% endif %}
+                    </button>
                 </div>
             </div>
-        </div>
 
-        <div class="d-grid gap-2 mt-3 mb-5">
-            <button type="button" id="add-row" class="btn btn-outline-primary btn-lg">
-                <i class="bi bi-plus-circle me-2"></i>Agregar otro producto
-            </button>
+            {% if es_bodeguero %}
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0 pedido-panel sticky-lg-top" style="top: 88px;">
+                    <div class="card-body p-3 p-md-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <h5 class="fw-bold mb-1">Resumen de carga</h5>
+                                <p class="text-muted small mb-0">Vista rápida de los balones ya añadidos.</p>
+                            </div>
+                            <span class="badge text-bg-primary rounded-pill" id="resumenFilasActivas">0 filas</span>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <div class="resumen-kpi">
+                                    <div class="resumen-kpi-label">Total balones</div>
+                                    <div class="resumen-kpi-value" id="resumenTotalCantidad">0</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="resumen-kpi">
+                                    <div class="resumen-kpi-label">Monto estimado</div>
+                                    <div class="resumen-kpi-value" id="resumenTotalMonto">$0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border rounded-3 p-3 bg-light-subtle">
+                            <div class="fw-semibold mb-2">Detalle agregado</div>
+                            <div id="resumenDetalleLista" class="d-grid gap-2">
+                                <div class="text-muted small">Aún no hay balones seleccionados.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
 
         <div class="d-grid gap-2">
@@ -175,15 +337,95 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let formIndex = parseInt(totalFormsInput.value) || 1;
 
+    function syncRowPrice(row) {
+        const balonSelect = row.querySelector('.balon-select');
+        const precioInput = row.querySelector('.precio-display');
+
+        if (!balonSelect || !precioInput) return;
+
+        const selectedOption = balonSelect.options[balonSelect.selectedIndex];
+        const precio = selectedOption ? (selectedOption.dataset.precio || '') : '';
+        precioInput.value = precio;
+    }
+
+    function updateRowLabels() {
+        container.querySelectorAll('.detalle-row').forEach((row, index) => {
+            if (row.style.display === 'none') return;
+            const badge = row.querySelector('.fila-badge, .badge.rounded-pill.text-bg-primary');
+            if (badge) {
+                badge.textContent = `Fila ${index + 1}`;
+            }
+        });
+    }
+
+    function updateBodegueroSummary() {
+        const resumenLista = document.getElementById('resumenDetalleLista');
+        const resumenFilas = document.getElementById('resumenFilasActivas');
+        const resumenCantidad = document.getElementById('resumenTotalCantidad');
+        const resumenMonto = document.getElementById('resumenTotalMonto');
+
+        if (!resumenLista || !resumenFilas || !resumenCantidad || !resumenMonto) return;
+
+        const filas = [];
+        let totalCantidad = 0;
+        let totalMonto = 0;
+
+        container.querySelectorAll('.detalle-row').forEach(row => {
+            if (row.style.display === 'none') return;
+
+            const balonSelect = row.querySelector('.balon-select');
+            const cantidadInput = row.querySelector('input[name*="-cantidad"]');
+            const precioInput = row.querySelector('.precio-display');
+
+            const balonLabel = balonSelect && balonSelect.value ? balonSelect.options[balonSelect.selectedIndex].text : '';
+            const cantidad = cantidadInput ? (parseInt(cantidadInput.value, 10) || 0) : 0;
+            const precio = precioInput
+                ? (parseInt(precioInput.value, 10) || parseInt(balonSelect?.options[balonSelect.selectedIndex]?.dataset.precio, 10) || 0)
+                : 0;
+
+            if (!balonLabel || cantidad <= 0) return;
+
+            totalCantidad += cantidad;
+            totalMonto += cantidad * precio;
+            filas.push({
+                label: balonLabel,
+                cantidad,
+                subtotal: cantidad * precio,
+            });
+        });
+
+        resumenFilas.textContent = `${filas.length} fila${filas.length === 1 ? '' : 's'}`;
+        resumenCantidad.textContent = totalCantidad.toLocaleString('es-CL');
+        resumenMonto.textContent = '$' + totalMonto.toLocaleString('es-CL');
+
+        if (!filas.length) {
+            resumenLista.innerHTML = '<div class="text-muted small">Aún no hay balones seleccionados.</div>';
+            return;
+        }
+
+        resumenLista.innerHTML = filas.map(item => `
+            <div class="resumen-item">
+                <div class="resumen-item-main">${item.label}</div>
+                <div class="resumen-item-meta">
+                    <span>${item.cantidad} un.</span>
+                    <span>$${item.subtotal.toLocaleString('es-CL')}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
     // Función para configurar los listeners de cambio de balón
     function setupBalonChangeListeners(row) {
         const balonSelect = row.querySelector('.balon-select');
         const precioInput = row.querySelector('.precio-display');
+        const cantidadInput = row.querySelector('input[name*="-cantidad"]');
+
+        syncRowPrice(row);
         
         if (balonSelect && precioInput) {
             balonSelect.addEventListener('change', function() {
                 const selectedOption = this.options[this.selectedIndex];
-                const precio = selectedOption.dataset.precio || '';
+                const precio = selectedOption ? (selectedOption.dataset.precio || '') : '';
 
                 // Verificar duplicado después de actualizar el valor
                 if (this.value && isDuplicateBalon(this.value)) {
@@ -198,7 +440,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     precioInput.value = '';
                 }
+
+                updateBodegueroSummary();
             });
+        }
+
+        if (cantidadInput) {
+            cantidadInput.addEventListener('input', updateBodegueroSummary);
         }
     }
 
@@ -217,10 +465,31 @@ document.addEventListener('DOMContentLoaded', function() {
         return getActiveBalonValues().filter(v => v === value).length > 1;
     }
 
+    container.addEventListener('click', function(e) {
+        const cantidadBtn = e.target.closest('.cantidad-btn');
+        if (!cantidadBtn) return;
+
+        const control = cantidadBtn.closest('.cantidad-control');
+        const input = control ? control.querySelector('input[name*="-cantidad"]') : null;
+        if (!input) return;
+
+        const currentValue = parseInt(input.value, 10) || 0;
+        const minValue = parseInt(input.min, 10) || 1;
+        const nextValue = cantidadBtn.dataset.action === 'increment'
+            ? currentValue + 1
+            : Math.max(minValue, currentValue - 1);
+
+        input.value = nextValue;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
     // Configurar listeners para filas existentes
     container.querySelectorAll('.detalle-row').forEach(row => {
         setupBalonChangeListeners(row);
     });
+    updateRowLabels();
+    updateBodegueroSummary();
 
     // Validación anti-duplicado al enviar el formulario
     document.getElementById('pedidoForm').addEventListener('submit', function(e) {
@@ -255,6 +524,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Configurar listeners para la nueva fila
         setupBalonChangeListeners(newRow);
+        updateRowLabels();
+        updateBodegueroSummary();
         
         formIndex++;
         totalFormsInput.value = formIndex;
@@ -289,6 +560,8 @@ document.addEventListener('DOMContentLoaded', function() {
             deleteCheckbox.checked = true;
         }
         filaEliminarPendiente.style.display = 'none';
+        updateRowLabels();
+        updateBodegueroSummary();
         filaEliminarPendiente = null;
         bootstrap.Modal.getInstance(document.getElementById('modalEliminarProducto')).hide();
     });
@@ -298,6 +571,9 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
+    .pedido-panel {
+        border: 1px solid rgba(13, 110, 253, 0.08);
+    }
     .detalle-row { 
         transition: all 0.2s ease;
     }
@@ -308,6 +584,107 @@ document.addEventListener('DOMContentLoaded', function() {
     .form-control:focus {
         border-color: #0d6efd;
         box-shadow: 0 0 0 0.25rem rgba(13,110,253,.25);
+    }
+    .detalle-row-bodega {
+        border-left: 4px solid rgba(13, 110, 253, 0.18);
+    }
+    .detalle-row-bodega .form-select,
+    .detalle-row-bodega .form-control {
+        min-height: 48px;
+    }
+    .cantidad-control {
+        display: flex;
+        align-items: stretch;
+        gap: 0.5rem;
+        width: 100%;
+    }
+    .cantidad-control .form-control {
+        text-align: center;
+        flex: 1 1 auto;
+        min-width: 0;
+        width: auto !important;
+        max-width: none !important;
+        min-width: 88px;
+    }
+    .cantidad-btn {
+        width: 44px;
+        min-width: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+    }
+    .cantidad-btn-increment:hover,
+    .cantidad-btn-increment:focus {
+        background-color: #198754;
+        border-color: #198754;
+        color: white;
+    }
+    .cantidad-btn-decrement:hover,
+    .cantidad-btn-decrement:focus {
+        background-color: #dc3545;
+        border-color: #dc3545;
+        color: white;
+    }
+    .telefonista-action-btn {
+        font-size: 1rem;
+        font-weight: 600;
+    }
+    @media (max-width: 575.98px) {
+        .cantidad-control {
+            gap: 0.35rem;
+        }
+        .cantidad-btn {
+            width: 42px;
+            min-width: 42px;
+        }
+        .cantidad-control .form-control {
+            min-width: 96px;
+        }
+        .telefonista-action-btn {
+            min-height: 48px;
+        }
+    }
+    .compact-select-wrap .form-select {
+        min-height: 48px;
+    }
+    .resumen-kpi {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.9rem;
+        padding: 0.9rem 1rem;
+        height: 100%;
+    }
+    .resumen-kpi-label {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        color: #6c757d;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+    .resumen-kpi-value {
+        font-size: 1.35rem;
+        font-weight: 800;
+        color: #0d6efd;
+        line-height: 1.1;
+    }
+    .resumen-item {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.75rem;
+        padding: 0.75rem 0.9rem;
+    }
+    .resumen-item-main {
+        font-weight: 700;
+        font-size: 0.92rem;
+        margin-bottom: 0.2rem;
+    }
+    .resumen-item-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        color: #6c757d;
+        font-size: 0.83rem;
     }
 </style>
 
