@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.db.models import Sum, F, ExpressionWrapper, DecimalField
-from .models import Usuario, TipoBalon, HistorialPrecioBalon, Pedido, DetallePedido, HistorialEstadoPedido, SobreDiario, LineaSobre, AuditoriaAccion, PushSubscription
+from .models import Usuario, TipoBalon, HistorialPrecioBalon, Sector, Pedido, DetallePedido, HistorialEstadoPedido, SobreDiario, LineaSobre, AuditoriaAccion, PushSubscription
 
 
 @admin.register(Usuario)
@@ -75,6 +75,16 @@ class HistorialPrecioBalonAdmin(admin.ModelAdmin):
     
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(Sector)
+class SectorAdmin(admin.ModelAdmin):
+    list_display = ('nombre', 'codigo', 'zona', 'activo', 'actualizado_el')
+    list_filter = ('zona', 'activo')
+    search_fields = ('nombre', 'codigo')
+    list_editable = ('activo',)
+    readonly_fields = ('creado_el', 'actualizado_el')
+    ordering = ('zona', 'nombre')
     
 class DetallePedidoInline(admin.TabularInline):
     model = DetallePedido
