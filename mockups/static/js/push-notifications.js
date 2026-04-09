@@ -154,6 +154,15 @@
 
             // Verificar si ya existe una suscripción
             let subscription = await registration.pushManager.getSubscription();
+
+            const serverStatus = await getServerSubscriptionStatus();
+            const needsRenewal = !!subscription && serverStatus.available && !serverStatus.hasSubscriptions;
+
+            if (needsRenewal) {
+                console.log('[Push] Suscripción local sin respaldo válido en servidor, renovando endpoint...');
+                await subscription.unsubscribe();
+                subscription = null;
+            }
             
             if (!subscription) {
                 // Crear nueva suscripción
@@ -168,7 +177,23 @@
             }
 
             // Enviar o reactivar suscripción en el servidor
-            const data = await syncSubscriptionWithServer(subscription);
+            let data;
+            try {
+                data = await syncSubscriptionWithServer(subscription);
+            } catch (error) {
+                if (subscription) {
+                    console.warn('[Push] Falló sincronización. Intentando renovar suscripción...', error.message);
+                    await subscription.unsubscribe();
+                    const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+                    subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: applicationServerKey
+                    });
+                    data = await syncSubscriptionWithServer(subscription);
+                } else {
+                    throw error;
+                }
+            }
 
             if (data.success) {
                 console.log('[Push] Suscripción guardada en servidor');
@@ -256,7 +281,7 @@
             console.log('[Push] Notificaciones push no soportadas');
             return;
         }
-
+        
         // Esperar a que el service worker esté listo
         const registration = await navigator.serviceWorker.ready;
         console.log('[Push] Service Worker activo:', registration.active?.state);
