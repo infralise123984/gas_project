@@ -29,6 +29,14 @@
                     </span>
                 </div>
             {% endif %}
+            {% if sobre.tipo != 'bodega' and sobre.kilometraje_camion %}
+                <div class="mt-2">
+                    <span class="badge bg-light text-dark fs-6">
+                        <i class="bi bi-speedometer2 me-1"></i>
+                        Km: {{ sobre.kilometraje_camion }}
+                    </span>
+                </div>
+            {% endif %}
         </div>
 
         <div class="card-body p-4 p-md-5">
@@ -67,7 +75,7 @@
                             name="kilometraje_camion" 
                             class="form-control"
                             min="0"
-                            value="{{ sobre.kilometraje_camion|default:'' }}"
+                            value="{{ sobre.kilometraje_camion|default:0 }}"
                             placeholder="Ej: 45230"
                         >
                         <small class="form-text text-muted">
@@ -428,6 +436,11 @@
                                     data-bs-toggle="modal" data-bs-target="#modalCerrarSobre">
                                 <i class="bi bi-lock-fill me-2"></i>Guardar y Cerrar Sobre
                             </button>
+                            {% if request.user.rol in 'jefe,admin' %}
+                            <button type="button" class="btn btn-outline-info btn-lg px-4" data-bs-toggle="modal" data-bs-target="#modalCrearSobreAdicional">
+                                <i class="bi bi-plus-circle me-2"></i>Crear Sobre Adicional
+                            </button>
+                            {% endif %}
                             {% else %}
                             <div class="alert alert-success mb-0 flex-grow-1" role="alert">
                                 <i class="bi bi-check-circle-fill me-2"></i>
@@ -968,6 +981,41 @@ function agregarGasto() {
 </style>
 
 <!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- MODAL: CREAR SOBRE ADICIONAL (sobre aun abierto, solo jefe/admin) -->
+<div class="modal fade" id="modalCrearSobreAdicional" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Crear Sobre Adicional
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'crear_sobre_post_cierre' sobre.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="forzar_creacion" value="1">
+                <div class="modal-body">
+                    <div class="alert alert-warning mb-3">
+                        <strong>Atención:</strong> El sobre actual sigue <strong>abierto</strong>. Este nuevo sobre es adicional y excepcional.
+                    </div>
+                    <p class="text-muted mb-3">
+                        Se creará un nuevo sobre del mismo tipo:
+                        <strong>{% if sobre.tipo == 'bodega' %}Bodega{% else %}{{ sobre.trabajador.get_full_name|default:sobre.trabajador.username }}{% endif %}</strong>
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold"><i class="bi bi-calendar-event me-2"></i>Fecha Correspondiente</label>
+                        <input type="date" name="fecha_correspondiente" class="form-control" value="{{ hoy|date:'Y-m-d' }}" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning fw-bold">Crear Sobre Adicional</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- MODAL: CREAR NUEVO SOBRE -->
 <!-- ══════════════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="modalCrearNuevoSobre" tabindex="-1" aria-labelledby="modalCrearNuevoSobreLabel" aria-hidden="true">

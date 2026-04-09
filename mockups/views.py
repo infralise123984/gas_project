@@ -2958,7 +2958,7 @@ def editar_sobre_diario(request):
                 else:
                     messages.warning(request, "Kilometraje fuera de rango (0–999999). Se guardó el valor anterior.")
             except (ValueError, TypeError):
-                sobre.kilometraje_camion = 0
+                pass  # Campo vacío o inválido: se conserva el valor existente
         
         # Si se especifica fecha correspondiente
         fecha_correspondiente_str = request.POST.get("fecha_correspondiente")
@@ -3191,8 +3191,11 @@ def crear_sobre_post_cierre(request, sobre_id):
         messages.error(request, "No tienes permiso para crear un nuevo sobre.")
         return redirect('sobres_lista')
     
-    # Validar que el sobre anterior esté CERRADO
-    if not sobre_anterior.cerrado:
+    # Validar que el sobre anterior esté CERRADO (salvo que se fuerce por jefe/admin)
+    forzar = request.POST.get('forzar_creacion') == '1'
+    puede_forzar = request.user.rol in ['jefe', 'admin']
+
+    if not sobre_anterior.cerrado and not (forzar and puede_forzar):
         messages.error(request, "Solo puedes crear un nuevo sobre después de cerrar el anterior.")
         return redirect(f"{reverse('sobres_editar')}?sobre_id={sobre_anterior.id}")
     
@@ -3207,7 +3210,7 @@ def crear_sobre_post_cierre(request, sobre_id):
         
         # Crear el nuevo sobre con los mismos datos del anterior
         nuevo_sobre = SobreDiario.objects.create(
-            fecha=today_chile(),
+            fecha=now_chile(),
             fecha_correspondiente=fecha_correspondiente,
             tipo=sobre_anterior.tipo,
             trabajador=sobre_anterior.trabajador,
@@ -3221,11 +3224,18 @@ def crear_sobre_post_cierre(request, sobre_id):
         nuevo_sobre.pagos.all().delete()
         nuevo_sobre.gastos.all().delete()
         
-        messages.success(
-            request, 
-            f"Nuevo sobre creado para {fecha_correspondiente.strftime('%d/%m/%Y')}. "
-            f"El anterior estaba cerrado el {sobre_anterior.declarado_el.strftime('%d/%m/%Y %H:%M')}."
-        )
+        if forzar and puede_forzar and not sobre_anterior.cerrado:
+            messages.warning(
+                request,
+                f"Sobre adicional creado para {fecha_correspondiente.strftime('%d/%m/%Y')}. "
+                f"El sobre anterior (#{sobre_anterior.id}) sigue abierto."
+            )
+        else:
+            messages.success(
+                request,
+                f"Nuevo sobre creado para {fecha_correspondiente.strftime('%d/%m/%Y')}. "
+                f"El anterior estaba cerrado el {sobre_anterior.declarado_el.strftime('%d/%m/%Y %H:%M')}."
+            )
         
         # Redirigir a editar el nuevo sobre
         # IMPORTANTE: Solo usar sobre_id para evitar que se cargue otro sobre por búsqueda de fecha
@@ -3395,6 +3405,25 @@ def imprimir_sobre_diario(request, sobre_id):
     total_contabilizado = total_pagos + total_gastos
     diferencia = total_venta - total_contabilizado
 
+    # Kilos acumulados en el mes para el mismo trabajador (solo camioneros)
+    total_kilos_mes = 0
+    if sobre.tipo != 'bodega' and sobre.trabajador:
+        from django.db.models import DecimalField as DField
+        sobres_mes = SobreDiario.objects.filter(
+            tipo='camion',
+            trabajador=sobre.trabajador,
+            fecha_correspondiente__year=sobre.fecha_correspondiente.year,
+            fecha_correspondiente__month=sobre.fecha_correspondiente.month,
+        )
+        total_kilos_mes = LineaSobre.objects.filter(
+            sobre__in=sobres_mes
+        ).aggregate(
+            total=Sum(
+                F('cantidad_declarada') * F('balon__peso_neto_gas'),
+                output_field=DField()
+            )
+        )['total'] or 0
+
     context = {
         'sobre': sobre,
         'lineas_data': lineas_data,
@@ -3409,6 +3438,7 @@ def imprimir_sobre_diario(request, sobre_id):
         'total_cantidad_decl': total_cantidad_decl,
         'total_diferencia': total_diferencia,
         'total_kilos': total_kilos,
+        'total_kilos_mes': total_kilos_mes,
     }
 
     return render(request, 'sobres/imprimir_sobre.html', context)
