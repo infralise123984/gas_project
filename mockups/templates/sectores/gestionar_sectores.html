@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Gestión de Sectores - GasFácil{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-12">
+            <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+                <div>
+                    <h2 class="text-primary fw-bold mb-1">
+                        <i class="bi bi-geo-alt me-2"></i>Gestión de Sectores
+                    </h2>
+                    <p class="text-muted mb-0">Catálogo administrable para preparar la migración futura sin tocar pedidos históricos.</p>
+                </div>
+                <a href="{% url 'sectores_crear' %}" class="btn btn-success btn-lg px-4 shadow">
+                    <i class="bi bi-plus-circle me-2"></i>Nuevo Sector
+                </a>
+            </div>
+
+            <div class="alert alert-info border-start border-4 shadow-sm mb-4" role="alert">
+                <strong>Importante:</strong> esta pantalla administra el nuevo catálogo <strong>Sector</strong>. El sistema actual sigue usando <strong>Pedido.sector</strong> como texto, por lo que borrar o editar aquí no modifica pedidos ya registrados.
+            </div>
+
+            <div class="card shadow-lg border-0">
+                <div class="card-header bg-primary text-white py-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h4 class="mb-0 fw-bold">Sectores Registrados</h4>
+                        <small>Alta, edición y mantención del catálogo nuevo</small>
+                    </div>
+                    <span class="badge bg-light text-primary fs-6">{{ sectores|length }} sector{{ sectores|length|pluralize:"es" }}</span>
+                </div>
+
+                <div class="card-body p-0">
+                    {% if sectores %}
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered align-middle mb-0">
+                            <thead class="table-primary text-white">
+                                <tr>
+                                    <th class="ps-3">Nombre</th>
+                                    <th>Código</th>
+                                    <th class="text-center">Zona</th>
+                                    <th class="text-center">Estado</th>
+                                    <th class="text-center">Pedidos históricos</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sector in sectores %}
+                                <tr {% if not sector.activo %}class="table-secondary opacity-75"{% endif %}>
+                                    <td class="ps-3 fw-semibold">{{ sector.nombre }}</td>
+                                    <td><code>{{ sector.codigo }}</code></td>
+                                    <td class="text-center">
+                                        <span class="badge {% if sector.zona == 'sur' %}bg-danger-subtle text-danger{% elif sector.zona == 'norte' %}bg-info-subtle text-info{% else %}bg-secondary{% endif %}">
+                                            {{ sector.get_zona_display }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if sector.activo %}
+                                        <span class="badge bg-success">Activo</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Inactivo</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-dark border">{{ sector.pedidos_existentes|intcomma }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{% url 'sectores_editar' sector.id %}" class="btn btn-outline-primary" title="Editar">
+                                                <i class="bi bi-pencil-square"></i> Editar
+                                            </a>
+                                            {% if puede_eliminar %}
+                                            <button type="button"
+                                                    class="btn btn-outline-danger"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#modalEliminarSector"
+                                                    data-sector-id="{{ sector.id }}"
+                                                    data-sector-nombre="{{ sector.nombre }}"
+                                                    data-pedidos="{{ sector.pedidos_existentes }}"
+                                                    data-url="{% url 'sectores_eliminar' sector.id %}">
+                                                <i class="bi bi-trash"></i> Eliminar
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-pin-map fs-1 d-block mb-3"></i>
+                        <strong>No hay sectores en el catálogo todavía</strong>
+                        <p class="mt-2 mb-0">
+                            <a href="{% url 'sectores_crear' %}" class="btn btn-primary btn-sm mt-3">
+                                <i class="bi bi-plus-circle me-1"></i>Crear el primer sector
+                            </a>
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if puede_eliminar %}
+<div class="modal fade" id="modalEliminarSector" tabindex="-1" aria-labelledby="modalEliminarSectorLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalEliminarSectorLabel">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Eliminar sector
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">Vas a eliminar del catálogo el sector <strong id="sectorNombreModal"></strong>.</p>
+                <p class="mb-0 text-muted" id="sectorPedidosModal"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form method="post" id="formEliminarSector">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i>Eliminar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('modalEliminarSector');
+    if (!modal) return;
+
+    modal.addEventListener('show.bs.modal', function (event) {
+        const button = event.relatedTarget;
+        const nombre = button.getAttribute('data-sector-nombre');
+        const pedidos = Number(button.getAttribute('data-pedidos') || '0');
+        const url = button.getAttribute('data-url');
+
+        document.getElementById('sectorNombreModal').textContent = nombre;
+        document.getElementById('formEliminarSector').action = url;
+        document.getElementById('sectorPedidosModal').textContent = pedidos > 0
+            ? `Existen ${pedidos} pedido(s) históricos con este texto. Esos pedidos no serán modificados.`
+            : 'No hay pedidos históricos con este nombre exacto.';
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

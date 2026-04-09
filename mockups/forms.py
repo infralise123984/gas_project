@@ -6,10 +6,44 @@ from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory, BaseInlineFormSet
 from django.utils.safestring import mark_safe
-from .models import Pedido, DetallePedido, TipoBalon, SobreDiario, LineaSobre, LineaPago, LineaGasto, Usuario
+from .models import Pedido, DetallePedido, TipoBalon, Sector, SobreDiario, LineaSobre, LineaPago, LineaGasto, Usuario
 
-# Sectores definidos en Pedido.SECTORES (fuente única de verdad)
-SECTORES = [("", "— Seleccionar sector —")] + Pedido.SECTORES
+
+def get_sector_choices(include_blank=True, include_inactive=False, selected_value=None):
+    """Retorna opciones de sector priorizando el catálogo administrable y usando fallback legacy."""
+    queryset = Sector.objects.all()
+    if not include_inactive:
+        queryset = queryset.filter(activo=True)
+
+    sectores = list(queryset.order_by('zona', 'nombre'))
+    if sectores:
+        grouped_choices = []
+        for zona_value, zona_label in Sector.ZONAS:
+            opciones_zona = [
+                (sector.nombre, sector.nombre)
+                for sector in sectores
+                if sector.zona == zona_value
+            ]
+            if opciones_zona:
+                grouped_choices.append((zona_label, opciones_zona))
+        choices = grouped_choices
+    else:
+        choices = list(Pedido.SECTORES)
+
+    available_values = set()
+    for item in choices:
+        if isinstance(item[1], (list, tuple)):
+            for value, _label in item[1]:
+                available_values.add(value)
+        else:
+            available_values.add(item[0])
+
+    if selected_value and selected_value not in available_values:
+        choices.append((selected_value, f"[LEGACY] {selected_value}"))
+
+    if include_blank:
+        return [("", "— Seleccionar sector —")] + choices
+    return choices
 
 User = get_user_model()
 
@@ -150,8 +184,11 @@ class BalonSelectWidget(forms.Select):
     def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
         """Agregar data-precio a cada opción"""
         option = super().create_option(name, value, label, selected, index, subindex, attrs)
-        if value and value in self.prices_dict:
-            option['attrs']['data-precio'] = str(self.prices_dict[value])
+        raw_value = getattr(value, 'value', value)
+        normalized_value = '' if raw_value in (None, '') else str(raw_value)
+
+        if normalized_value and normalized_value in self.prices_dict:
+            option['attrs']['data-precio'] = str(self.prices_dict[normalized_value])
         return option
 
 
@@ -266,11 +303,22 @@ DetalleFormSet = inlineformset_factory(
 class PedidoCabeceraForm(forms.ModelForm):
     """Formulario solo para los campos de cabecera del pedido"""
     sector = forms.ChoiceField(
-        choices=SECTORES,
+        choices=[],
         widget=forms.Select(attrs={'class': 'form-select'}),
         required=False,
         label="Sector / Población",
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        valor_actual = None
+        if self.is_bound:
+            valor_actual = (self.data.get(self.add_prefix('sector')) or '').strip()
+        elif self.instance and self.instance.pk:
+            valor_actual = (self.instance.sector or '').strip()
+
+        self.fields['sector'].choices = get_sector_choices(selected_value=valor_actual)
     
     class Meta:
         model = Pedido
@@ -463,3 +511,40 @@ class TipoBalonForm(forms.ModelForm):
             self.add_error('peso_neto_gas', 'El peso debe ser mayor a 0')
         
         return cleaned_data
+
+
+class SectorForm(forms.ModelForm):
+    class Meta:
+        model = Sector
+        fields = ['nombre', 'zona', 'activo']
+        widgets = {
+            'nombre': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ej: Población José Olivares',
+                'maxlength': 100,
+            }),
+            'zona': forms.Select(attrs={
+                'class': 'form-select',
+            }),
+            'activo': forms.CheckboxInput(attrs={
+                'class': 'form-check-input',
+                'style': 'width: 1.5rem; height: 1.5rem;',
+            }),
+        }
+        labels = {
+            'nombre': 'Nombre del sector',
+            'zona': 'Zona',
+            'activo': 'Disponible para uso futuro',
+        }
+
+    def clean_nombre(self):
+        nombre = (self.cleaned_data.get('nombre') or '').strip()
+        if not nombre:
+            raise forms.ValidationError('Debes ingresar un nombre de sector.')
+
+        queryset = Sector.objects.filter(nombre__iexact=nombre)
+        if self.instance.pk:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise forms.ValidationError('Ya existe un sector con ese nombre.')
+        return nombre

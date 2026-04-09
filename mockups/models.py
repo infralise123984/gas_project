@@ -6,6 +6,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.models import Sum
 from django.utils import timezone
+from django.utils.text import slugify
 from django.core.exceptions import ValidationError
 import re
 
@@ -145,6 +146,66 @@ class HistorialPrecioBalon(models.Model):
         return f"{self.nombre_balon} - {self.fecha_cambio.date()}"
 
 
+class Sector(models.Model):
+    ZONAS = [
+        ("sur", "Sur"),
+        ("norte", "Norte"),
+        ("otro", "Otro / Sin zona"),
+    ]
+
+    nombre = models.CharField(
+        max_length=100,
+        unique=True,
+        verbose_name="Nombre",
+        help_text="Usa el mismo texto que hoy se guarda en Pedido.sector para facilitar la futura migración."
+    )
+    codigo = models.SlugField(
+        max_length=120,
+        unique=True,
+        blank=True,
+        verbose_name="Código interno",
+        help_text="Identificador estable para integraciones futuras. Si lo dejas vacío, se genera automáticamente."
+    )
+    zona = models.CharField(
+        max_length=20,
+        choices=ZONAS,
+        default="otro",
+        verbose_name="Zona"
+    )
+    activo = models.BooleanField(default=True, verbose_name="Activo")
+    creado_el = models.DateTimeField(auto_now_add=True, verbose_name="Creado el")
+    actualizado_el = models.DateTimeField(auto_now=True, verbose_name="Actualizado el")
+
+    def save(self, *args, **kwargs):
+        if not self.codigo and self.nombre:
+            base_codigo = slugify(self.nombre) or "sector"
+            codigo = base_codigo[:120]
+            sufijo = 2
+
+            while Sector.objects.exclude(pk=self.pk).filter(codigo=codigo).exists():
+                extra = f"-{sufijo}"
+                codigo = f"{base_codigo[:120 - len(extra)]}{extra}"
+                sufijo += 1
+
+            self.codigo = codigo
+
+        super().save(*args, **kwargs)
+
+    @property
+    def etiqueta(self):
+        if self.zona == "otro":
+            return self.nombre
+        return f"[{self.get_zona_display().upper()}] {self.nombre}"
+
+    def __str__(self):
+        return self.etiqueta
+
+    class Meta:
+        verbose_name = "Sector"
+        verbose_name_plural = "Sectores"
+        ordering = ["zona", "nombre"]
+
+
 class Pedido(models.Model):
     ESTADOS = [
         ("pendiente",  "Pendiente"),
@@ -188,10 +249,10 @@ class Pedido(models.Model):
         ("Villa Los Andes",             "[SUR] Villa Los Andes"),
         ("Condominio Brisas del Sur",   "[SUR] Condominio Brisas del Sur"),
         ("Villa Shiaponi",              "[SUR] Villa Shiaponi"),
-        ("Grecia","[SUR] Grecia"),
+        ("Grecia",                      "[SUR] Grecia"),
         
         # Sector Norte
-        ("villa las cañadas",            "[NORTE] Villa Las Cañadas"),
+        ("villa las cañadas",           "[NORTE] Villa Las Cañadas"),
         ("Villa Tuniche",               "[NORTE] Villa Tuniche"),
         ("Villa Araucaria",             "[NORTE] Villa Araucaria"),
         ("Villa La Leonera",            "[NORTE] Villa La Leonera"),

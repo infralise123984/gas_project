@@ -40,10 +40,12 @@ from .forms import (
     DetalleFormSetEdit,
     LineaPagoFormSet,
     LineaGastoFormSet,
-    TipoBalonForm
+    TipoBalonForm,
+    SectorForm,
 )
 from .models import (
     Pedido, 
+    Sector,
     TipoBalon, 
     Usuario, 
     DetallePedido, 
@@ -838,6 +840,110 @@ def gestionar_balones_eliminar(request, balon_id):
     messages.success(request, f"Balón '{nombre_balon}' eliminado correctamente.")
     
     return redirect("balones_lista")
+
+
+@login_required
+def gestionar_sectores_lista(request):
+    """Listar sectores del catálogo administrable."""
+    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para gestionar sectores.")
+    if resp:
+        return resp
+
+    sectores = list(Sector.objects.all().order_by('zona', 'nombre'))
+    conteos_pedidos = {
+        item['sector']: item['total']
+        for item in Pedido.objects.exclude(sector='').values('sector').annotate(total=Count('id'))
+    }
+
+    for sector in sectores:
+        sector.pedidos_existentes = conteos_pedidos.get(sector.nombre, 0)
+
+    context = {
+        'sectores': sectores,
+        'title': 'Gestión de Sectores',
+        'puede_eliminar': request.user.rol == 'admin',
+    }
+    return render(request, 'sectores/gestionar_sectores.html', context)
+
+
+@login_required
+def gestionar_sectores_crear(request):
+    """Crear un sector en el catálogo administrable."""
+    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para crear sectores.")
+    if resp:
+        return resp
+
+    if request.method == 'POST':
+        form = SectorForm(request.POST)
+        if form.is_valid():
+            sector = form.save()
+            messages.success(request, f"Sector '{sector.nombre}' creado correctamente.")
+            return redirect('sectores_lista')
+        for field, errors in form.errors.items():
+            for error in errors:
+                messages.error(request, f"{field}: {error}")
+    else:
+        form = SectorForm()
+
+    context = {
+        'form': form,
+        'title': 'Crear Sector',
+        'accion': 'Crear',
+    }
+    return render(request, 'sectores/gestionar_sector_form.html', context)
+
+
+@login_required
+def gestionar_sectores_editar(request, sector_id):
+    """Editar un sector del catálogo administrable."""
+    resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para editar sectores.")
+    if resp:
+        return resp
+
+    sector = get_object_or_404(Sector, id=sector_id)
+
+    if request.method == 'POST':
+        form = SectorForm(request.POST, instance=sector)
+        if form.is_valid():
+            sector = form.save()
+            messages.success(request, f"Sector '{sector.nombre}' actualizado correctamente.")
+            return redirect('sectores_lista')
+        for field, errors in form.errors.items():
+            for error in errors:
+                messages.error(request, f"{field}: {error}")
+    else:
+        form = SectorForm(instance=sector)
+
+    context = {
+        'form': form,
+        'sector': sector,
+        'title': f'Editar Sector - {sector.nombre}',
+        'accion': 'Editar',
+    }
+    return render(request, 'sectores/gestionar_sector_form.html', context)
+
+
+@login_required
+def gestionar_sectores_eliminar(request, sector_id):
+    """Eliminar un sector del catálogo administrable."""
+    resp = require_roles(request, ["admin"], "index", "No tienes permiso para eliminar sectores.")
+    if resp:
+        return resp
+
+    sector = get_object_or_404(Sector, id=sector_id)
+    nombre = sector.nombre
+    pedidos_asociados = Pedido.objects.filter(sector=nombre).count()
+    sector.delete()
+
+    if pedidos_asociados:
+        messages.warning(
+            request,
+            f"Sector '{nombre}' eliminado del catálogo. Los {pedidos_asociados} pedido(s) históricos con ese texto no fueron modificados."
+        )
+    else:
+        messages.success(request, f"Sector '{nombre}' eliminado correctamente.")
+
+    return redirect('sectores_lista')
 
 
 # ══════════════════════════════════════════════════════════════
@@ -3133,31 +3239,61 @@ def crear_sobre_post_cierre(request, sobre_id):
 @login_required
 def historial_sobres(request):
     """Ver historial completo de sobres cerrados con métricas diarias."""
-    """
-    Historial de sobres diarios con filtro por fecha.
-    Muestra sobres abiertos y cerrados, agrupados por tipo (bodega/camionero).
-    """
-    # Parsear fecha del GET (por defecto hoy)
+    modo_historial = request.GET.get('modo', 'dia')
+    if modo_historial not in ['dia', 'mes', 'todo']:
+        modo_historial = 'dia'
+
+    hoy = today_chile()
     fecha_str = request.GET.get('fecha', '')
-    
+    mes_str = request.GET.get('mes', '')
+
     if fecha_str:
         try:
             fecha_seleccionada = datetime.strptime(fecha_str, '%Y-%m-%d').date()
         except ValueError:
-            fecha_seleccionada = today_chile()
+            fecha_seleccionada = hoy
+            messages.warning(request, 'La fecha indicada no es valida. Se usara hoy.')
     else:
-        fecha_seleccionada = today_chile()
-    
-    # Filtrar sobres por fecha_correspondiente (la fecha lógica del sobre, no cuando se creó)
-    todos_sobres = SobreDiario.objects.filter(
-        fecha_correspondiente=fecha_seleccionada
-    ).select_related('trabajador', 'creado_por').prefetch_related('lineas')
+        fecha_seleccionada = hoy
+
+    if mes_str:
+        try:
+            anio_seleccionado, mes_seleccionado_num = map(int, mes_str.split('-'))
+            primer_dia_mes = date(anio_seleccionado, mes_seleccionado_num, 1)
+        except (TypeError, ValueError):
+            primer_dia_mes = date(hoy.year, hoy.month, 1)
+            messages.warning(request, 'El mes indicado no es valido. Se usara el mes actual.')
+    else:
+        primer_dia_mes = date(hoy.year, hoy.month, 1)
+
+    ultimo_dia_mes = date(
+        primer_dia_mes.year,
+        primer_dia_mes.month,
+        monthrange(primer_dia_mes.year, primer_dia_mes.month)[1],
+    )
+
+    todos_sobres = SobreDiario.objects.select_related('trabajador', 'creado_por').prefetch_related('lineas')
+
+    if modo_historial == 'mes':
+        todos_sobres = todos_sobres.filter(
+            fecha_correspondiente__gte=primer_dia_mes,
+            fecha_correspondiente__lte=ultimo_dia_mes,
+        )
+        titulo_periodo = primer_dia_mes.strftime('%B de %Y').capitalize()
+        descripcion_periodo = 'Resumen mensual de sobres segun su fecha correspondiente.'
+    elif modo_historial == 'todo':
+        titulo_periodo = 'Todo el historial'
+        descripcion_periodo = 'Todos los sobres registrados, ordenados por fecha correspondiente.'
+    else:
+        todos_sobres = todos_sobres.filter(fecha_correspondiente=fecha_seleccionada)
+        titulo_periodo = fecha_seleccionada.strftime('%A %d de %B de %Y').capitalize()
+        descripcion_periodo = 'Sobres de una fecha especifica, agrupados por tipo.'
     
     # Agrupar: Bodega vs Camioneros
-    sobres_bodega = todos_sobres.filter(tipo='bodega').order_by('-cerrado', '-fecha')
+    sobres_bodega = todos_sobres.filter(tipo='bodega').order_by('-fecha_correspondiente', '-cerrado', '-fecha')
     
     # Para camioneros: agrupar por trabajador
-    sobres_camionero = todos_sobres.filter(tipo='camion').order_by('trabajador__first_name', '-cerrado', '-fecha')
+    sobres_camionero = todos_sobres.filter(tipo='camion').order_by('trabajador__first_name', '-fecha_correspondiente', '-cerrado', '-fecha')
     
     # Crear diccionario {camionero: [sobres]}
     sobres_por_camionero = {}
@@ -3183,25 +3319,23 @@ def historial_sobres(request):
     total_cerrados = todos_sobres.filter(cerrado=True).count()
     total_bodega = sobres_bodega.count()
     total_camion = sobres_camionero.count()
-    
-    # Camioneros activos para crear nuevos sobres
-    camioneros_activos = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+    total_declarado = sum(int(sobre.monto_declarado or 0) for sobre in todos_sobres)
     
     context = {
+        'modo_historial': modo_historial,
         'fecha_seleccionada': fecha_seleccionada,
-        'hoy': today_chile(),
-        'fecha_anterior': fecha_seleccionada - timedelta(days=1),
-        'fecha_siguiente': fecha_seleccionada + timedelta(days=1),
+        'mes_seleccionado': primer_dia_mes.strftime('%Y-%m'),
+        'hoy': hoy,
+        'titulo_periodo': titulo_periodo,
+        'descripcion_periodo': descripcion_periodo,
         'sobres_bodega': sobres_bodega,
-        'sobres_por_camionero': sobres_por_camionero,
         'grupos_camioneros': grupos_camioneros,
-        'camioneros_activos': camioneros_activos,
         'total_sobres': total_sobres,
         'total_cerrados': total_cerrados,
         'total_abiertos': total_sobres - total_cerrados,
         'total_bodega': total_bodega,
         'total_camion': total_camion,
-        'total_declarado': sum(int(sobre.monto_declarado or 0) for sobre in todos_sobres),
+        'total_declarado': total_declarado,
     }
 
     return render(request, 'sobres/historial_sobres.html', context)

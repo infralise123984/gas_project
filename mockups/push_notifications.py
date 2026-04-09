@@ -20,6 +20,25 @@ except ImportError:
 audit_logger = logging.getLogger('audit')
 
 
+def _is_expired_subscription_error(error, error_msg=''):
+    """Detecta suscripciones push expiradas aunque pywebpush no entregue siempre response.status_code."""
+    response = getattr(error, 'response', None)
+    status_code = getattr(response, 'status_code', None)
+    if status_code in [404, 410]:
+        return True
+
+    texto = f"{error_msg} {error}".lower()
+    patrones = [
+        'subscription_expired',
+        '410 gone',
+        '404 not found',
+        'no such subscription',
+        'error":"gone"',
+        'errno":106',
+    ]
+    return any(patron in texto for patron in patrones)
+
+
 def _ubicacion_pedido(pedido):
     """
     Retorna la ubicación legible para notificaciones.
@@ -135,13 +154,16 @@ def send_push_notification(subscription_info, title, body, url='/', tag='gasfaci
         audit_logger.warning(f"PUSH_FAILED | Title: {title_log} | Error: {error_msg}")
         
         # Si la suscripción expiró o es inválida, retornar código específico
-        if e.response and e.response.status_code in [404, 410]:
+        if _is_expired_subscription_error(e, error_msg):
             return False, 'subscription_expired'
         
         return False, error_msg
     except Exception as e:
-        audit_logger.error(f"PUSH_ERROR | Title: {title} | Error: {str(e)}")
-        return False, str(e)
+        error_msg = str(e)
+        audit_logger.error(f"PUSH_ERROR | Title: {title} | Error: {error_msg}")
+        if _is_expired_subscription_error(e, error_msg):
+            return False, 'subscription_expired'
+        return False, error_msg
 
 
 def notificar_nuevo_pedido(pedido):
