@@ -165,6 +165,9 @@
                         <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}" class="btn btn-primary btn-sm px-4">
                             <i class="bi bi-pencil-square me-2"></i>Ver
                         </a>
+                        <a href="{% url 'sobres_imprimir' sobre.id %}" class="btn btn-outline-secondary btn-sm px-4" target="_blank">
+                            <i class="bi bi-printer me-2"></i>Imprimir
+                        </a>
                     </div>
                 </div>
             </div>
@@ -230,6 +233,9 @@
                     <div class="d-flex gap-2 flex-wrap align-items-start">
                         <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}" class="btn btn-primary btn-sm px-4">
                             <i class="bi bi-pencil-square me-2"></i>Ver
+                        </a>
+                        <a href="{% url 'sobres_imprimir' sobre.id %}" class="btn btn-outline-secondary btn-sm px-4" target="_blank">
+                            <i class="bi bi-printer me-2"></i>Imprimir
                         </a>
                     </div>
                 </div>
