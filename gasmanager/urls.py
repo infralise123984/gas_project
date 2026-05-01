@@ -68,6 +68,11 @@ urlpatterns = [
     path('precios/historial/', views.historial_precios, name='precios_historial'),
 
     # ────────────────────────────────────────────────
+    # AUDITORÍA
+    # ────────────────────────────────────────────────
+    path('auditoria/', views.auditoria_lista, name='auditoria_lista'),
+
+    # ────────────────────────────────────────────────
     # GESTIÓN DE BALONES (sin admin)
     # ────────────────────────────────────────────────
     path('balones/lista/', views.gestionar_balones_lista, name='balones_lista'),

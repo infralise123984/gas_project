@@ -69,9 +69,9 @@
             font-size: 10px;
         }
 
-        /* Encabezados: fondo gris claro, sin negro */
+        /* Encabezados en blanco para ahorro de tinta */
         th {
-            background-color: #e0e0e0;
+            background-color: #fff;
             color: #000;
             padding: 1px 3px;
             text-align: center;
@@ -86,7 +86,7 @@
         }
 
         td.label {
-            background-color: #d0d0d0;
+            background-color: #fff;
             font-weight: bold;
             text-align: left;
             border: 1px solid #333;
@@ -94,70 +94,58 @@
 
         /* Balón clásico: fondo liso */
         td.yellow {
-            background-color: #efefef;
+            background-color: #fff;
             border: 1px solid #333;
         }
 
         /* Balón catalítico: trama diagonal + cursiva en cabecera */
         th.cat-header {
-            background-image: repeating-linear-gradient(
-                45deg,
-                #e0e0e0, #e0e0e0 3px,
-                #fff 3px, #fff 7px
-            );
+            background-image: none;
+            background-color: #fff;
             border: 2px solid #000;
             font-style: italic;
         }
 
         td.cat {
-            background-image: repeating-linear-gradient(
-                45deg,
-                transparent, transparent 3px,
-                rgba(0,0,0,0.07) 3px, rgba(0,0,0,0.07) 7px
-            );
+            background-image: none;
+            background-color: #fff;
             border: 2px solid #555;
         }
 
         /* Balón aluminio: trama horizontal */
         th.alu-header {
-            background-image: repeating-linear-gradient(
-                0deg,
-                #e0e0e0, #e0e0e0 2px,
-                #fff 2px, #fff 5px
-            );
+            background-image: none;
+            background-color: #fff;
             border: 2px solid #000;
             font-style: italic;
         }
 
         td.alu {
-            background-image: repeating-linear-gradient(
-                0deg,
-                transparent, transparent 2px,
-                rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 5px
-            );
+            background-image: none;
+            background-color: #fff;
             border: 2px solid #555;
         }
 
         td.green {
-            background-color: #efefef;
+            background-color: #fff;
             font-weight: bold;
             border: 1px solid #333;
         }
 
         td.red {
-            background-color: #c0c0c0;
+            background-color: #fff;
             font-weight: bold;
             color: #000;
             border: 2px solid #000;
         }
 
         td.light-yellow {
-            background-color: #fafafa;
+            background-color: #fff;
             border: 1px dashed #333;
         }
 
         td.total {
-            background-color: #d0d0d0;
+            background-color: #fff;
             font-weight: bold;
             border: 1px solid #333;
         }
@@ -165,10 +153,18 @@
         /* Tabla balones: compacta */
         .table-balones {
             table-layout: fixed;
-            font-size: 9px;
+            font-size: 8px;
         }
 
-        .table-balones th,
+        .table-balones th {
+            padding: 1px 2px;
+            line-height: 1.1;
+            word-break: normal;
+            overflow-wrap: normal;
+            font-weight: normal;
+            font-size: 7.5px;
+        }
+
         .table-balones td {
             padding: 1px 2px;
             line-height: 1;
@@ -176,29 +172,29 @@
         }
 
         .table-balones th small {
-            font-size: 8px;
+            font-size: 7px;
             display: block;
             line-height: 1;
         }
 
         /* Pagos */
         .table-pagos th {
-            background-color: #e0e0e0;
+            background-color: #fff;
         }
 
         .table-pagos td.total {
-            background-color: #d0d0d0;
+            background-color: #fff;
             border: 2px solid #000;
         }
 
         /* Gastos */
         .table-gastos th {
-            background-color: #e0e0e0;
+            background-color: #fff;
             border-left: 3px solid #000;
         }
 
         .table-gastos td.total {
-            background-color: #b8b8b8;
+            background-color: #fff;
             border: 2px dotted #000;
         }
 
@@ -207,7 +203,7 @@
             padding: 5px;
             border: 2px solid #000;
             font-size: 11px;
-            background-color: #fafafa;
+            background-color: #fff;
         }
 
         .summary-row {
@@ -242,20 +238,20 @@
 
         .diferencia.perfect {
             color: #000;
-            background-color: #e6e6e6;
+            background-color: #fff;
             padding: 3px;
         }
 
         .diferencia.warning {
             color: #000;
-            background-color: #d9d9d9;
+            background-color: #fff;
             padding: 3px;
             border-left: 4px solid #000;
         }
 
         .diferencia.error {
             color: #000;
-            background-color: #bfbfbf;
+            background-color: #fff;
             padding: 3px;
             border-left: 4px solid #000;
         }
@@ -317,7 +313,7 @@
             </div>
         </div>
         {% if sobre.tipo != 'bodega' and sobre.kilometraje_camion %}
-        <div style="display: inline-block; margin-bottom: 5px; padding: 2px 8px; border: 1px solid #333; background: #e0e0e0; font-size: 11px;">
+        <div style="display: inline-block; margin-bottom: 5px; padding: 2px 8px; border: 1px solid #333; background: #fff; font-size: 11px;">
             <span style="font-weight: bold;">Kilometraje:</span> {{ sobre.kilometraje_camion|floatformat:0 }} km
         </div>
         {% endif %}
@@ -335,11 +331,11 @@
                             <th style="width: 45px;" class="{% if item.linea.balon.tipo_gas == 'catalitico' %}cat-header{% elif item.linea.balon.tipo_gas == 'aluminio' %}alu-header{% endif %}">
                                 {{ item.linea.balon.peso_neto_gas }} KG
                                 {% if item.linea.balon.tipo_gas == 'catalitico' %}
-                                <br><small style="font-size:9px;">[CATALÍTICO]</small>
+                                <br><small>[CAT]</small>
                                 {% elif item.linea.balon.tipo_gas == 'aluminio' %}
-                                <br><small style="font-size:9px;">[ALUMINIO]</small>
+                                <br><small>[ALU]</small>
                                 {% else %}
-                                <br><small style="font-size:9px;">[CLÁSICO]</small>
+                                <br><small>[CLS]</small>
                                 {% endif %}
                             </th>
                             {% endfor %}
@@ -400,7 +396,7 @@
                         </tr>
                         <tr>
                             <td class="label">TOTAL KILOS</td>
-                            <td colspan="{{ lineas_data|length }}" style="text-align: center; font-weight: bold; background-color: #bfbfbf; border: 2px solid #333;">
+                            <td colspan="{{ lineas_data|length }}" style="text-align: center; font-weight: bold; background-color: #fff; border: 2px solid #333;">
                                 Este sobre: {{ total_kilos }} kg
                                 {% if total_kilos_mes %}
                                 &nbsp;|&nbsp; Acum. mes: {{ total_kilos_mes|floatformat:0 }} kg
@@ -420,8 +416,8 @@
                 <table style="width: 100%; border-collapse: collapse; margin-bottom: 6px;">
                     <thead>
                         <tr>
-                            <th style="text-align: left; padding: 2px 4px; background: #e0e0e0; border: 1px solid #000;">Pago</th>
-                            <th style="padding: 2px 4px; background: #e0e0e0; border: 1px solid #000; text-align: right;">Monto</th>
+                            <th style="text-align: left; padding: 2px 4px; background: #fff; border: 1px solid #000;">Pago</th>
+                            <th style="padding: 2px 4px; background: #fff; border: 1px solid #000; text-align: right;">Monto</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -432,8 +428,8 @@
                         </tr>
                         {% endfor %}
                         <tr>
-                            <td style="padding: 2px 4px; border: 1px solid #333; font-weight: bold; background: #d0d0d0;">TOTAL PAGOS</td>
-                            <td style="padding: 2px 4px; border: 1px solid #333; font-weight: bold; background: #d0d0d0; text-align: right;">${{ total_pagos|floatformat:0 }}</td>
+                            <td style="padding: 2px 4px; border: 1px solid #333; font-weight: bold; background: #fff;">TOTAL PAGOS</td>
+                            <td style="padding: 2px 4px; border: 1px solid #333; font-weight: bold; background: #fff; text-align: right;">${{ total_pagos|floatformat:0 }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -444,8 +440,8 @@
                 <table style="width: 100%; border-collapse: collapse; margin-bottom: 6px; border-left: 3px solid #555;">
                     <thead>
                         <tr>
-                            <th style="text-align: left; padding: 2px 4px; background: #e0e0e0; border: 1px solid #000;">Gasto</th>
-                            <th style="padding: 2px 4px; background: #e0e0e0; border: 1px solid #000; text-align: right;">Monto</th>
+                            <th style="text-align: left; padding: 2px 4px; background: #fff; border: 1px solid #000;">Gasto</th>
+                            <th style="padding: 2px 4px; background: #fff; border: 1px solid #000; text-align: right;">Monto</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -456,8 +452,8 @@
                         </tr>
                         {% endfor %}
                         <tr>
-                            <td style="padding: 2px 4px; border: 1px solid #333; font-weight: bold; background: #d0d0d0;">TOTAL GASTOS</td>
-                            <td style="padding: 2px 4px; border: 1px solid #333; font-weight: bold; background: #d0d0d0; text-align: right;">${{ total_gastos|floatformat:0 }}</td>
+                            <td style="padding: 2px 4px; border: 1px solid #333; font-weight: bold; background: #fff;">TOTAL GASTOS</td>
+                            <td style="padding: 2px 4px; border: 1px solid #333; font-weight: bold; background: #fff; text-align: right;">${{ total_gastos|floatformat:0 }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -467,24 +463,23 @@
                 <table style="width: 100%; border-collapse: collapse;">
                     <tbody>
                         <tr>
-                            <td style="padding: 2px 4px; border: 1px solid #333; background: #e0e0e0; font-weight: bold;">Ventas</td>
+                            <td style="padding: 2px 4px; border: 1px solid #333; background: #fff; font-weight: bold;">Ventas</td>
                             <td style="padding: 2px 4px; border: 1px solid #333; text-align: right; font-weight: bold;">${{ total_venta|floatformat:0 }}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 2px 4px; border: 1px solid #333; background: #e0e0e0; font-weight: bold;">Pagos</td>
+                            <td style="padding: 2px 4px; border: 1px solid #333; background: #fff; font-weight: bold;">Pagos</td>
                             <td style="padding: 2px 4px; border: 1px solid #333; text-align: right; font-weight: bold;">${{ total_pagos|floatformat:0 }}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 2px 4px; border: 1px solid #333; background: #e0e0e0; font-weight: bold;">Gastos</td>
+                            <td style="padding: 2px 4px; border: 1px solid #333; background: #fff; font-weight: bold;">Gastos</td>
                             <td style="padding: 2px 4px; border: 1px solid #333; text-align: right; font-weight: bold;">${{ total_gastos|floatformat:0 }}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 2px 4px; border: 1px solid #333; background: #d0d0d0; font-weight: bold;">Contabilizado</td>
-                            <td style="padding: 2px 4px; border: 1px solid #333; background: #d0d0d0; text-align: right; font-weight: bold;">${{ total_contabilizado|floatformat:0 }}</td>
+                            <td style="padding: 2px 4px; border: 1px solid #333; background: #fff; font-weight: bold;">Contabilizado</td>
+                            <td style="padding: 2px 4px; border: 1px solid #333; background: #fff; text-align: right; font-weight: bold;">${{ total_contabilizado|floatformat:0 }}</td>
                         </tr>
                         <tr>
-                            <td colspan="2" style="padding: 3px 4px; border: 2px solid #000; font-weight: bold;
-                                {% if diferencia == 0 %}background:#e6e6e6;{% elif diferencia > 0 %}background:#d9d9d9; border-left:4px solid #000;{% else %}background:#bfbfbf; border-left:4px solid #000;{% endif %}">
+                            <td colspan="2" style="padding: 3px 4px; border: 2px solid #000; border-left:4px solid #000; font-weight: bold; background:#fff;">
                                 DIFERENCIA: ${{ diferencia|floatformat:0 }}
                                 {% if diferencia == 0 %} ✓{% elif diferencia > 0 %} ⚠{% else %} ✗{% endif %}
                             </td>
