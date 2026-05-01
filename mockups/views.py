@@ -730,6 +730,23 @@ def gestionar_balones_crear(request):
             balon = form.save(commit=False)
             balon.actualizado_por = request.user
             balon.save()
+
+            AuditoriaAccion.registrar(
+                request=request,
+                tipo='BALON_CREATE',
+                descripcion=f"Creación de balón: {balon.nombre}",
+                objeto=balon,
+                datos_nuevos={
+                    'nombre': balon.nombre,
+                    'peso_neto_gas': balon.peso_neto_gas,
+                    'tipo_gas': balon.tipo_gas,
+                    'precio_compra': int(balon.precio_compra),
+                    'precio_local': int(balon.precio_local),
+                    'precio_domicilio': int(balon.precio_domicilio),
+                    'activo': balon.activo,
+                }
+            )
+
             messages.success(request, f"Balón '{balon.nombre}' creado correctamente.")
             return redirect("balones_lista")
         else:
@@ -789,8 +806,39 @@ def gestionar_balones_editar(request, balon_id):
                     activo_anterior=balon_anterior.activo,
                     actualizado_por=request.user,
                 )
+
+            datos_anteriores = {
+                'nombre': balon_anterior.nombre,
+                'peso_neto_gas': balon_anterior.peso_neto_gas,
+                'tipo_gas': balon_anterior.tipo_gas,
+                'precio_compra': int(balon_anterior.precio_compra),
+                'precio_local': int(balon_anterior.precio_local),
+                'precio_domicilio': int(balon_anterior.precio_domicilio),
+                'activo': balon_anterior.activo,
+            }
             
             balon_actualizado.save()
+
+            datos_nuevos = {
+                'nombre': balon_actualizado.nombre,
+                'peso_neto_gas': balon_actualizado.peso_neto_gas,
+                'tipo_gas': balon_actualizado.tipo_gas,
+                'precio_compra': int(balon_actualizado.precio_compra),
+                'precio_local': int(balon_actualizado.precio_local),
+                'precio_domicilio': int(balon_actualizado.precio_domicilio),
+                'activo': balon_actualizado.activo,
+            }
+
+            if form.changed_data:
+                AuditoriaAccion.registrar(
+                    request=request,
+                    tipo='BALON_UPDATE',
+                    descripcion=f"Edición de balón: {balon_actualizado.nombre}",
+                    objeto=balon_actualizado,
+                    datos_anteriores=datos_anteriores,
+                    datos_nuevos=datos_nuevos,
+                )
+
             messages.success(request, f"Balón '{balon_actualizado.nombre}' actualizado correctamente.")
             return redirect("balones_lista")
         else:
@@ -836,10 +884,46 @@ def gestionar_balones_eliminar(request, balon_id):
         return redirect("balones_lista")
     
     nombre_balon = balon.nombre
+
+    AuditoriaAccion.registrar(
+        request=request,
+        tipo='BALON_DELETE',
+        descripcion=f"Eliminación de balón: {nombre_balon}",
+        objeto=balon,
+        datos_anteriores={
+            'nombre': balon.nombre,
+            'peso_neto_gas': balon.peso_neto_gas,
+            'tipo_gas': balon.tipo_gas,
+            'precio_compra': int(balon.precio_compra),
+            'precio_local': int(balon.precio_local),
+            'precio_domicilio': int(balon.precio_domicilio),
+            'activo': balon.activo,
+        }
+    )
+
     balon.delete()
     messages.success(request, f"Balón '{nombre_balon}' eliminado correctamente.")
     
     return redirect("balones_lista")
+
+
+@login_required
+def auditoria_lista(request):
+    """Listado simple de todos los registros de auditoría. Solo admin."""
+    if not request.user.is_superuser:
+        resp = require_roles(request, ["admin"], "index", "No tienes permiso para ver la auditoría del sistema.")
+        if resp:
+            return resp
+
+    registros = AuditoriaAccion.objects.select_related('usuario').all().order_by('-fecha')
+    paginator = Paginator(registros, 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
+
+    context = {
+        'page_obj': page_obj,
+        'total_registros': registros.count(),
+    }
+    return render(request, 'auditoria/lista_auditoria.html', context)
 
 
 @login_required
