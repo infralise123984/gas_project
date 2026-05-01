@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+
+{% block title %}Auditoría del Sistema{% endblock %}
+
+{% block extra_head %}
+<style>
+    .badge-tipo {
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 4px 8px;
+        border-radius: 4px;
+        white-space: nowrap;
+    }
+    /* Categorías de color por tipo */
+    .tipo-ok       { background-color: #d1e7dd; color: #0a3622; }
+    .tipo-fail     { background-color: #f8d7da; color: #58151c; }
+    .tipo-neutral  { background-color: #e2e3e5; color: #383d41; }
+    .tipo-create   { background-color: #cfe2ff; color: #084298; }
+    .tipo-update   { background-color: #fff3cd; color: #664d03; }
+    .tipo-delete   { background-color: #f8d7da; color: #58151c; }
+    .tipo-warn     { background-color: #f8d7da; color: #58151c; }
+
+    .user-name   { font-weight: 600; font-size: 0.875rem; }
+    .user-role   { font-size: 0.75rem; color: #6c757d; }
+    .user-anon   { color: #adb5bd; font-style: italic; font-size: 0.85rem; }
+
+    .objeto-repr { font-size: 0.8rem; color: #495057; }
+    .objeto-tipo { font-size: 0.72rem; color: #6c757d; }
+
+    .desc-text   { font-size: 0.85rem; }
+    .ip-text     { font-size: 0.78rem; color: #6c757d; font-family: monospace; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-shield-check me-2 text-primary"></i>Auditoría del Sistema</h2>
+        <p class="text-muted mb-0">{{ total_registros }} registro{{ total_registros|pluralize }} en total &mdash; mostrando página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</p>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light border-bottom">
+                    <tr>
+                        <th class="ps-3" style="width:130px;">Fecha</th>
+                        <th style="width:160px;">Acción</th>
+                        <th style="width:180px;">Usuario</th>
+                        <th>Descripción</th>
+                        <th style="width:180px;">Objeto</th>
+                        <th style="width:110px;">IP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for registro in page_obj %}
+                    <tr class="border-bottom">
+                        {# ── Fecha ── #}
+                        <td class="ps-3 text-nowrap">
+                            <div class="fw-semibold" style="font-size:0.85rem;">{{ registro.fecha|date:"d/m/Y" }}</div>
+                            <div class="text-muted" style="font-size:0.78rem;">{{ registro.fecha|date:"H:i:s" }}</div>
+                        </td>
+
+                        {# ── Badge coloreado por categoría ── #}
+                        <td>
+                            {% with t=registro.tipo %}
+                            {% if t == "LOGIN_OK" %}
+                                <span class="badge-tipo tipo-ok">{{ registro.get_tipo_display }}</span>
+                            {% elif t == "LOGIN_FAIL" or t == "PERM_DENIED" or t == "SUSPICIOUS" %}
+                                <span class="badge-tipo tipo-fail">{{ registro.get_tipo_display }}</span>
+                            {% elif t == "LOGOUT" %}
+                                <span class="badge-tipo tipo-neutral">{{ registro.get_tipo_display }}</span>
+                            {% elif t|slice:"-7:" == "_CREATE" or t == "USER_CREATE" or t == "SOBRE_CREATE" %}
+                                <span class="badge-tipo tipo-create">{{ registro.get_tipo_display }}</span>
+                            {% elif t|slice:"-7:" == "_DELETE" or t == "USER_DELETE" %}
+                                <span class="badge-tipo tipo-delete">{{ registro.get_tipo_display }}</span>
+                            {% elif t|slice:"-7:" == "_UPDATE" or t == "PEDIDO_ESTADO" or t == "SOBRE_CLOSE" or t == "PRECIO_UPDATE" or t == "PASSWORD_CHANGE" or t == "CONFIG_CHANGE" or t == "EXPORT_DATA" %}
+                                <span class="badge-tipo tipo-update">{{ registro.get_tipo_display }}</span>
+                            {% else %}
+                                <span class="badge-tipo tipo-neutral">{{ registro.get_tipo_display }}</span>
+                            {% endif %}
+                            {% endwith %}
+                        </td>
+
+                        {# ── Usuario: nombre completo + rol ── #}
+                        <td>
+                            {% if registro.usuario %}
+                                <div class="user-name">
+                                    {{ registro.usuario.get_full_name|default:registro.usuario.username }}
+                                </div>
+                                <div class="user-role">
+                                    <i class="bi bi-person-badge me-1"></i>{{ registro.usuario.get_rol_display }}
+                                    &nbsp;&middot;&nbsp;
+                                    <span class="font-monospace">{{ registro.username }}</span>
+                                </div>
+                            {% elif registro.username %}
+                                <div class="user-name">{{ registro.username }}</div>
+                                <div class="user-role text-muted fst-italic">(usuario eliminado)</div>
+                            {% else %}
+                                <span class="user-anon"><i class="bi bi-incognito me-1"></i>Anónimo</span>
+                            {% endif %}
+                        </td>
+
+                        {# ── Descripción ── #}
+                        <td class="desc-text">{{ registro.descripcion|default:"—" }}</td>
+
+                        {# ── Objeto afectado ── #}
+                        <td>
+                            {% if registro.objeto_repr %}
+                                <div class="objeto-repr">{{ registro.objeto_repr|truncatechars:50 }}</div>
+                                <div class="objeto-tipo">{{ registro.objeto_tipo }} #{{ registro.objeto_id }}</div>
+                            {% elif registro.objeto_tipo %}
+                                <div class="objeto-tipo">{{ registro.objeto_tipo }} #{{ registro.objeto_id }}</div>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+
+                        {# ── IP ── #}
+                        <td class="ip-text">{{ registro.ip_address|default:"—" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-5">
+                            <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                            No hay registros de auditoría disponibles.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<nav class="mt-3" aria-label="Paginación auditoría">
+    <ul class="pagination justify-content-center mb-0">
+        {% if page_obj.has_previous %}
+            <li class="page-item"><a class="page-link" href="?page=1"><i class="bi bi-chevron-double-left"></i></a></li>
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}"><i class="bi bi-chevron-left"></i> Anterior</a></li>
+        {% else %}
+            <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-double-left"></i></span></li>
+            <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-left"></i> Anterior</span></li>
+        {% endif %}
+
+        <li class="page-item disabled">
+            <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        </li>
+
+        {% if page_obj.has_next %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Siguiente <i class="bi bi-chevron-right"></i></a></li>
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}"><i class="bi bi-chevron-double-right"></i></a></li>
+        {% else %}
+            <li class="page-item disabled"><span class="page-link">Siguiente <i class="bi bi-chevron-right"></i></span></li>
+            <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-double-right"></i></span></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}
