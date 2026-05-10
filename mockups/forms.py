@@ -513,6 +513,201 @@ class TipoBalonForm(forms.ModelForm):
         return cleaned_data
 
 
+class EditarPerfilForm(forms.Form):
+    first_name = forms.CharField(
+        label="Nombre",
+        max_length=150,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Ej: Juan',
+            'autocomplete': 'given-name',
+        }),
+    )
+    last_name = forms.CharField(
+        label="Apellido",
+        max_length=150,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Ej: Pérez',
+            'autocomplete': 'family-name',
+        }),
+    )
+    email = forms.EmailField(
+        label="Correo electrónico",
+        required=False,
+        widget=forms.EmailInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Ej: juan@ejemplo.com',
+            'autocomplete': 'email',
+        }),
+    )
+    telefono = forms.CharField(
+        label="Teléfono",
+        max_length=15,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Ej: +56987654321',
+            'inputmode': 'tel',
+            'autocomplete': 'tel',
+        }),
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.current_user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+
+    def clean_telefono(self):
+        telefono = (self.cleaned_data.get('telefono') or '').strip()
+        if not telefono:
+            return ''
+        if not telefono.replace('+', '', 1).isdigit():
+            raise forms.ValidationError("Ingresa un teléfono válido usando solo números y un '+' opcional al inicio.")
+        if not 8 <= len(telefono.replace('+', '', 1)) <= 15:
+            raise forms.ValidationError("El teléfono debe tener entre 8 y 15 dígitos.")
+        qs = User.objects.filter(telefono=telefono)
+        if self.current_user:
+            qs = qs.exclude(pk=self.current_user.pk)
+        if qs.exists():
+            raise forms.ValidationError("Ya existe un usuario con ese teléfono.")
+        return telefono
+
+    def clean_email(self):
+        email = (self.cleaned_data.get('email') or '').strip().lower()
+        if not email:
+            return ''
+        qs = User.objects.filter(email__iexact=email)
+        if self.current_user:
+            qs = qs.exclude(pk=self.current_user.pk)
+        if qs.exists():
+            raise forms.ValidationError("Ya existe un usuario con ese correo electrónico.")
+        return email
+
+
+class CambiarPasswordForm(forms.Form):
+    password_actual = forms.CharField(
+        label="Contraseña actual",
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'autocomplete': 'current-password',
+        }),
+    )
+    password_nueva = forms.CharField(
+        label="Nueva contraseña",
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'autocomplete': 'new-password',
+        }),
+    )
+    password_confirmar = forms.CharField(
+        label="Confirmar nueva contraseña",
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'autocomplete': 'new-password',
+        }),
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.current_user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+
+    def clean_password_actual(self):
+        password_actual = self.cleaned_data.get('password_actual')
+        if self.current_user and not self.current_user.check_password(password_actual):
+            raise forms.ValidationError("La contraseña actual no es correcta.")
+        return password_actual
+
+    def clean(self):
+        cleaned_data = super().clean()
+        nueva = cleaned_data.get('password_nueva')
+        confirmar = cleaned_data.get('password_confirmar')
+
+        if nueva and confirmar and nueva != confirmar:
+            self.add_error('password_confirmar', "Las contraseñas nuevas no coinciden.")
+
+        if nueva and self.current_user:
+            try:
+                validate_password(nueva, user=self.current_user)
+            except ValidationError as exc:
+                self.add_error('password_nueva', exc)
+
+        return cleaned_data
+
+
+class Verificar2FAForm(forms.Form):
+    codigo = forms.CharField(
+        label="Código de verificación",
+        max_length=6,
+        min_length=6,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-lg text-center',
+            'placeholder': '000000',
+            'inputmode': 'numeric',
+            'autocomplete': 'one-time-code',
+            'autofocus': True,
+            'maxlength': '6',
+            'pattern': '[0-9]{6}',
+        }),
+    )
+
+    def clean_codigo(self):
+        codigo = (self.cleaned_data.get('codigo') or '').strip()
+        if not codigo.isdigit():
+            raise forms.ValidationError("El código debe contener solo dígitos.")
+        return codigo
+
+
+class Activar2FAConfirmForm(forms.Form):
+    codigo = forms.CharField(
+        label="Código de confirmación",
+        max_length=6,
+        min_length=6,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-lg text-center',
+            'placeholder': '000000',
+            'inputmode': 'numeric',
+            'autocomplete': 'one-time-code',
+            'autofocus': True,
+            'maxlength': '6',
+            'pattern': '[0-9]{6}',
+        }),
+        help_text="Ingresa el código de 6 dígitos que aparece en tu aplicación autenticadora.",
+    )
+
+    def clean_codigo(self):
+        codigo = (self.cleaned_data.get('codigo') or '').strip()
+        if not codigo.isdigit():
+            raise forms.ValidationError("El código debe contener solo dígitos.")
+        return codigo
+
+
+class Desactivar2FAForm(forms.Form):
+    password_actual = forms.CharField(
+        label="Contraseña actual",
+        strip=False,
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'autocomplete': 'current-password',
+        }),
+        help_text="Confirma tu contraseña para desactivar la verificación en dos pasos.",
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.current_user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+
+    def clean_password_actual(self):
+        password = self.cleaned_data.get('password_actual')
+        if self.current_user and not self.current_user.check_password(password):
+            raise forms.ValidationError("La contraseña no es correcta.")
+        return password
+
+
 class SectorForm(forms.ModelForm):
     class Meta:
         model = Sector

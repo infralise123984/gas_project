@@ -27,6 +27,15 @@ class Usuario(AbstractUser):
         max_length=15, blank=True, null=True, unique=True, verbose_name="Teléfono"
     )
 
+    # 2FA (TOTP opcional)
+    totp_secret = models.CharField(
+        max_length=64, blank=True, null=True, verbose_name="Secreto TOTP"
+    )
+    totp_activo = models.BooleanField(default=False, verbose_name="2FA activo")
+    totp_ultimo_verificado = models.DateTimeField(
+        blank=True, null=True, verbose_name="Último código 2FA verificado en"
+    )
+
     def __str__(self):
         nombre = self.get_full_name().strip() or self.username
         return f"{nombre} ({self.get_rol_display()})"

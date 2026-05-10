@@ -325,6 +325,12 @@
                                 <div class="fw-bold">{{ user.get_full_name|default:user.username }}</div>
                                 <div class="text-muted">{{ user.get_rol_display }}</div>
                             </li>
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.url_name == 'auth_perfil' %}active{% endif %}" href="{% url 'auth_perfil' %}">
+                                    <i class="bi bi-person-gear me-1"></i> Mi perfil
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger fw-bold" href="{% url 'auth_logout' %}">
                                     <i class="bi bi-box-arrow-right"></i> Cerrar sesión
                                 </a></li>
