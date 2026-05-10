@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block title %}Activar verificación en dos pasos - ValGas{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-9 col-lg-7">
+
+            <div class="d-flex align-items-center gap-3 mb-4">
+                <i class="bi bi-shield-check fs-1 text-success"></i>
+                <div>
+                    <h4 class="mb-0 fw-bold">Activar verificación en dos pasos</h4>
+                    <small class="text-muted">Protege tu cuenta con un código adicional al iniciar sesión.</small>
+                </div>
+            </div>
+
+            <!-- Paso 1: Escanear QR -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0"><span class="badge bg-white text-primary me-2">1</span>Escanea el código QR</h6>
+                </div>
+                <div class="card-body p-4">
+                    <p class="text-muted mb-3">
+                        Abre tu aplicación autenticadora (<strong>Google Authenticator</strong>, <strong>Authy</strong>,
+                        <strong>Microsoft Authenticator</strong>, etc.) y escanea este código QR.
+                    </p>
+                    <div class="text-center my-3">
+                        <div class="d-inline-block p-3 bg-white border rounded shadow-sm">
+                            {{ qr_svg|safe }}
+                        </div>
+                    </div>
+                    <div class="alert alert-secondary mt-3 mb-0">
+                        <small>
+                            <strong>¿No puedes escanear?</strong> Ingresa este código manual en tu app:<br>
+                            <code class="fs-6 user-select-all">{{ secret }}</code>
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paso 2: Confirmar código -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0"><span class="badge bg-white text-primary me-2">2</span>Confirma con un código</h6>
+                </div>
+                <div class="card-body p-4">
+                    <p class="text-muted mb-3">
+                        Ingresa el código de 6 dígitos que aparece ahora en tu app para confirmar que todo funciona.
+                    </p>
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="id_codigo" class="form-label fw-semibold">
+                                {{ form.codigo.label }}
+                            </label>
+                            {{ form.codigo }}
+                            {% if form.codigo.help_text %}
+                                <div class="form-text">{{ form.codigo.help_text }}</div>
+                            {% endif %}
+                            {% if form.codigo.errors %}
+                                <div class="invalid-feedback d-block mt-1">
+                                    {{ form.codigo.errors|join:", " }}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex gap-2 justify-content-end">
+                            <a href="{% url 'auth_perfil' %}" class="btn btn-outline-secondary">
+                                Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-success px-4">
+                                <i class="bi bi-shield-check me-1"></i> Activar 2FA
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

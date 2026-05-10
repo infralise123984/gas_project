@@ -30,7 +30,11 @@ urlpatterns = [
     path("", views.index, name="index"),
     path('auth/login/', views.login_view, name='auth_login'),
     path('auth/logout/', views.logout_view, name='auth_logout'),
+    path('auth/perfil/', views.perfil_view, name='auth_perfil'),
     path('auth/crear-usuario/', views.crear_usuario, name='auth_crear_usuario'),
+    path('auth/verificar-2fa/', views.verificar_2fa_view, name='auth_verificar_2fa'),
+    path('auth/activar-2fa/', views.activar_2fa_view, name='auth_activar_2fa'),
+    path('auth/desactivar-2fa/', views.desactivar_2fa_view, name='auth_desactivar_2fa'),
 
     # ────────────────────────────────────────────────
     # GESTIÓN DE PEDIDOS
