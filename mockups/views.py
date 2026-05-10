@@ -3227,27 +3227,32 @@ def editar_sobre_diario(request):
 
         inicio_creacion, fin_creacion = get_rango_utc_para_fecha(fecha_creacion_objetivo)
         
-        sobres_candidatos = SobreDiario.objects.filter(
-            fecha_correspondiente=fecha_objetivo,
-            tipo=tipo_sobre,
-            trabajador=trabajador
-        )
+        forzar_nuevo = request.GET.get('forzar_nuevo') == '1'
 
-        # Preferir sobres creados en la jornada desde donde el usuario esta trabajando.
-        sobre = sobres_candidatos.filter(
-            fecha__gte=inicio_creacion,
-            fecha__lte=fin_creacion,
-        ).order_by('-fecha', '-id').first()
+        if forzar_nuevo:
+            sobre = None
+        else:
+            sobres_candidatos = SobreDiario.objects.filter(
+                fecha_correspondiente=fecha_objetivo,
+                tipo=tipo_sobre,
+                trabajador=trabajador
+            )
 
-        # Compatibilidad: si no existe uno creado en esa jornada, usar el mas reciente historico.
-        if not sobre:
-            sobre = sobres_candidatos.order_by('-fecha', '-id').first()
-        
+            # Preferir sobres creados en la jornada desde donde el usuario esta trabajando.
+            sobre = sobres_candidatos.filter(
+                fecha__gte=inicio_creacion,
+                fecha__lte=fin_creacion,
+            ).order_by('-fecha', '-id').first()
+
+            # Compatibilidad: si no existe uno creado en esa jornada, usar el mas reciente historico.
+            if not sobre:
+                sobre = sobres_candidatos.order_by('-fecha', '-id').first()
+
         if sobre:
             # Existe un sobre del día, usarlo (el usuario decide si crear otro)
             creado = False
         else:
-            # No existe ningún sobre para esa fecha, crear uno nuevo
+            # No existe ningún sobre para esa fecha, o se forzó uno nuevo
             sobre = SobreDiario.objects.create(
                 fecha=now_chile(),
                 tipo=tipo_sobre,
@@ -3748,13 +3753,28 @@ def imprimir_sobre_diario(request, sobre_id):
     total_contabilizado = total_pagos + total_gastos
     diferencia = total_venta - total_contabilizado
 
-    # Kilos acumulados en el mes para el mismo trabajador (solo camioneros)
+    # Kilos acumulados en el mes (camioneros y bodega)
     total_kilos_mes = 0
     if sobre.tipo != 'bodega' and sobre.trabajador:
         from django.db.models import DecimalField as DField
         sobres_mes = SobreDiario.objects.filter(
             tipo='camion',
             trabajador=sobre.trabajador,
+            fecha_correspondiente__year=sobre.fecha_correspondiente.year,
+            fecha_correspondiente__month=sobre.fecha_correspondiente.month,
+        )
+        total_kilos_mes = LineaSobre.objects.filter(
+            sobre__in=sobres_mes
+        ).aggregate(
+            total=Sum(
+                F('cantidad_declarada') * F('balon__peso_neto_gas'),
+                output_field=DField()
+            )
+        )['total'] or 0
+    elif sobre.tipo == 'bodega':
+        from django.db.models import DecimalField as DField
+        sobres_mes = SobreDiario.objects.filter(
+            tipo='bodega',
             fecha_correspondiente__year=sobre.fecha_correspondiente.year,
             fecha_correspondiente__month=sobre.fecha_correspondiente.month,
         )

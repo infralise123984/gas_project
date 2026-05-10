@@ -166,6 +166,7 @@
                     <input type="hidden" name="camionero" id="modalCamioneroInput" value="">
                     <input type="hidden" name="fecha" id="modalFechaFinalInput" value="{{ fecha_filtro|date:'Y-m-d' }}">
                     <input type="hidden" name="fecha_creacion" id="modalFechaCreacionInput" value="{{ fecha_filtro|date:'Y-m-d' }}">
+                    <input type="hidden" name="forzar_nuevo" id="modalForzarNuevoInput" value="">
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold d-block mb-2">¿A que dia corresponde el sobre?</label>
@@ -188,7 +189,15 @@
                         </label>
                     </div>
 
-                    <div class="alert alert-light border small mb-0">
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" id="modalForzarNuevoCheck">
+                        <label class="form-check-label small" for="modalForzarNuevoCheck">
+                            <strong>Crear nuevo sobre</strong> aunque ya exista uno para esta fecha
+                            <span class="text-muted d-block">Caso excepcional. Se creara un sobre adicional.</span>
+                        </label>
+                    </div>
+
+                    <div class="alert alert-light border small mb-0 mt-3">
                         <i class="bi bi-info-circle me-2"></i>
                         Esto evita crear sobres por error y deja la fecha como parte del flujo de apertura.
                     </div>
@@ -261,8 +270,12 @@ document.addEventListener('DOMContentLoaded', function() {
     opcionFechaOtra.addEventListener('change', syncFechaObjetivo);
     modalFechaOtraInput.addEventListener('input', syncFechaObjetivo);
 
+    const modalForzarNuevoCheck = document.getElementById('modalForzarNuevoCheck');
+    const modalForzarNuevoInput = document.getElementById('modalForzarNuevoInput');
+
     formAbrirSobreModal.addEventListener('submit', function(event) {
         syncFechaObjetivo();
+        modalForzarNuevoInput.value = modalForzarNuevoCheck.checked ? '1' : '';
         if (opcionFechaOtra.checked && !modalFechaOtraInput.value) {
             event.preventDefault();
             modalFechaOtraInput.focus();
