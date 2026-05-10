@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+
+{% block title %}Mi Perfil - ValGas{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-10 col-lg-8">
+
+            <div class="d-flex align-items-center gap-3 mb-4">
+                <i class="bi bi-person-circle fs-1 text-primary"></i>
+                <div>
+                    <h4 class="mb-0 fw-bold">{{ user.get_full_name|default:user.username }}</h4>
+                    <small class="text-muted">{{ user.get_rol_display }} · @{{ user.username }}</small>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <ul class="nav nav-tabs mb-4" id="perfilTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link {% if active_tab == 'perfil' %}active{% endif %}"
+                        id="tab-perfil"
+                        data-bs-toggle="tab" data-bs-target="#panel-perfil"
+                        type="button" role="tab">
+                        <i class="bi bi-person me-1"></i> Datos personales
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link {% if active_tab == 'seguridad' %}active{% endif %}"
+                        id="tab-seguridad"
+                        data-bs-toggle="tab" data-bs-target="#panel-seguridad"
+                        type="button" role="tab">
+                        <i class="bi bi-shield-lock me-1"></i> Seguridad
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="perfilTabsContent">
+
+                <!-- ── TAB: Datos personales ── -->
+                <div class="tab-pane fade {% if active_tab == 'perfil' %}show active{% endif %}"
+                     id="panel-perfil" role="tabpanel">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0"><i class="bi bi-person-fill me-2"></i>Datos personales</h6>
+                        </div>
+                        <div class="card-body p-4">
+                            <form method="post" novalidate>
+                                {% csrf_token %}
+                                <input type="hidden" name="accion" value="perfil">
+
+                                <div class="row g-3">
+                                    <div class="col-12 col-sm-6">
+                                        <label for="id_first_name" class="form-label fw-semibold">
+                                            {{ form_perfil.first_name.label }}
+                                        </label>
+                                        {{ form_perfil.first_name }}
+                                        {% if form_perfil.first_name.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {{ form_perfil.first_name.errors|join:", " }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-12 col-sm-6">
+                                        <label for="id_last_name" class="form-label fw-semibold">
+                                            {{ form_perfil.last_name.label }}
+                                        </label>
+                                        {{ form_perfil.last_name }}
+                                        {% if form_perfil.last_name.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {{ form_perfil.last_name.errors|join:", " }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-12 col-sm-6">
+                                        <label for="id_email" class="form-label fw-semibold">
+                                            {{ form_perfil.email.label }}
+                                        </label>
+                                        {{ form_perfil.email }}
+                                        {% if form_perfil.email.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {{ form_perfil.email.errors|join:", " }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-12 col-sm-6">
+                                        <label for="id_telefono" class="form-label fw-semibold">
+                                            {{ form_perfil.telefono.label }}
+                                        </label>
+                                        {{ form_perfil.telefono }}
+                                        {% if form_perfil.telefono.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {{ form_perfil.telefono.errors|join:", " }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-semibold text-muted">Usuario</label>
+                                        <input type="text" class="form-control bg-light" value="{{ user.username }}" disabled>
+                                        <small class="text-muted">El nombre de usuario no se puede cambiar.</small>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-semibold text-muted">Rol</label>
+                                        <input type="text" class="form-control bg-light" value="{{ user.get_rol_display }}" disabled>
+                                        <small class="text-muted">El rol es asignado por un administrador.</small>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex justify-content-end mt-4">
+                                    <button type="submit" class="btn btn-primary px-4">
+                                        <i class="bi bi-check-lg me-1"></i> Guardar cambios
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── TAB: Seguridad ── -->
+                <div class="tab-pane fade {% if active_tab == 'seguridad' %}show active{% endif %}"
+                     id="panel-seguridad" role="tabpanel">
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0"><i class="bi bi-key-fill me-2"></i>Cambiar contraseña</h6>
+                        </div>
+                        <div class="card-body p-4">
+                            <form method="post" novalidate>
+                                {% csrf_token %}
+                                <input type="hidden" name="accion" value="password">
+
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <label for="id_password_actual" class="form-label fw-semibold">
+                                            {{ form_password.password_actual.label }}
+                                        </label>
+                                        {{ form_password.password_actual }}
+                                        {% if form_password.password_actual.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {{ form_password.password_actual.errors|join:", " }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-12 col-sm-6">
+                                        <label for="id_password_nueva" class="form-label fw-semibold">
+                                            {{ form_password.password_nueva.label }}
+                                        </label>
+                                        {{ form_password.password_nueva }}
+                                        {% if form_password.password_nueva.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {{ form_password.password_nueva.errors|join:", " }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-12 col-sm-6">
+                                        <label for="id_password_confirmar" class="form-label fw-semibold">
+                                            {{ form_password.password_confirmar.label }}
+                                        </label>
+                                        {{ form_password.password_confirmar }}
+                                        {% if form_password.password_confirmar.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {{ form_password.password_confirmar.errors|join:", " }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <div class="d-flex justify-content-end mt-4">
+                                    <button type="submit" class="btn btn-warning px-4">
+                                        <i class="bi bi-shield-lock me-1"></i> Cambiar contraseña
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- 2FA -->
+                    <div class="card shadow-sm border-{% if user.totp_activo %}success{% else %}secondary{% endif %}">
+                        <div class="card-header {% if user.totp_activo %}bg-success text-white{% else %}bg-light text-secondary{% endif %} d-flex align-items-center gap-2">
+                            <i class="bi bi-phone{% if user.totp_activo %}-fill{% endif %}"></i>
+                            <h6 class="mb-0">Verificación en dos pasos (2FA)</h6>
+                            {% if user.totp_activo %}
+                                <span class="badge bg-white text-success ms-auto">Activo</span>
+                            {% else %}
+                                <span class="badge bg-secondary ms-auto">Inactivo</span>
+                            {% endif %}
+                        </div>
+                        <div class="card-body p-4">
+                            {% if user.totp_activo %}
+                                <p class="text-muted mb-3">
+                                    <i class="bi bi-check-circle-fill text-success me-1"></i>
+                                    Tu cuenta está protegida con verificación en dos pasos. Se te pedirá un código
+                                    de tu app autenticadora al iniciar sesión.
+                                </p>
+                                <form method="post" action="{% url 'auth_desactivar_2fa' %}" novalidate
+                                      onsubmit="return confirm('¿Seguro que quieres desactivar la verificación en dos pasos?')">
+                                    {% csrf_token %}
+                                    <div class="mb-3">
+                                        <label for="id_des2fa_password" class="form-label fw-semibold">
+                                            Confirmar contraseña actual
+                                        </label>
+                                        <input type="password" class="form-control" id="id_des2fa_password"
+                                               name="password_actual" autocomplete="current-password"
+                                               placeholder="Tu contraseña actual" required>
+                                    </div>
+                                    <button type="submit" class="btn btn-outline-danger">
+                                        <i class="bi bi-shield-x me-1"></i> Desactivar 2FA
+                                    </button>
+                                </form>
+                            {% else %}
+                                <p class="text-muted mb-3">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Agrega una capa extra de seguridad a tu cuenta. Necesitarás una app autenticadora
+                                    como <strong>Google Authenticator</strong> o <strong>Authy</strong>.
+                                </p>
+                                <a href="{% url 'auth_activar_2fa' %}" class="btn btn-success">
+                                    <i class="bi bi-shield-check me-1"></i> Activar verificación en dos pasos
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

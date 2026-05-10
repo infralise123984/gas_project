@@ -29,10 +29,17 @@ from django.http import HttpResponse, JsonResponse
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side 
 from openpyxl.utils import get_column_letter   # ← AGREGAR ESTA LÍNEA
+import pyotp
+import segno
 
 # App local
 from .forms import (
     CrearUsuarioSeguroForm,
+    EditarPerfilForm,
+    CambiarPasswordForm,
+    Verificar2FAForm,
+    Activar2FAConfirmForm,
+    Desactivar2FAForm,
     DetallePedidoForm, 
     PedidoCabeceraForm, 
     DetalleFormSet, 
@@ -312,6 +319,15 @@ def login_view(request):
         ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
 
         if user is not None:
+            if user.totp_activo:
+                # 2FA requerido: guardar en sesión y redirigir a verificación
+                request.session['2fa_pending_user_id'] = user.pk
+                # Guardar el backend para poder llamar login() luego sin authenticate()
+                request.session['2fa_pending_backend'] = user.backend
+                request.session['2fa_next'] = request.POST.get('next', '')
+                audit_logger.info(f"2FA_REQUIRED | User: {username} | IP: {ip}")
+                return redirect("auth_verificar_2fa")
+
             login(request, user)
             messages.success(request, f"¡Bienvenido, {user.get_full_name() or user.username}!")
             
@@ -359,6 +375,249 @@ def logout_view(request):
     logout(request)
     messages.success(request, "Has cerrado sesión correctamente")
     return redirect("auth_login")
+
+
+# Autenticación: perfil de usuario propio
+@login_required
+def perfil_view(request):
+    """Permite al usuario ver y editar sus datos personales y cambiar contraseña."""
+    user = request.user
+    active_tab = 'perfil'
+
+    form_perfil = EditarPerfilForm(user=user, initial={
+        'first_name': user.first_name,
+        'last_name':  user.last_name,
+        'email':      user.email,
+        'telefono':   user.telefono,
+    })
+    form_password = CambiarPasswordForm(user=user)
+
+    if request.method == "POST":
+        accion = request.POST.get('accion')
+
+        if accion == 'perfil':
+            form_perfil = EditarPerfilForm(request.POST, user=user)
+            if form_perfil.is_valid():
+                datos = form_perfil.cleaned_data
+                campos_cambiados = {}
+
+                for campo in ('first_name', 'last_name', 'email'):
+                    nuevo = datos.get(campo, '')
+                    if getattr(user, campo) != nuevo:
+                        campos_cambiados[campo] = {'antes': getattr(user, campo), 'despues': nuevo}
+                        setattr(user, campo, nuevo)
+
+                nuevo_telefono = datos.get('telefono') or None
+                if user.telefono != nuevo_telefono:
+                    campos_cambiados['telefono'] = {'antes': user.telefono, 'despues': nuevo_telefono}
+                    user.telefono = nuevo_telefono
+
+                user.save(update_fields=['first_name', 'last_name', 'email', 'telefono'])
+
+                if campos_cambiados:
+                    AuditoriaAccion.registrar(
+                        request=request,
+                        tipo='USER_UPDATE',
+                        descripcion=f"Perfil actualizado por {user.username}",
+                        objeto=user,
+                        datos_nuevos=campos_cambiados,
+                    )
+                    audit_logger.info(f"PROFILE_UPDATE | User: {user.username} | Fields: {list(campos_cambiados)}")
+
+                messages.success(request, "Perfil actualizado correctamente.")
+                return redirect("auth_perfil")
+            else:
+                active_tab = 'perfil'
+
+        elif accion == 'password':
+            form_password = CambiarPasswordForm(request.POST, user=user)
+            if form_password.is_valid():
+                user.set_password(form_password.cleaned_data['password_nueva'])
+                user.save(update_fields=['password'])
+
+                AuditoriaAccion.registrar(
+                    request=request,
+                    tipo='USER_UPDATE',
+                    descripcion=f"Contraseña cambiada por {user.username}",
+                    objeto=user,
+                )
+                audit_logger.info(f"PASSWORD_CHANGE | User: {user.username}")
+
+                # Re-autenticar para no perder la sesión tras cambiar contraseña
+                from django.contrib.auth import update_session_auth_hash
+                update_session_auth_hash(request, user)
+
+                messages.success(request, "Contraseña actualizada correctamente.")
+                return redirect("auth_perfil")
+            else:
+                active_tab = 'seguridad'
+
+    return render(request, "auth/perfil.html", {
+        'form_perfil':   form_perfil,
+        'form_password': form_password,
+        'active_tab':    active_tab,
+    })
+
+
+# ══════════════════════════════════════════════════════════════
+# 3b. 2FA — VERIFICACIÓN, ACTIVACIÓN Y DESACTIVACIÓN
+# ══════════════════════════════════════════════════════════════
+
+def verificar_2fa_view(request):
+    """Segunda etapa del login: verificar código TOTP cuando 2FA está activo."""
+    user_id = request.session.get('2fa_pending_user_id')
+    if not user_id:
+        return redirect("auth_login")
+
+    try:
+        user = Usuario.objects.get(pk=user_id)
+    except Usuario.DoesNotExist:
+        del request.session['2fa_pending_user_id']
+        return redirect("auth_login")
+
+    form = Verificar2FAForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        codigo = form.cleaned_data['codigo']
+        totp = pyotp.TOTP(user.totp_secret)
+
+        # Verificar código y proteger contra replay (ventana ±1 intervalo de 30s)
+        ahora = timezone.now()
+        valido = totp.verify(codigo, valid_window=1)
+
+        # Anti-replay: rechazar si el mismo intervalo ya fue verificado
+        if valido and user.totp_ultimo_verificado:
+            intervalo_actual = int(ahora.timestamp()) // 30
+            intervalo_ultimo = int(user.totp_ultimo_verificado.timestamp()) // 30
+            if intervalo_actual == intervalo_ultimo:
+                valido = False
+
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
+
+        if valido:
+            user.totp_ultimo_verificado = ahora
+            user.save(update_fields=['totp_ultimo_verificado'])
+
+            backend = request.session.pop('2fa_pending_backend', None)
+            del request.session['2fa_pending_user_id']
+            login(request, user, backend=backend)
+            messages.success(request, f"¡Bienvenido, {user.get_full_name() or user.username}!")
+
+            AuditoriaAccion.registrar(
+                request=request,
+                tipo='LOGIN_OK',
+                descripcion=f'Inicio de sesión con 2FA exitoso para {user.username}',
+                objeto=user,
+            )
+            audit_logger.info(f"2FA_OK | User: {user.username} | IP: {ip}")
+
+            next_url = request.session.pop('2fa_next', '') or 'index'
+            return redirect(next_url)
+        else:
+            AuditoriaAccion.registrar(
+                request=request,
+                tipo='LOGIN_FAIL',
+                descripcion=f'Código 2FA incorrecto para {user.username}',
+            )
+            security_logger.warning(f"2FA_FAIL | User: {user.username} | IP: {ip}")
+            form.add_error('codigo', "Código incorrecto o expirado. Inténtalo de nuevo.")
+
+    return render(request, "auth/verificar_2fa.html", {'form': form})
+
+
+@login_required
+def activar_2fa_view(request):
+    """Genera un secreto TOTP temporal, muestra el QR y confirma la activación."""
+    user = request.user
+
+    if user.totp_activo:
+        messages.info(request, "La verificación en dos pasos ya está activa.")
+        return redirect("auth_perfil")
+
+    # Generar o reutilizar secreto temporal guardado en sesión
+    if request.method == "GET" or '2fa_setup_secret' not in request.session:
+        secret = pyotp.random_base32()
+        request.session['2fa_setup_secret'] = secret
+    else:
+        secret = request.session['2fa_setup_secret']
+
+    # Generar URI otpauth:// y QR como SVG inline
+    nombre_app = "ValGas"
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(
+        name=user.username,
+        issuer_name=nombre_app,
+    )
+    qr = segno.make(uri, error='M')
+    import io
+    buf = io.BytesIO()
+    qr.save(buf, kind='svg', scale=4, border=2)
+    qr_svg = buf.getvalue().decode('utf-8')
+
+    form = Activar2FAConfirmForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        codigo = form.cleaned_data['codigo']
+        totp = pyotp.TOTP(secret)
+
+        if totp.verify(codigo, valid_window=1):
+            user.totp_secret = secret
+            user.totp_activo = True
+            user.totp_ultimo_verificado = timezone.now()
+            user.save(update_fields=['totp_secret', 'totp_activo', 'totp_ultimo_verificado'])
+
+            del request.session['2fa_setup_secret']
+
+            AuditoriaAccion.registrar(
+                request=request,
+                tipo='USER_UPDATE',
+                descripcion=f'2FA activado por {user.username}',
+                objeto=user,
+            )
+            audit_logger.info(f"2FA_ACTIVATED | User: {user.username}")
+            messages.success(request, "¡Verificación en dos pasos activada correctamente!")
+            return redirect("auth_perfil")
+        else:
+            form.add_error('codigo', "Código incorrecto. Verifica que la hora de tu dispositivo sea correcta.")
+
+    return render(request, "auth/activar_2fa.html", {
+        'form':   form,
+        'qr_svg': qr_svg,
+        'secret': secret,
+    })
+
+
+@login_required
+def desactivar_2fa_view(request):
+    """Desactiva 2FA del usuario tras confirmar contraseña."""
+    user = request.user
+
+    if not user.totp_activo:
+        messages.info(request, "La verificación en dos pasos no está activa.")
+        return redirect("auth_perfil")
+
+    if request.method != "POST":
+        return redirect("auth_perfil")
+
+    form = Desactivar2FAForm(request.POST, user=user)
+    if form.is_valid():
+        user.totp_secret = None
+        user.totp_activo = False
+        user.totp_ultimo_verificado = None
+        user.save(update_fields=['totp_secret', 'totp_activo', 'totp_ultimo_verificado'])
+
+        AuditoriaAccion.registrar(
+            request=request,
+            tipo='USER_UPDATE',
+            descripcion=f'2FA desactivado por {user.username}',
+            objeto=user,
+        )
+        audit_logger.info(f"2FA_DEACTIVATED | User: {user.username}")
+        messages.success(request, "Verificación en dos pasos desactivada.")
+    else:
+        messages.error(request, "Contraseña incorrecta. No se pudo desactivar el 2FA.")
+
+    return redirect("auth_perfil")
 
 
 # ══════════════════════════════════════════════════════════════
