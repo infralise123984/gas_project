@@ -8,3 +8,5 @@ pywebpush==2.2.0
 # Herramientas útiles en local
 # dj-database-url se puede instalar si quieres probar DATABASE_URL localmente
 dj-database-url==1.0.0
+pyotp==2.9.0
+segno==1.6.6
