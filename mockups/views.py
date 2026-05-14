@@ -25,6 +25,10 @@ from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse, JsonResponse
 
+# Seguridad adicional
+from django.core.cache import cache
+from django.utils.http import url_has_allowed_host_and_scheme
+
 # Librerías de terceros
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side 
@@ -312,11 +316,20 @@ def login_view(request):
         
         username = request.POST.get("username", "")
         password = request.POST.get("password", "")
-        user = authenticate(request, username=username, password=password)
-        
-        # Obtener IP para logging
+
+        # Obtener IP para logging (antes del rate limit)
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
+
+        # Rate limiting: máximo 10 intentos fallidos por IP+usuario en 15 minutos
+        rl_key = f"login_attempts_{ip}_{username[:50]}"
+        intentos_login = cache.get(rl_key, 0)
+        if intentos_login >= 10:
+            messages.error(request, "Demasiados intentos fallidos. Espera 15 minutos antes de intentarlo de nuevo.")
+            security_logger.warning(f"LOGIN_BLOCKED | User: {username} | IP: {ip} | intentos: {intentos_login}")
+            return render(request, "auth/login.html")
+
+        user = authenticate(request, username=username, password=password)
 
         if user is not None:
             if user.totp_activo:
@@ -328,6 +341,8 @@ def login_view(request):
                 audit_logger.info(f"2FA_REQUIRED | User: {username} | IP: {ip}")
                 return redirect("auth_verificar_2fa")
 
+            # Login exitoso: limpiar contador de intentos fallidos
+            cache.delete(rl_key)
             login(request, user)
             messages.success(request, f"¡Bienvenido, {user.get_full_name() or user.username}!")
             
@@ -342,6 +357,8 @@ def login_view(request):
             
             return redirect("index")
         else:
+            # Incrementar contador de intentos fallidos (expira en 15 min)
+            cache.set(rl_key, intentos_login + 1, timeout=900)
             messages.error(request, "Usuario o contraseña incorrectos")
             
             # Auditoría: Login fallido
@@ -350,7 +367,7 @@ def login_view(request):
                 tipo='LOGIN_FAIL',
                 descripcion=f'Intento de login fallido para usuario: {username}'
             )
-            security_logger.warning(f"LOGIN_FAIL | User: {username} | IP: {ip}")
+            security_logger.warning(f"LOGIN_FAIL | User: {username} | IP: {ip} | intentos: {intentos_login + 1}")
 
     return render(request, "auth/login.html")
 
@@ -358,6 +375,10 @@ def login_view(request):
 # Autenticación: cierre de sesión
 def logout_view(request):
     """Cierra sesión e registra acción en auditoría."""
+    # Requerir POST para evitar CSRF logout via GET
+    if request.method != "POST":
+        return redirect("index")
+
     # Guardar datos antes del logout para auditoría
     username = request.user.username if request.user.is_authenticated else 'Anónimo'
     user_obj = request.user if request.user.is_authenticated else None
@@ -478,6 +499,17 @@ def verificar_2fa_view(request):
     form = Verificar2FAForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
+        # Rate limiting: máximo 5 intentos por sesión antes de revocar el flujo 2FA
+        intentos_2fa = request.session.get('2fa_intentos', 0)
+        if intentos_2fa >= 5:
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            ip_2fa = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
+            security_logger.warning(f"2FA_BLOCKED | User: {user.username} | IP: {ip_2fa} | Demasiados intentos")
+            for k in ('2fa_pending_user_id', '2fa_pending_backend', '2fa_next', '2fa_intentos'):
+                request.session.pop(k, None)
+            messages.error(request, "Demasiados intentos fallidos. Por seguridad, debes iniciar sesión nuevamente.")
+            return redirect("auth_login")
+
         codigo = form.cleaned_data['codigo']
         totp = pyotp.TOTP(user.totp_secret)
 
@@ -501,6 +533,7 @@ def verificar_2fa_view(request):
 
             backend = request.session.pop('2fa_pending_backend', None)
             del request.session['2fa_pending_user_id']
+            request.session.pop('2fa_intentos', None)  # Limpiar contador al autenticar
             login(request, user, backend=backend)
             messages.success(request, f"¡Bienvenido, {user.get_full_name() or user.username}!")
 
@@ -512,7 +545,10 @@ def verificar_2fa_view(request):
             )
             audit_logger.info(f"2FA_OK | User: {user.username} | IP: {ip}")
 
-            next_url = request.session.pop('2fa_next', '') or 'index'
+            # Validar next_url para prevenir Open Redirect
+            next_url = request.session.pop('2fa_next', '') or ''
+            if not next_url or not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+                next_url = 'index'
             return redirect(next_url)
         else:
             AuditoriaAccion.registrar(
@@ -520,7 +556,8 @@ def verificar_2fa_view(request):
                 tipo='LOGIN_FAIL',
                 descripcion=f'Código 2FA incorrecto para {user.username}',
             )
-            security_logger.warning(f"2FA_FAIL | User: {user.username} | IP: {ip}")
+            request.session['2fa_intentos'] = request.session.get('2fa_intentos', 0) + 1
+            security_logger.warning(f"2FA_FAIL | User: {user.username} | IP: {ip} | intentos: {request.session['2fa_intentos']}")
             form.add_error('codigo', "Código incorrecto o expirado. Inténtalo de nuevo.")
 
     return render(request, "auth/verificar_2fa.html", {'form': form})
