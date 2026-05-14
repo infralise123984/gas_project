@@ -3212,6 +3212,10 @@ def editar_sobre_diario(request):
     - /sobres/editar/?bodega=1&fecha=...  (crea/busca sobre y redirige con sobre_id)
     - /sobres/editar/?camionero=5&fecha=...  (crea/busca sobre y redirige con sobre_id)
     """
+    resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para editar sobres.")
+    if resp:
+        return resp
+
     usuario = request.user
     sobre_id = request.GET.get('sobre_id')
     
@@ -3567,14 +3571,12 @@ def crear_sobre_post_cierre(request, sobre_id):
     Hereda: tipo, trabajador del sobre anterior.
     Parámetro POST: fecha_correspondiente (opcional, default = hoy).
     """
+    resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para crear un nuevo sobre.")
+    if resp:
+        return resp
+
     # Obtener el sobre anterior
     sobre_anterior = get_object_or_404(SobreDiario, id=sobre_id)
-    
-    # Validar que el usuario tenga permiso
-    if not (request.user.rol in ['bodeguero', 'jefe', 'admin'] or 
-            (sobre_anterior.trabajador == request.user)):
-        messages.error(request, "No tienes permiso para crear un nuevo sobre.")
-        return redirect('sobres_lista')
     
     # Validar que el sobre anterior esté CERRADO (salvo que se fuerce por jefe/admin)
     forzar = request.POST.get('forzar_creacion') == '1'
@@ -3634,6 +3636,10 @@ def crear_sobre_post_cierre(request, sobre_id):
 @login_required
 def historial_sobres(request):
     """Ver historial completo de sobres cerrados con métricas diarias."""
+    resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para ver historial de sobres.")
+    if resp:
+        return resp
+
     modo_historial = request.GET.get('modo', 'dia')
     if modo_historial not in ['dia', 'mes', 'todo']:
         modo_historial = 'dia'
@@ -3743,7 +3749,7 @@ def imprimir_sobre_diario(request, sobre_id):
     Genera una página HTML optimizada para impresión del sobre diario.
     Formato compacto similar a Excel.
     """
-    if request.user.rol not in ['bodeguero', 'jefe', 'admin', 'camionero']:
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
         messages.error(request, "No tienes permiso para imprimir sobres.")
         return redirect('index')
 
@@ -3847,7 +3853,7 @@ def imprimir_sobre_diario(request, sobre_id):
 @login_required
 def exportar_sobre_excel(request, sobre_id):
     """Exportar detalles de sobre a archivo .xlsx."""
-    if request.user.rol not in ['bodeguero', 'jefe', 'admin', 'camionero']:
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
         messages.error(request, "No tienes permiso para exportar sobres.")
         return redirect('index')
 
