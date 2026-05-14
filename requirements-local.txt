@@ -1,12 +1,11 @@
 # requirements-local.txt - dependencias para desarrollo local
 Django==5.1.3
-mysqlclient==2.2.6
-python-dotenv==1.0.1
-openpyxl==3.1.5
-whitenoise==6.7.0
-pywebpush==2.2.0
-# Herramientas útiles en local
-# dj-database-url se puede instalar si quieres probar DATABASE_URL localmente
-dj-database-url==1.0.0
-pyotp==2.9.0
-segno==1.6.6
+mysqlclient==2.2.6          # Driver MySQL para desarrollo local
+python-dotenv==1.0.1        # Carga el .env con SECRET_KEY, DB_PASSWORD, etc.
+openpyxl==3.1.5             # Exportación a Excel
+whitenoise==6.7.0           # Servir estáticos en local igual que en producción
+pywebpush==2.2.0            # Push Notifications para camioneros
+dj-database-url==2.3.0      # Parseo de DATABASE_URL (igualado con producción)
+django-axes==7.0.1          # Protección contra fuerza bruta en el login (requerido en settings.py)
+pyotp==2.9.0                # Códigos TOTP para 2FA
+segno==1.6.6                # Generación de QR para activar 2FA
