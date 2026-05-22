@@ -305,6 +305,7 @@ def index(request):
 
 
 # Autenticación: inicio de sesión
+@never_cache
 def login_view(request):
     """Autentica usuario, registra intento en auditoría."""
     if request.user.is_authenticated:
