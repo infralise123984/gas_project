@@ -10,6 +10,7 @@ from calendar import monthrange
 from django.utils import timezone
 import uuid
 from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_POST
 from zoneinfo import ZoneInfo
 from django.urls import reverse
 
@@ -1156,6 +1157,7 @@ def gestionar_balones_editar(request, balon_id):
 
 # Admin/Jefe: eliminar tipo de balón
 @login_required
+@require_POST
 def gestionar_balones_eliminar(request, balon_id):
     """Eliminar un tipo de balón (confirmar primero)."""
     """
@@ -1304,6 +1306,7 @@ def gestionar_sectores_editar(request, sector_id):
 
 
 @login_required
+@require_POST
 def gestionar_sectores_eliminar(request, sector_id):
     """Eliminar un sector del catálogo administrable."""
     resp = require_roles(request, ["admin"], "index", "No tienes permiso para eliminar sectores.")
@@ -1886,6 +1889,7 @@ def camionero_entregas_api(request):
 
 # Camionero: tomar pedido asignado
 @login_required
+@require_POST
 def camionero_tomar_pedido(request, pedido_id):
     """Camionero marca pedido como 'en_ruta' (asignado a él)."""
     resp = require_roles(request, ["camionero"], "index", "Solo camioneros pueden tomar pedidos.")
@@ -1948,6 +1952,7 @@ def camionero_tomar_pedido(request, pedido_id):
 
 # Camionero: marcar pedido como entregado
 @login_required
+@require_POST
 def camionero_marcar_entregado(request, pedido_id):
     """Camionero marca pedido como 'entregado'."""
     resp = require_roles(request, ["camionero"], "index", "Solo los camioneros pueden marcar entregas.")
@@ -2072,6 +2077,7 @@ def telefonista_cancelar_pedido(request, pedido_id):
 
 # Camionero: cancelar entrega
 @login_required
+@require_POST
 def camionero_cancelar_entrega(request, pedido_id):
     """Camionero devuelve pedido a 'pendiente' si no puede entregar."""
     resp = require_roles(request, ["camionero"], "camionero_entregas", "Solo camioneros pueden cancelar entregas.")
@@ -3473,6 +3479,7 @@ def editar_sobre_diario(request):
     return render(request, 'sobres/sobres.html', context)
 
 @login_required
+@require_POST
 def refrescar_sobre_diario(request, sobre_id):
     """Sincroniza un sobre abierto con los pedidos y retorna sus cantidades actualizadas."""
     if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
