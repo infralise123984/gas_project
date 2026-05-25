@@ -376,7 +376,7 @@ def login_view(request):
 
 # Autenticación: cierre de sesión
 def logout_view(request):
-    """Cierra sesión e registra acción en auditoría."""
+    """Cierra sesión y registra acción en auditoría."""
     # Requerir POST para evitar CSRF logout via GET
     if request.method != "POST":
         return redirect("index")
