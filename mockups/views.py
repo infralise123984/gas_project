@@ -27,7 +27,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse, JsonResponse
 
 # Seguridad adicional
-from django.core.cache import cache
 from django.utils.http import url_has_allowed_host_and_scheme
 
 # Librerías de terceros
@@ -323,14 +322,6 @@ def login_view(request):
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
 
-        # Rate limiting: máximo 10 intentos fallidos por IP+usuario en 15 minutos
-        rl_key = f"login_attempts_{ip}_{username[:50]}"
-        intentos_login = cache.get(rl_key, 0)
-        if intentos_login >= 10:
-            messages.error(request, "Demasiados intentos fallidos. Espera 15 minutos antes de intentarlo de nuevo.")
-            security_logger.warning(f"LOGIN_BLOCKED | User: {username} | IP: {ip} | intentos: {intentos_login}")
-            return render(request, "auth/login.html")
-
         user = authenticate(request, username=username, password=password)
 
         if user is not None:
@@ -343,8 +334,6 @@ def login_view(request):
                 audit_logger.info(f"2FA_REQUIRED | User: {username} | IP: {ip}")
                 return redirect("auth_verificar_2fa")
 
-            # Login exitoso: limpiar contador de intentos fallidos
-            cache.delete(rl_key)
             login(request, user)
             messages.success(request, f"¡Bienvenido, {user.get_full_name() or user.username}!")
             
@@ -359,8 +348,6 @@ def login_view(request):
             
             return redirect("index")
         else:
-            # Incrementar contador de intentos fallidos (expira en 15 min)
-            cache.set(rl_key, intentos_login + 1, timeout=900)
             messages.error(request, "Usuario o contraseña incorrectos")
             
             # Auditoría: Login fallido
@@ -369,7 +356,7 @@ def login_view(request):
                 tipo='LOGIN_FAIL',
                 descripcion=f'Intento de login fallido para usuario: {username}'
             )
-            security_logger.warning(f"LOGIN_FAIL | User: {username} | IP: {ip} | intentos: {intentos_login + 1}")
+            security_logger.warning(f"LOGIN_FAIL | User: {username} | IP: {ip}")
 
     return render(request, "auth/login.html")
 
