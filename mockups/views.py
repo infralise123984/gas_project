@@ -10,6 +10,7 @@ from calendar import monthrange
 from django.utils import timezone
 import uuid
 from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_POST
 from zoneinfo import ZoneInfo
 from django.urls import reverse
 
@@ -24,6 +25,9 @@ from django.db.models import Count, F, Q, Sum, Case, When, Value, IntegerField
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse, JsonResponse
+
+# Seguridad adicional
+from django.utils.http import url_has_allowed_host_and_scheme
 
 # Librerías de terceros
 import openpyxl
@@ -300,6 +304,7 @@ def index(request):
 
 
 # Autenticación: inicio de sesión
+@never_cache
 def login_view(request):
     """Autentica usuario, registra intento en auditoría."""
     if request.user.is_authenticated:
@@ -312,11 +317,12 @@ def login_view(request):
         
         username = request.POST.get("username", "")
         password = request.POST.get("password", "")
-        user = authenticate(request, username=username, password=password)
-        
-        # Obtener IP para logging
+
+        # Obtener IP para logging (antes del rate limit)
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
+
+        user = authenticate(request, username=username, password=password)
 
         if user is not None:
             if user.totp_activo:
@@ -357,7 +363,11 @@ def login_view(request):
 
 # Autenticación: cierre de sesión
 def logout_view(request):
-    """Cierra sesión e registra acción en auditoría."""
+    """Cierra sesión y registra acción en auditoría."""
+    # Requerir POST para evitar CSRF logout via GET
+    if request.method != "POST":
+        return redirect("index")
+
     # Guardar datos antes del logout para auditoría
     username = request.user.username if request.user.is_authenticated else 'Anónimo'
     user_obj = request.user if request.user.is_authenticated else None
@@ -478,6 +488,17 @@ def verificar_2fa_view(request):
     form = Verificar2FAForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
+        # Rate limiting: máximo 5 intentos por sesión antes de revocar el flujo 2FA
+        intentos_2fa = request.session.get('2fa_intentos', 0)
+        if intentos_2fa >= 5:
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            ip_2fa = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
+            security_logger.warning(f"2FA_BLOCKED | User: {user.username} | IP: {ip_2fa} | Demasiados intentos")
+            for k in ('2fa_pending_user_id', '2fa_pending_backend', '2fa_next', '2fa_intentos'):
+                request.session.pop(k, None)
+            messages.error(request, "Demasiados intentos fallidos. Por seguridad, debes iniciar sesión nuevamente.")
+            return redirect("auth_login")
+
         codigo = form.cleaned_data['codigo']
         totp = pyotp.TOTP(user.totp_secret)
 
@@ -501,6 +522,7 @@ def verificar_2fa_view(request):
 
             backend = request.session.pop('2fa_pending_backend', None)
             del request.session['2fa_pending_user_id']
+            request.session.pop('2fa_intentos', None)  # Limpiar contador al autenticar
             login(request, user, backend=backend)
             messages.success(request, f"¡Bienvenido, {user.get_full_name() or user.username}!")
 
@@ -512,7 +534,10 @@ def verificar_2fa_view(request):
             )
             audit_logger.info(f"2FA_OK | User: {user.username} | IP: {ip}")
 
-            next_url = request.session.pop('2fa_next', '') or 'index'
+            # Validar next_url para prevenir Open Redirect
+            next_url = request.session.pop('2fa_next', '') or ''
+            if not next_url or not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+                next_url = 'index'
             return redirect(next_url)
         else:
             AuditoriaAccion.registrar(
@@ -520,7 +545,8 @@ def verificar_2fa_view(request):
                 tipo='LOGIN_FAIL',
                 descripcion=f'Código 2FA incorrecto para {user.username}',
             )
-            security_logger.warning(f"2FA_FAIL | User: {user.username} | IP: {ip}")
+            request.session['2fa_intentos'] = request.session.get('2fa_intentos', 0) + 1
+            security_logger.warning(f"2FA_FAIL | User: {user.username} | IP: {ip} | intentos: {request.session['2fa_intentos']}")
             form.add_error('codigo', "Código incorrecto o expirado. Inténtalo de nuevo.")
 
     return render(request, "auth/verificar_2fa.html", {'form': form})
@@ -1119,6 +1145,7 @@ def gestionar_balones_editar(request, balon_id):
 
 # Admin/Jefe: eliminar tipo de balón
 @login_required
+@require_POST
 def gestionar_balones_eliminar(request, balon_id):
     """Eliminar un tipo de balón (confirmar primero)."""
     """
@@ -1267,6 +1294,7 @@ def gestionar_sectores_editar(request, sector_id):
 
 
 @login_required
+@require_POST
 def gestionar_sectores_eliminar(request, sector_id):
     """Eliminar un sector del catálogo administrable."""
     resp = require_roles(request, ["admin"], "index", "No tienes permiso para eliminar sectores.")
@@ -1849,6 +1877,7 @@ def camionero_entregas_api(request):
 
 # Camionero: tomar pedido asignado
 @login_required
+@require_POST
 def camionero_tomar_pedido(request, pedido_id):
     """Camionero marca pedido como 'en_ruta' (asignado a él)."""
     resp = require_roles(request, ["camionero"], "index", "Solo camioneros pueden tomar pedidos.")
@@ -1911,6 +1940,7 @@ def camionero_tomar_pedido(request, pedido_id):
 
 # Camionero: marcar pedido como entregado
 @login_required
+@require_POST
 def camionero_marcar_entregado(request, pedido_id):
     """Camionero marca pedido como 'entregado'."""
     resp = require_roles(request, ["camionero"], "index", "Solo los camioneros pueden marcar entregas.")
@@ -2035,6 +2065,7 @@ def telefonista_cancelar_pedido(request, pedido_id):
 
 # Camionero: cancelar entrega
 @login_required
+@require_POST
 def camionero_cancelar_entrega(request, pedido_id):
     """Camionero devuelve pedido a 'pendiente' si no puede entregar."""
     resp = require_roles(request, ["camionero"], "camionero_entregas", "Solo camioneros pueden cancelar entregas.")
@@ -3175,6 +3206,10 @@ def editar_sobre_diario(request):
     - /sobres/editar/?bodega=1&fecha=...  (crea/busca sobre y redirige con sobre_id)
     - /sobres/editar/?camionero=5&fecha=...  (crea/busca sobre y redirige con sobre_id)
     """
+    resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para editar sobres.")
+    if resp:
+        return resp
+
     usuario = request.user
     sobre_id = request.GET.get('sobre_id')
     
@@ -3432,6 +3467,7 @@ def editar_sobre_diario(request):
     return render(request, 'sobres/sobres.html', context)
 
 @login_required
+@require_POST
 def refrescar_sobre_diario(request, sobre_id):
     """Sincroniza un sobre abierto con los pedidos y retorna sus cantidades actualizadas."""
     if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
@@ -3530,14 +3566,12 @@ def crear_sobre_post_cierre(request, sobre_id):
     Hereda: tipo, trabajador del sobre anterior.
     Parámetro POST: fecha_correspondiente (opcional, default = hoy).
     """
+    resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para crear un nuevo sobre.")
+    if resp:
+        return resp
+
     # Obtener el sobre anterior
     sobre_anterior = get_object_or_404(SobreDiario, id=sobre_id)
-    
-    # Validar que el usuario tenga permiso
-    if not (request.user.rol in ['bodeguero', 'jefe', 'admin'] or 
-            (sobre_anterior.trabajador == request.user)):
-        messages.error(request, "No tienes permiso para crear un nuevo sobre.")
-        return redirect('sobres_lista')
     
     # Validar que el sobre anterior esté CERRADO (salvo que se fuerce por jefe/admin)
     forzar = request.POST.get('forzar_creacion') == '1'
@@ -3597,6 +3631,10 @@ def crear_sobre_post_cierre(request, sobre_id):
 @login_required
 def historial_sobres(request):
     """Ver historial completo de sobres cerrados con métricas diarias."""
+    resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para ver historial de sobres.")
+    if resp:
+        return resp
+
     modo_historial = request.GET.get('modo', 'dia')
     if modo_historial not in ['dia', 'mes', 'todo']:
         modo_historial = 'dia'
@@ -3706,7 +3744,7 @@ def imprimir_sobre_diario(request, sobre_id):
     Genera una página HTML optimizada para impresión del sobre diario.
     Formato compacto similar a Excel.
     """
-    if request.user.rol not in ['bodeguero', 'jefe', 'admin', 'camionero']:
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
         messages.error(request, "No tienes permiso para imprimir sobres.")
         return redirect('index')
 
@@ -3810,7 +3848,7 @@ def imprimir_sobre_diario(request, sobre_id):
 @login_required
 def exportar_sobre_excel(request, sobre_id):
     """Exportar detalles de sobre a archivo .xlsx."""
-    if request.user.rol not in ['bodeguero', 'jefe', 'admin', 'camionero']:
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
         messages.error(request, "No tienes permiso para exportar sobres.")
         return redirect('index')
 
