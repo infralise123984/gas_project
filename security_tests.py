@@ -311,23 +311,14 @@ class XSSProtectionTests(TestCase):
 class BruteForceProtectionTests(TestCase):
     """Pruebas contra ataques de fuerza bruta"""
     
-    def test_multiple_failed_logins(self):
-        """
-        RECOMENDACIÓN: Implementar rate limiting
-        Este test documenta la necesidad de protección contra fuerza bruta
-        """
-        client = Client()
-        # Simular múltiples intentos fallidos
-        for i in range(20):
-            client.post(reverse('auth_login'), {
-                'username': 'nonexistent',
-                'password': f'wrongpass{i}'
-            })
-        
-        # TODO: Implementar Django-ratelimit o similar
-        # y verificar que el usuario es bloqueado temporalmente
-        # self.assertEqual(response.status_code, 429)  # Too Many Requests
-        pass  # Actualmente no hay protección
+    def test_axes_is_enabled_for_login_protection(self):
+        """La protección de fuerza bruta debe estar centralizada en Axes."""
+        from django.conf import settings
+
+        self.assertIn('axes', settings.INSTALLED_APPS)
+        self.assertIn('axes.middleware.AxesMiddleware', settings.MIDDLEWARE)
+        self.assertIn('axes.backends.AxesStandaloneBackend', settings.AUTHENTICATION_BACKENDS)
+        self.assertGreaterEqual(getattr(settings, 'AXES_FAILURE_LIMIT', 0), 1)
 
 
 class IDORTests(TestCase):
