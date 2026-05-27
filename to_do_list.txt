@@ -1,3 +1,26 @@
 venta de camiones
 precios de venta diferentes
 vista simplificada de ventas de bodega y de camiones
+
+--- FUTURO / ESCALABILIDAD ---
+
+[TODO - Multi-bodeguero / Multi-bodega]
+Contexto: el sistema fue disenado y opera con un unico bodeguero. Si se expande a
+otra bodega (o se usan turnos con dos bodegueros distintos), el modelo de sobres
+de bodega requiere los siguientes cambios:
+
+  1. En SobreDiario: al crear un sobre de tipo 'bodega', asignar el bodeguero en
+     el campo `trabajador` (actualmente siempre queda None).
+
+  2. En views.py - get_pedidos_queryset_para_sobre: para bodega, agregar el filtro
+     `registrador=sobre.trabajador` ademas de `origen='local'`, para que cada sobre
+     solo incluya las ventas de ese bodeguero en particular.
+
+  3. En models.py - calcular_desde_pedidos: corregir el filtro de bodega que hoy
+     usa `registrador=self.trabajador` (donde trabajador=None, devuelve 0 siempre).
+     Con el cambio del punto 1, este filtro quedaria correcto por si solo.
+
+  ATENCION: no hacer este cambio sin antes crear una migracion que actualice los
+  sobres de bodega existentes, asignando el bodeguero correcto en `trabajador`.
+  Un cambio parcial dejaria sobres historicos sin trabajador y sobres nuevos con
+  trabajador, rompiendo la consistencia del historial.

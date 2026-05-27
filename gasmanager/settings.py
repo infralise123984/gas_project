@@ -189,8 +189,8 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
     
-    # Expiración de sesión (8 horas de inactividad)
-    SESSION_COOKIE_AGE = 172800  # 8 horas
+    # Expiración de sesión (48 horas de inactividad)
+    SESSION_COOKIE_AGE = 172800  # 48 horas
     SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Mantiene sesión aunque cierre el navegador
 
 # ──────────────────────────────────────────────────────────────
