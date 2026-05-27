@@ -327,11 +327,14 @@ def login_view(request):
 
         if user is not None:
             if user.totp_activo:
-                # 2FA requerido: guardar en sesión y redirigir a verificación
+                # 2FA requerido: rotar session key (mitiga session fixation) y guardar estado pendiente
+                request.session.cycle_key()
                 request.session['2fa_pending_user_id'] = user.pk
                 # Guardar el backend para poder llamar login() luego sin authenticate()
                 request.session['2fa_pending_backend'] = user.backend
                 request.session['2fa_next'] = request.POST.get('next', '')
+                # Timestamp para expirar el paso 2FA en 10 minutos
+                request.session['2fa_pending_at'] = timezone.now().timestamp()
                 audit_logger.info(f"2FA_REQUIRED | User: {username} | IP: {ip}")
                 return redirect("auth_verificar_2fa")
 
@@ -486,6 +489,14 @@ def verificar_2fa_view(request):
         del request.session['2fa_pending_user_id']
         return redirect("auth_login")
 
+    # Expirar el estado pendiente si han pasado más de 10 minutos desde el factor 1
+    pending_at = request.session.get('2fa_pending_at', 0)
+    if (timezone.now().timestamp() - pending_at) > 600:
+        for k in ('2fa_pending_user_id', '2fa_pending_backend', '2fa_next', '2fa_intentos', '2fa_pending_at'):
+            request.session.pop(k, None)
+        messages.error(request, "La sesión de verificación expiró. Inicia sesión nuevamente.")
+        return redirect("auth_login")
+
     form = Verificar2FAForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
@@ -566,8 +577,8 @@ def activar_2fa_view(request):
         messages.info(request, "La verificación en dos pasos ya está activa.")
         return redirect("auth_perfil")
 
-    # Generar o reutilizar secreto temporal guardado en sesión
-    if request.method == "GET" or '2fa_setup_secret' not in request.session:
+    # Generar secreto temporal solo si no existe en sesión (evita invalidar QR ya escaneado al recargar)
+    if '2fa_setup_secret' not in request.session:
         secret = pyotp.random_base32()
         request.session['2fa_setup_secret'] = secret
     else:
