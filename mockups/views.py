@@ -3708,6 +3708,21 @@ def imprimir_sobre_diario(request, sobre_id):
                 output_field=DField()
             )
         )['total'] or 0
+    elif sobre.tipo == 'bodega':
+        from django.db.models import DecimalField as DField
+        sobres_mes = SobreDiario.objects.filter(
+            tipo='bodega',
+            fecha_correspondiente__year=sobre.fecha_correspondiente.year,
+            fecha_correspondiente__month=sobre.fecha_correspondiente.month,
+        )
+        total_kilos_mes = LineaSobre.objects.filter(
+            sobre__in=sobres_mes
+        ).aggregate(
+            total=Sum(
+                F('cantidad_declarada') * F('balon__peso_neto_gas'),
+                output_field=DField()
+            )
+        )['total'] or 0
 
     context = {
         'sobre': sobre,
