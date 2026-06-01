@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sobre Diario - {{ sobre.fecha|date:"d/m/Y" }}</title>
+    <title>Sobre Diario - {{ sobre.fecha_correspondiente|date:"d/m/Y" }}</title>
     <style>
         * {
             margin: 0;
@@ -305,7 +305,7 @@
             </div>
             <div class="info-item">
                 <span class="info-label">FECHA:</span>
-                <span>{{ sobre.fecha.day }} {{ sobre.fecha|date:"M"|upper }} {{ sobre.fecha.year }}</span>
+                <span>{{ sobre.fecha_correspondiente.day }} {{ sobre.fecha_correspondiente|date:"M"|upper }} {{ sobre.fecha_correspondiente.year }}</span>
             </div>
             <div class="info-item">
                 <span class="info-label">Creado por:</span>

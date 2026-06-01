@@ -290,9 +290,12 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Volver</button>
-                <a href="#" id="btnConfirmarEliminarBalon" class="btn btn-danger">
-                    <i class="bi bi-trash me-1"></i>Sí, eliminar balón
-                </a>
+                <form method="post" id="formEliminarBalon" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i>Sí, eliminar balón
+                    </button>
+                </form>
             </div>
         </div>
     </div>
@@ -305,7 +308,7 @@
     modal.addEventListener('show.bs.modal', function (e) {
         const btn = e.relatedTarget;
         document.getElementById('modalBalonNombre').textContent = btn.dataset.balonNombre;
-        document.getElementById('btnConfirmarEliminarBalon').href = btn.dataset.url;
+        document.getElementById('formEliminarBalon').action = btn.dataset.url;
     });
 })();
 </script>

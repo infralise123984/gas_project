@@ -10,6 +10,7 @@ from calendar import monthrange
 from django.utils import timezone
 import uuid
 from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_POST
 from zoneinfo import ZoneInfo
 from django.urls import reverse
 
@@ -24,6 +25,9 @@ from django.db.models import Count, F, Q, Sum, Case, When, Value, IntegerField
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse, JsonResponse
+
+# Seguridad adicional
+from django.utils.http import url_has_allowed_host_and_scheme
 
 # Librerías de terceros
 import openpyxl
@@ -74,6 +78,11 @@ audit_logger = logging.getLogger('audit')
 # 2. FUNCIONES AUXILIARES Y UTILIDADES
 # ══════════════════════════════════════════════════════════════
 
+def get_client_ip(request):
+    """Obtiene IP de cliente para auditoría de forma consistente."""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    return x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
+
 # Zona horaria: convierte hora actual a Chile (America/Santiago)
 def now_chile():
     """Retorna hora actual en zona horaria de Chile con ajuste automático de horario."""
@@ -86,9 +95,10 @@ def today_chile():
     """Retorna fecha actual en Chile (evita problemas de UTC)."""
     return now_chile().date()
 
-def get_balones_activos_ordenados():
-    """Retorna los balones activos en el mismo orden usado por los sobres."""
-    return TipoBalon.objects.filter(activo=True).annotate(
+def get_balones_activos_ordenados(solo_activos=True):
+    """Retorna los balones en el mismo orden usado por los sobres. Solo activos por defecto."""
+    qs = TipoBalon.objects.filter(activo=True) if solo_activos else TipoBalon.objects.all()
+    return qs.annotate(
         tipo_orden=Case(
             When(tipo_gas='normal', then=Value(0)),
             When(tipo_gas='catalitico', then=Value(1)),
@@ -300,31 +310,31 @@ def index(request):
 
 
 # Autenticación: inicio de sesión
+@never_cache
 def login_view(request):
     """Autentica usuario, registra intento en auditoría."""
     if request.user.is_authenticated:
         return redirect("index")
 
     if request.method == "POST":
-        # Doble chequeo de autenticación por seguridad
-        if request.user.is_authenticated:
-            return redirect("index")
-        
         username = request.POST.get("username", "")
         password = request.POST.get("password", "")
+
+        # Obtener IP para logging y auditoría
+        ip = get_client_ip(request)
+
         user = authenticate(request, username=username, password=password)
-        
-        # Obtener IP para logging
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
 
         if user is not None:
             if user.totp_activo:
-                # 2FA requerido: guardar en sesión y redirigir a verificación
+                # 2FA requerido: rotar session key (mitiga session fixation) y guardar estado pendiente
+                request.session.cycle_key()
                 request.session['2fa_pending_user_id'] = user.pk
                 # Guardar el backend para poder llamar login() luego sin authenticate()
                 request.session['2fa_pending_backend'] = user.backend
                 request.session['2fa_next'] = request.POST.get('next', '')
+                # Timestamp para expirar el paso 2FA en 10 minutos
+                request.session['2fa_pending_at'] = timezone.now().timestamp()
                 audit_logger.info(f"2FA_REQUIRED | User: {username} | IP: {ip}")
                 return redirect("auth_verificar_2fa")
 
@@ -357,7 +367,11 @@ def login_view(request):
 
 # Autenticación: cierre de sesión
 def logout_view(request):
-    """Cierra sesión e registra acción en auditoría."""
+    """Cierra sesión y registra acción en auditoría."""
+    # Requerir POST para evitar CSRF logout via GET
+    if request.method != "POST":
+        return redirect("index")
+
     # Guardar datos antes del logout para auditoría
     username = request.user.username if request.user.is_authenticated else 'Anónimo'
     user_obj = request.user if request.user.is_authenticated else None
@@ -475,9 +489,27 @@ def verificar_2fa_view(request):
         del request.session['2fa_pending_user_id']
         return redirect("auth_login")
 
+    # Expirar el estado pendiente si han pasado más de 10 minutos desde el factor 1
+    pending_at = request.session.get('2fa_pending_at', 0)
+    if (timezone.now().timestamp() - pending_at) > 600:
+        for k in ('2fa_pending_user_id', '2fa_pending_backend', '2fa_next', '2fa_intentos', '2fa_pending_at'):
+            request.session.pop(k, None)
+        messages.error(request, "La sesión de verificación expiró. Inicia sesión nuevamente.")
+        return redirect("auth_login")
+
     form = Verificar2FAForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
+        # Control de intentos 2FA por sesión para frenar fuerza bruta del segundo factor
+        intentos_2fa = request.session.get('2fa_intentos', 0)
+        if intentos_2fa >= 5:
+            ip_2fa = get_client_ip(request)
+            security_logger.warning(f"2FA_BLOCKED | User: {user.username} | IP: {ip_2fa} | Demasiados intentos")
+            for k in ('2fa_pending_user_id', '2fa_pending_backend', '2fa_next', '2fa_intentos'):
+                request.session.pop(k, None)
+            messages.error(request, "Demasiados intentos fallidos. Por seguridad, debes iniciar sesión nuevamente.")
+            return redirect("auth_login")
+
         codigo = form.cleaned_data['codigo']
         totp = pyotp.TOTP(user.totp_secret)
 
@@ -492,8 +524,7 @@ def verificar_2fa_view(request):
             if intervalo_actual == intervalo_ultimo:
                 valido = False
 
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        ip = x_forwarded_for.split(',')[0].strip() if x_forwarded_for else request.META.get('REMOTE_ADDR')
+        ip = get_client_ip(request)
 
         if valido:
             user.totp_ultimo_verificado = ahora
@@ -501,6 +532,13 @@ def verificar_2fa_view(request):
 
             backend = request.session.pop('2fa_pending_backend', None)
             del request.session['2fa_pending_user_id']
+            request.session.pop('2fa_intentos', None)  # Limpiar contador al autenticar
+
+            if not backend:
+                messages.error(request, "La sesión de verificación expiró. Inicia sesión nuevamente.")
+                security_logger.warning(f"2FA_BACKEND_MISSING | User: {user.username} | IP: {ip}")
+                return redirect("auth_login")
+
             login(request, user, backend=backend)
             messages.success(request, f"¡Bienvenido, {user.get_full_name() or user.username}!")
 
@@ -512,7 +550,10 @@ def verificar_2fa_view(request):
             )
             audit_logger.info(f"2FA_OK | User: {user.username} | IP: {ip}")
 
-            next_url = request.session.pop('2fa_next', '') or 'index'
+            # Validar next_url para prevenir Open Redirect
+            next_url = request.session.pop('2fa_next', '') or ''
+            if not next_url or not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+                next_url = 'index'
             return redirect(next_url)
         else:
             AuditoriaAccion.registrar(
@@ -520,7 +561,8 @@ def verificar_2fa_view(request):
                 tipo='LOGIN_FAIL',
                 descripcion=f'Código 2FA incorrecto para {user.username}',
             )
-            security_logger.warning(f"2FA_FAIL | User: {user.username} | IP: {ip}")
+            request.session['2fa_intentos'] = request.session.get('2fa_intentos', 0) + 1
+            security_logger.warning(f"2FA_FAIL | User: {user.username} | IP: {ip} | intentos: {request.session['2fa_intentos']}")
             form.add_error('codigo', "Código incorrecto o expirado. Inténtalo de nuevo.")
 
     return render(request, "auth/verificar_2fa.html", {'form': form})
@@ -535,8 +577,8 @@ def activar_2fa_view(request):
         messages.info(request, "La verificación en dos pasos ya está activa.")
         return redirect("auth_perfil")
 
-    # Generar o reutilizar secreto temporal guardado en sesión
-    if request.method == "GET" or '2fa_setup_secret' not in request.session:
+    # Generar secreto temporal solo si no existe en sesión (evita invalidar QR ya escaneado al recargar)
+    if '2fa_setup_secret' not in request.session:
         secret = pyotp.random_base32()
         request.session['2fa_setup_secret'] = secret
     else:
@@ -691,120 +733,6 @@ def crear_usuario(request):
     return render(request, "auth/crear_usuario.html", {"form": form})
 
 @login_required
-def precios_balones(request):
-    """
-    Vista para Jefes, admin y bodegueros.
-    Permite actualizar masivamente precios de compra, venta y estado de balones.
-    Registra historial automático de los valores ANTERIORES cuando hay cambios.
-    """
-    # Verificación de rol (tu función existente)
-    resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para gestionar precios.")
-    if resp:
-        return resp
-
-    balones = TipoBalon.objects.all().annotate(
-        tipo_orden=Case(
-            When(tipo_gas='normal', then=Value(0)),
-            When(tipo_gas='catalitico', then=Value(1)),
-            When(tipo_gas='aluminio', then=Value(2)),
-            default=Value(3),
-            output_field=IntegerField(),
-        )
-    ).order_by("tipo_orden", "-peso_neto_gas")
-
-    if request.method == "POST":
-        cambios_realizados = False
-
-        for balon in balones:
-            # Claves de los campos del formulario
-            compra_key    = f"precio_compra_{balon.id}"
-            local_key     = f"precio_local_{balon.id}"
-            dom_key       = f"precio_domicilio_{balon.id}"
-            activo_key    = f"activo_{balon.id}"
-
-            # Valores enviados (o los actuales si no se enviaron)
-            nuevo_compra_str    = request.POST.get(compra_key)
-            nuevo_local_str     = request.POST.get(local_key)
-            nuevo_dom_str       = request.POST.get(dom_key)
-            nuevo_activo        = activo_key in request.POST
-
-            try:
-                nuevo_compra     = int(nuevo_compra_str) if nuevo_compra_str else balon.precio_compra
-                nuevo_local      = int(nuevo_local_str)  if nuevo_local_str  else balon.precio_local
-                nuevo_domicilio  = int(nuevo_dom_str)    if nuevo_dom_str    else balon.precio_domicilio
-
-                if nuevo_compra < 0 or nuevo_local < 0 or nuevo_domicilio < 0:
-                    raise ValueError("Precios no pueden ser negativos")
-            except ValueError:
-                messages.error(request, f"Precio inválido para {balon.nombre}. Se ignoraron cambios en esta fila.")
-                continue
-
-            # Detectar si realmente hay algún cambio
-            hubo_cambio = (
-                balon.precio_compra     != nuevo_compra or
-                balon.precio_local      != nuevo_local or
-                balon.precio_domicilio  != nuevo_domicilio or
-                balon.activo            != nuevo_activo
-            )
-
-            if hubo_cambio:
-                # ────────────────────────────────────────────────
-                # GUARDAR HISTORIAL ANTES de aplicar los cambios
-                # ────────────────────────────────────────────────
-                datos_anteriores = {
-                    'precio_compra': int(balon.precio_compra),
-                    'precio_local': int(balon.precio_local),
-                    'precio_domicilio': int(balon.precio_domicilio),
-                    'activo': balon.activo
-                }
-                
-                HistorialPrecioBalon.objects.create(
-                    nombre_balon       = balon.nombre,                # snapshot actual (antes del cambio)
-                    precio_compra_anterior     = balon.precio_compra,
-                    precio_local_anterior      = balon.precio_local,
-                    precio_domicilio_anterior  = balon.precio_domicilio,
-                    activo_anterior            = balon.activo,
-                    actualizado_por            = request.user,
-                    # fecha_cambio se autogenera con default=timezone.now
-                )
-
-                # Ahora sí aplicar los nuevos valores
-                balon.precio_compra     = nuevo_compra
-                balon.precio_local      = nuevo_local
-                balon.precio_domicilio  = nuevo_domicilio
-                balon.activo            = nuevo_activo
-                balon.actualizado_por   = request.user
-                balon.save()
-                
-                # Auditoría: Precio actualizado
-                AuditoriaAccion.registrar(
-                    request=request,
-                    tipo='PRECIO_UPDATE',
-                    descripcion=f'Precio actualizado para {balon.nombre}',
-                    objeto=balon,
-                    datos_anteriores=datos_anteriores,
-                    datos_nuevos={
-                        'precio_compra': nuevo_compra,
-                        'precio_local': nuevo_local,
-                        'precio_domicilio': nuevo_domicilio,
-                        'activo': nuevo_activo
-                    }
-                )
-                audit_logger.info(f"PRECIO_UPDATE | {balon.nombre} | By: {request.user.username}")
-
-                cambios_realizados = True
-
-        if cambios_realizados:
-            messages.success(request, "Precios y disponibilidad actualizados correctamente. Historial registrado.")
-        else:
-            messages.info(request, "No se detectaron cambios válidos.")
-
-        return redirect("precios_lista")
-
-    # GET → mostrar formulario
-    return render(request, "balones/precios_balones.html", {"balones": balones})
-
-@login_required
 def historial_precios(request):
     if request.user.rol not in ['jefe', 'admin', 'bodeguero']:
         messages.error(request, "No tienes permiso para ver el historial de precios.")
@@ -881,17 +809,9 @@ def gestionar_balones_lista(request):
     resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para gestionar balones.")
     if resp:
         return resp
-    
-    balones = TipoBalon.objects.all().annotate(
-        tipo_orden=Case(
-            When(tipo_gas='normal', then=Value(0)),
-            When(tipo_gas='catalitico', then=Value(1)),
-            When(tipo_gas='aluminio', then=Value(2)),
-            default=Value(3),
-            output_field=IntegerField(),
-        )
-    ).order_by("tipo_orden", "-peso_neto_gas")
-    
+
+    balones = get_balones_activos_ordenados(solo_activos=False)
+
     # Procesar POST para edición masiva de precios
     if request.method == "POST":
         cambios_realizados = False
@@ -1119,6 +1039,7 @@ def gestionar_balones_editar(request, balon_id):
 
 # Admin/Jefe: eliminar tipo de balón
 @login_required
+@require_POST
 def gestionar_balones_eliminar(request, balon_id):
     """Eliminar un tipo de balón (confirmar primero)."""
     """
@@ -1267,6 +1188,7 @@ def gestionar_sectores_editar(request, sector_id):
 
 
 @login_required
+@require_POST
 def gestionar_sectores_eliminar(request, sector_id):
     """Eliminar un sector del catálogo administrable."""
     resp = require_roles(request, ["admin"], "index", "No tienes permiso para eliminar sectores.")
@@ -1849,6 +1771,7 @@ def camionero_entregas_api(request):
 
 # Camionero: tomar pedido asignado
 @login_required
+@require_POST
 def camionero_tomar_pedido(request, pedido_id):
     """Camionero marca pedido como 'en_ruta' (asignado a él)."""
     resp = require_roles(request, ["camionero"], "index", "Solo camioneros pueden tomar pedidos.")
@@ -1911,6 +1834,7 @@ def camionero_tomar_pedido(request, pedido_id):
 
 # Camionero: marcar pedido como entregado
 @login_required
+@require_POST
 def camionero_marcar_entregado(request, pedido_id):
     """Camionero marca pedido como 'entregado'."""
     resp = require_roles(request, ["camionero"], "index", "Solo los camioneros pueden marcar entregas.")
@@ -2035,6 +1959,7 @@ def telefonista_cancelar_pedido(request, pedido_id):
 
 # Camionero: cancelar entrega
 @login_required
+@require_POST
 def camionero_cancelar_entrega(request, pedido_id):
     """Camionero devuelve pedido a 'pendiente' si no puede entregar."""
     resp = require_roles(request, ["camionero"], "camionero_entregas", "Solo camioneros pueden cancelar entregas.")
@@ -2092,15 +2017,7 @@ def tarreo_pedido(request):
         messages.error(request, "Acceso solo para camioneros.")
         return redirect('index')
 
-    balones = TipoBalon.objects.filter(activo=True).annotate(
-        tipo_orden=Case(
-            When(tipo_gas='normal', then=Value(0)),
-            When(tipo_gas='catalitico', then=Value(1)),
-            When(tipo_gas='aluminio', then=Value(2)),
-            default=Value(3),
-            output_field=IntegerField(),
-        )
-    ).order_by('tipo_orden', '-peso_neto_gas')
+    balones = get_balones_activos_ordenados()
 
     if request.method == 'POST':
         # Verificar token anti-duplicado
@@ -2972,7 +2889,7 @@ def reporte_sobres(request):
             'declarado':         declarado,
             'gastos':            gastos_s,
             'no_efectivo':       no_ef_s,
-            'dinero_neto':       declarado,
+            'dinero_neto':       declarado - gastos_s,
             'km':                s.kilometraje_camion or 0,
         })
 
@@ -3036,6 +2953,7 @@ def reporte_sobres(request):
         'total_gastos':       total_gastos,
         'total_no_ef':        total_no_ef,
         'efectivo_estimado':  efectivo_estimado,
+        'total_dinero_neto':  total_declarado - total_gastos,
         'pagos_global':       pagos_global,
         'balones_global':     balones_global_lista,
 
@@ -3120,12 +3038,7 @@ def lista_sobres_diarios(request):
 
     camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
 
-    tz_chile = ZoneInfo('America/Santiago')
-    tz_utc = ZoneInfo('UTC')
-    inicio_dia = datetime.combine(fecha_filtro, time.min)
-    inicio_dia = timezone.make_aware(inicio_dia, tz_chile).astimezone(tz_utc)
-    fin_dia = datetime.combine(fecha_filtro, time.max)
-    fin_dia = timezone.make_aware(fin_dia, tz_chile).astimezone(tz_utc)
+    inicio_dia, fin_dia = get_rango_utc_para_fecha(fecha_filtro)
 
     sobres_del_dia = SobreDiario.objects.filter(
         fecha__gte=inicio_dia,
@@ -3175,6 +3088,10 @@ def editar_sobre_diario(request):
     - /sobres/editar/?bodega=1&fecha=...  (crea/busca sobre y redirige con sobre_id)
     - /sobres/editar/?camionero=5&fecha=...  (crea/busca sobre y redirige con sobre_id)
     """
+    resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para editar sobres.")
+    if resp:
+        return resp
+
     usuario = request.user
     sobre_id = request.GET.get('sobre_id')
     
@@ -3432,6 +3349,7 @@ def editar_sobre_diario(request):
     return render(request, 'sobres/sobres.html', context)
 
 @login_required
+@require_POST
 def refrescar_sobre_diario(request, sobre_id):
     """Sincroniza un sobre abierto con los pedidos y retorna sus cantidades actualizadas."""
     if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
@@ -3530,14 +3448,12 @@ def crear_sobre_post_cierre(request, sobre_id):
     Hereda: tipo, trabajador del sobre anterior.
     Parámetro POST: fecha_correspondiente (opcional, default = hoy).
     """
+    resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para crear un nuevo sobre.")
+    if resp:
+        return resp
+
     # Obtener el sobre anterior
     sobre_anterior = get_object_or_404(SobreDiario, id=sobre_id)
-    
-    # Validar que el usuario tenga permiso
-    if not (request.user.rol in ['bodeguero', 'jefe', 'admin'] or 
-            (sobre_anterior.trabajador == request.user)):
-        messages.error(request, "No tienes permiso para crear un nuevo sobre.")
-        return redirect('sobres_lista')
     
     # Validar que el sobre anterior esté CERRADO (salvo que se fuerce por jefe/admin)
     forzar = request.POST.get('forzar_creacion') == '1'
@@ -3597,6 +3513,10 @@ def crear_sobre_post_cierre(request, sobre_id):
 @login_required
 def historial_sobres(request):
     """Ver historial completo de sobres cerrados con métricas diarias."""
+    resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para ver historial de sobres.")
+    if resp:
+        return resp
+
     modo_historial = request.GET.get('modo', 'dia')
     if modo_historial not in ['dia', 'mes', 'todo']:
         modo_historial = 'dia'
@@ -3706,7 +3626,7 @@ def imprimir_sobre_diario(request, sobre_id):
     Genera una página HTML optimizada para impresión del sobre diario.
     Formato compacto similar a Excel.
     """
-    if request.user.rol not in ['bodeguero', 'jefe', 'admin', 'camionero']:
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
         messages.error(request, "No tienes permiso para imprimir sobres.")
         return redirect('index')
 
@@ -3760,6 +3680,23 @@ def imprimir_sobre_diario(request, sobre_id):
         sobres_mes = SobreDiario.objects.filter(
             tipo='camion',
             trabajador=sobre.trabajador,
+            cerrado=True,
+            fecha_correspondiente__year=sobre.fecha_correspondiente.year,
+            fecha_correspondiente__month=sobre.fecha_correspondiente.month,
+        )
+        total_kilos_mes = LineaSobre.objects.filter(
+            sobre__in=sobres_mes
+        ).aggregate(
+            total=Sum(
+                F('cantidad_declarada') * F('balon__peso_neto_gas'),
+                output_field=DField()
+            )
+        )['total'] or 0
+    elif sobre.tipo == 'bodega':
+        from django.db.models import DecimalField as DField
+        sobres_mes = SobreDiario.objects.filter(
+            tipo='bodega',
+            cerrado=True,
             fecha_correspondiente__year=sobre.fecha_correspondiente.year,
             fecha_correspondiente__month=sobre.fecha_correspondiente.month,
         )
@@ -3810,7 +3747,7 @@ def imprimir_sobre_diario(request, sobre_id):
 @login_required
 def exportar_sobre_excel(request, sobre_id):
     """Exportar detalles de sobre a archivo .xlsx."""
-    if request.user.rol not in ['bodeguero', 'jefe', 'admin', 'camionero']:
+    if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
         messages.error(request, "No tienes permiso para exportar sobres.")
         return redirect('index')
 
