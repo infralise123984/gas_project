@@ -733,10 +733,18 @@ async function refreshSobreDinamicamente() {
     const syncStatus = document.getElementById('sobreSyncStatus');
     if (!syncStatus) return;
 
+    const csrfTokenInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
+    if (!csrfToken) {
+        return;
+    }
+
     try {
         const response = await fetch(syncStatus.dataset.refreshUrl, {
+            method: 'POST',
             headers: {
-                'X-Requested-With': 'XMLHttpRequest'
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrfToken
             }
         });
 
