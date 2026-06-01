@@ -75,9 +75,14 @@
                     <span class="badge bg-warning text-dark ms-2">Abierto</span>
                     {% endif %}
                 </div>
-                <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}" class="btn btn-sm btn-outline-primary">
-                    Ver
-                </a>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}" class="btn btn-sm btn-outline-primary">Ver</a>
+                    {% if sobre.cerrado %}
+                    <a href="{% url 'sobres_imprimir' sobre.id %}" class="btn btn-sm btn-outline-secondary" target="_blank">
+                        <i class="bi bi-printer"></i>
+                    </a>
+                    {% endif %}
+                </div>
             </li>
             {% endfor %}
         </ul>
@@ -126,9 +131,14 @@
                     <span class="badge bg-warning text-dark ms-2">Abierto</span>
                     {% endif %}
                 </div>
-                <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}" class="btn btn-sm btn-outline-info">
-                    Ver
-                </a>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'sobres_editar' %}?sobre_id={{ sobre.id }}" class="btn btn-sm btn-outline-info">Ver</a>
+                    {% if sobre.cerrado %}
+                    <a href="{% url 'sobres_imprimir' sobre.id %}" class="btn btn-sm btn-outline-secondary" target="_blank">
+                        <i class="bi bi-printer"></i>
+                    </a>
+                    {% endif %}
+                </div>
             </li>
             {% endif %}
         {% endfor %}
