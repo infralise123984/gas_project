@@ -2889,7 +2889,7 @@ def reporte_sobres(request):
             'declarado':         declarado,
             'gastos':            gastos_s,
             'no_efectivo':       no_ef_s,
-            'dinero_neto':       declarado,
+            'dinero_neto':       declarado - gastos_s,
             'km':                s.kilometraje_camion or 0,
         })
 
@@ -2953,6 +2953,7 @@ def reporte_sobres(request):
         'total_gastos':       total_gastos,
         'total_no_ef':        total_no_ef,
         'efectivo_estimado':  efectivo_estimado,
+        'total_dinero_neto':  total_declarado - total_gastos,
         'pagos_global':       pagos_global,
         'balones_global':     balones_global_lista,
 
@@ -3679,6 +3680,7 @@ def imprimir_sobre_diario(request, sobre_id):
         sobres_mes = SobreDiario.objects.filter(
             tipo='camion',
             trabajador=sobre.trabajador,
+            cerrado=True,
             fecha_correspondiente__year=sobre.fecha_correspondiente.year,
             fecha_correspondiente__month=sobre.fecha_correspondiente.month,
         )
@@ -3694,6 +3696,7 @@ def imprimir_sobre_diario(request, sobre_id):
         from django.db.models import DecimalField as DField
         sobres_mes = SobreDiario.objects.filter(
             tipo='bodega',
+            cerrado=True,
             fecha_correspondiente__year=sobre.fecha_correspondiente.year,
             fecha_correspondiente__month=sobre.fecha_correspondiente.month,
         )
