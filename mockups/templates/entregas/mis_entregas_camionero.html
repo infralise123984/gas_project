@@ -11,12 +11,17 @@
         <i class="bi bi-check-circle-fill me-2"></i>Mis Entregas Hoy
     </h2>
 
-    <!-- Mensaje explicativo -->
+    <div class="text-center mb-3">
+        <a href="{% url 'entregas_historial' %}" class="btn btn-outline-primary btn-sm rounded-pill px-3">
+            <i class="bi bi-calendar3 me-1"></i>Ver historial por mes
+        </a>
+    </div>
+
     <div class="alert alert-info text-center mb-4 py-3">
         <i class="bi bi-info-circle-fill me-2 fs-4"></i>
-        <strong>Estás viendo tus entregas de hoy</strong><br>
+        <strong>Entregas de hoy</strong><br>
         <small class="d-block mt-2 text-muted">
-            El historial completo solo lo puede ver el jefe.
+            Para días anteriores usa el historial mensual.
         </small>
     </div>
 
@@ -44,8 +49,9 @@
 <script>
 (function () {
     'use strict';
-    const POLL_INTERVAL = 30000; // 30 segundos
+    const POLL_INTERVAL = 45000; // 45 segundos
     const API_URL = '{% url "entregas_mias_api" %}';
+    let lastCount = {{ total_entregas_hoy }};
     let pollTimer = null;
     let isPolling = false;
 
@@ -59,8 +65,11 @@
             });
             if (!resp.ok) throw new Error('Error en la respuesta');
             const data = await resp.json();
-            const container = document.getElementById('entregas-camionero-container');
-            if (container) container.innerHTML = data.html;
+            if (data.count !== lastCount) {
+                const container = document.getElementById('entregas-camionero-container');
+                if (container) container.innerHTML = data.html;
+                lastCount = data.count;
+            }
         } catch (e) {
             console.warn('[MisEntregas] Error actualizando:', e.message);
         } finally {

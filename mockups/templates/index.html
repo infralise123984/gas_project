@@ -49,7 +49,14 @@
                     <a href="{% url 'entregas_mias' %}" 
                        class="btn btn-outline-secondary btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
                         <i class="bi bi-check-circle fs-1"></i>
-                        <span class="fs-4 fw-semibold">Mis Entregas</span>
+                        <span class="fs-4 fw-semibold">Mis Entregas Hoy</span>
+                    </a>
+                </div>
+                <div class="col-12 col-md-8">
+                    <a href="{% url 'entregas_historial' %}" 
+                       class="btn btn-outline-primary btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
+                        <i class="bi bi-calendar3 fs-1"></i>
+                        <span class="fs-4 fw-semibold">Historial de Ventas</span>
                     </a>
                 </div>
                 {% endif %}

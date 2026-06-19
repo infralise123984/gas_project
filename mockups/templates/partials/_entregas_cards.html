@@ -4,14 +4,14 @@
 <!-- Contador centrado y destacado -->
 <div class="text-center mb-5">
     <span class="badge bg-primary fs-5 px-5 py-3 shadow-lg rounded-pill" id="entregas-counter">
-        {{ pendientes.count }} pendiente{{ pendientes.count|pluralize:"s" }} • 
-        {{ pedidos_en_ruta.count }} en ruta
+        {{ count_pendientes|default:pendientes.count }} pendiente{{ count_pendientes|default:pendientes.count|pluralize:"s" }} • 
+        {{ count_en_ruta|default:pedidos_en_ruta.count }} en ruta
     </span>
 </div>
 
 <!-- Sección: En Ruta -->
 {% if pedidos_en_ruta %}
-<h5 class="text-success fw-bold mb-4 text-center fs-5">En Ruta ({{ pedidos_en_ruta.count }})</h5>
+<h5 class="text-success fw-bold mb-4 text-center fs-5">En Ruta ({{ count_en_ruta|default:pedidos_en_ruta.count }})</h5>
 {% for pedido in pedidos_en_ruta %}
 <div class="card shadow-lg mb-5 border-warning border-3 rounded-4">
     <div class="card-body p-4 text-center">
@@ -91,7 +91,7 @@
 
 <!-- Sección: Pendientes -->
 {% if pendientes %}
-<h5 class="text-info fw-bold mb-4 text-center fs-5">Pendientes ({{ pendientes.count }})</h5>
+<h5 class="text-info fw-bold mb-4 text-center fs-5">Pendientes ({{ count_pendientes|default:pendientes.count }})</h5>
 {% for pedido in pendientes %}
 <div class="card shadow-lg mb-5 border-info border-3 rounded-4">
     <div class="card-body p-4 text-center">
