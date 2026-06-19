@@ -54,11 +54,11 @@
 (function() {
     'use strict';
     
-    const POLL_INTERVAL = 15000; // 15 segundos
+    const POLL_INTERVAL = 45000; // 45 segundos
     const API_URL = '/entregas/api/';
     
-    let lastPendientes = {{ pendientes.count }};
-    let lastEnRuta = {{ pedidos_en_ruta.count }};
+    let lastPendientes = {{ count_pendientes }};
+    let lastEnRuta = {{ count_en_ruta }};
     let pollTimer = null;
     let isPolling = false;
     

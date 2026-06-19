@@ -125,6 +125,9 @@ class PedidoAdmin(admin.ModelAdmin):
     # date_hierarchy = 'fecha'  # ya comentado, perfecto
     actions = ['marcar_entregado', 'marcar_cancelado']
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('detalles__balon')
+
     def marcar_entregado(self, request, queryset):
         queryset.update(estado='entregado')
     marcar_entregado.short_description = "Marcar seleccionados como entregados"
@@ -183,11 +186,21 @@ class SobreDiarioAdmin(admin.ModelAdmin):
     ordering = ('-fecha',)
     readonly_fields = ('total_declarado', 'total_diferencia')
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(
+            _total_declarado=Sum('lineas__cantidad_declarada'),
+            _total_diferencia=Sum(F('lineas__cantidad_declarada') - F('lineas__cantidad_calculada')),
+        )
+
     def total_declarado(self, obj):
+        if hasattr(obj, '_total_declarado'):
+            return obj._total_declarado or 0
         return obj.lineas.aggregate(total=Sum('cantidad_declarada'))['total'] or 0
     total_declarado.short_description = 'Total Declarado'
 
     def total_diferencia(self, obj):
+        if hasattr(obj, '_total_diferencia'):
+            return obj._total_diferencia or 0
         return obj.lineas.aggregate(
             total=Sum(F('cantidad_declarada') - F('cantidad_calculada'))
         )['total'] or 0

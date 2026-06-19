@@ -305,7 +305,7 @@
         </div>
 
         <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-success btn-lg py-3 fs-5 shadow">
+            <button type="submit" id="pedidoSubmitBtn" class="btn btn-success btn-lg py-3 fs-5 shadow">
                 <i class="bi bi-check-circle me-2"></i>
                 {% if es_bodeguero %}Registrar Venta{% else %}Tomar Pedido{% endif %}
             </button>
@@ -314,6 +314,24 @@
             </a>
         </div>
     </form>
+
+    <div id="pedidoSubmitOverlay" class="pedido-submit-overlay d-none" aria-live="polite" aria-busy="true">
+        <div class="pedido-submit-overlay-card text-center">
+            <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+                <span class="visually-hidden">Procesando...</span>
+            </div>
+            <h5 class="fw-bold mb-2" id="pedidoSubmitOverlayTitle">
+                {% if es_bodeguero %}Registrando venta{% else %}Registrando pedido{% endif %}
+            </h5>
+            <p class="text-muted mb-0 small" id="pedidoSubmitOverlayMessage">
+                {% if es_bodeguero %}
+                    Guardando la venta, por favor espera...
+                {% else %}
+                    Guardando el pedido y avisando a los camioneros...
+                {% endif %}
+            </p>
+        </div>
+    </div>
 
 </div>
 
@@ -491,14 +509,30 @@ document.addEventListener('DOMContentLoaded', function() {
     updateRowLabels();
     updateBodegueroSummary();
 
+    const pedidoForm = document.getElementById('pedidoForm');
+    const pedidoSubmitBtn = document.getElementById('pedidoSubmitBtn');
+    const pedidoSubmitOverlay = document.getElementById('pedidoSubmitOverlay');
+
+    function showPedidoSubmitLoading() {
+        if (!pedidoSubmitOverlay || !pedidoSubmitBtn) return;
+
+        pedidoSubmitOverlay.classList.remove('d-none');
+        pedidoSubmitBtn.disabled = true;
+        pedidoSubmitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando...';
+        document.body.style.overflow = 'hidden';
+    }
+
     // Validación anti-duplicado al enviar el formulario
-    document.getElementById('pedidoForm').addEventListener('submit', function(e) {
+    pedidoForm.addEventListener('submit', function(e) {
         const vals = getActiveBalonValues();
         const unique = new Set(vals);
         if (vals.length !== unique.size) {
             e.preventDefault();
             alert('Hay tipos de balón repetidos. Elimina las filas duplicadas antes de guardar.');
+            return;
         }
+
+        showPedidoSubmitLoading();
     });
 
     // Agregar nueva fila
@@ -571,6 +605,25 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
+    .pedido-submit-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        background: rgba(255, 255, 255, 0.82);
+        backdrop-filter: blur(2px);
+    }
+    .pedido-submit-overlay-card {
+        width: min(100%, 360px);
+        padding: 1.75rem 1.5rem;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 1rem 2.5rem rgba(13, 110, 253, 0.15);
+        border: 1px solid rgba(13, 110, 253, 0.12);
+    }
     .pedido-panel {
         border: 1px solid rgba(13, 110, 253, 0.08);
     }

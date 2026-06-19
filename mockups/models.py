@@ -332,6 +332,7 @@ class Pedido(models.Model):
             models.Index(fields=["origen"]),
             models.Index(fields=["registrador"]),
             models.Index(fields=["entregador"]),
+            models.Index(fields=["sector"]),
         ]
 
 
@@ -443,6 +444,11 @@ class SobreDiario(models.Model):
         verbose_name_plural = "Sobres diarios"
         # unique_together = ['fecha_correspondiente', 'trabajador', 'tipo']
         ordering = ['-fecha_correspondiente', '-fecha']
+        indexes = [
+            models.Index(fields=['fecha_correspondiente']),
+            models.Index(fields=['fecha_correspondiente', 'tipo', 'cerrado']),
+            models.Index(fields=['trabajador', 'fecha_correspondiente']),
+        ]
 
     def __str__(self):
         if self.tipo == 'bodega':
