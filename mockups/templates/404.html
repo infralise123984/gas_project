@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Página no encontrada - Kim Gas{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 120px);">
+    <div class="text-center px-3" style="max-width: 480px;">
+        <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center shadow mb-4"
+             style="width: 88px; height: 88px;">
+            <i class="bi bi-compass fs-1"></i>
+        </div>
+        <h1 class="display-4 fw-bold text-primary mb-2">404</h1>
+        <h2 class="h4 text-dark mb-3">Página no encontrada</h2>
+        <p class="text-muted mb-4">
+            La dirección que buscaste no existe o ya no está disponible.
+        </p>
+        <a href="{% url 'index' %}" class="btn btn-primary btn-lg px-4">
+            <i class="bi bi-house-door me-2"></i>Volver al inicio
+        </a>
+    </div>
+</div>
+{% endblock %}
