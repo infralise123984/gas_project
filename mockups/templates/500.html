@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Error del servidor - Kim Gas</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background: #f8f9fa;
+            color: #212529;
+            padding: 1.5rem;
+        }
+        .card {
+            max-width: 420px;
+            width: 100%;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+            padding: 2.5rem 2rem;
+            text-align: center;
+        }
+        .icon {
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 1.25rem;
+            border-radius: 50%;
+            background: #dc3545;
+            color: #fff;
+            font-size: 2rem;
+            line-height: 72px;
+        }
+        h1 {
+            font-size: 3rem;
+            color: #dc3545;
+            margin-bottom: 0.25rem;
+        }
+        h2 {
+            font-size: 1.15rem;
+            margin-bottom: 0.75rem;
+        }
+        p {
+            color: #6c757d;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            margin-bottom: 1.5rem;
+        }
+        a {
+            display: inline-block;
+            background: #0d6efd;
+            color: #fff;
+            text-decoration: none;
+            padding: 0.65rem 1.5rem;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+        a:hover { background: #0b5ed7; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">!</div>
+        <h1>500</h1>
+        <h2>Error interno del servidor</h2>
+        <p>
+            Ocurrió un problema inesperado. El equipo ya fue notificado.
+            Intenta de nuevo en unos minutos.
+        </p>
+        <a href="/">Volver al inicio</a>
+    </div>
+</body>
+</html>
