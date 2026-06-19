@@ -78,8 +78,10 @@
 <script>
 (function () {
     'use strict';
-    const POLL_INTERVAL = 20000; // 20 segundos
+    const POLL_INTERVAL = 45000; // 45 segundos
     const API_URL = '{% url "pedidos_mios_api" %}';
+    let lastCount = {{ total_pedidos }};
+    let lastMonto = {{ total_monto_hoy_int }};
     let pollTimer = null;
     let isPolling = false;
 
@@ -94,8 +96,12 @@
             });
             if (!resp.ok) throw new Error('Error en la respuesta');
             const data = await resp.json();
-            const container = document.getElementById('pedidos-container');
-            if (container) container.innerHTML = data.html;
+            if (data.count !== lastCount || data.total_monto_hoy !== lastMonto) {
+                const container = document.getElementById('pedidos-container');
+                if (container) container.innerHTML = data.html;
+                lastCount = data.count;
+                lastMonto = data.total_monto_hoy;
+            }
         } catch (e) {
             console.warn('[MisPedidos] Error actualizando:', e.message);
         } finally {

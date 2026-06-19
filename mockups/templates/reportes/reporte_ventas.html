@@ -4,7 +4,7 @@
 {% block title %}Reporte de Ventas — {{ mes_display }} - Kim Gas{% endblock %}
 
 {% block extra_head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0" defer></script>
 <style>
     .metric-card {
         transition: transform 0.2s, box-shadow 0.2s;
@@ -389,6 +389,7 @@
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', function () {
 Chart.defaults.font.family = 'system-ui, -apple-system, sans-serif';
 Chart.defaults.plugins.legend.position = 'bottom';
 
@@ -585,7 +586,7 @@ if (ctxTrabajadores) {
         }
     });
 }
-
+});
 </script>
 
 {% endblock %}

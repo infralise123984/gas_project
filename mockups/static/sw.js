@@ -1,8 +1,10 @@
 // Service Worker para GasFácil - Notificaciones Push
 // Este archivo debe estar en la raíz del scope de la PWA
-// sw.js - Versión 1.2
+// sw.js - Versión 1.3
 
-const CACHE_NAME = 'gasfacil-v3';
+const CACHE_NAME = 'gasfacil-v5';
+
+let cachedPushConfig = null;
 const OFFLINE_URL = '/';
 
 // Archivos a cachear para funcionamiento offline
@@ -145,18 +147,103 @@ self.addEventListener('notificationclose', (event) => {
 // ─────────────────────────────────────────────────
 // RENOVACIÓN DE SUSCRIPCIÓN PUSH
 // ─────────────────────────────────────────────────
+function urlBase64ToUint8Array(base64String) {
+    if (!base64String) {
+        return null;
+    }
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+function subscriptionKeysToBase64(subscription) {
+    const p256dh = subscription.getKey('p256dh');
+    const auth = subscription.getKey('auth');
+    return {
+        p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(p256dh))),
+        auth: btoa(String.fromCharCode.apply(null, new Uint8Array(auth))),
+    };
+}
+
+async function resubscribePushInBackground() {
+    if (!cachedPushConfig?.vapidPublicKey) {
+        console.warn('[SW] Sin config push cacheada para re-suscripción en background');
+        return false;
+    }
+
+    const applicationServerKey = urlBase64ToUint8Array(cachedPushConfig.vapidPublicKey);
+    if (!applicationServerKey) {
+        return false;
+    }
+
+    const registration = self.registration;
+    const oldSubscription = await registration.pushManager.getSubscription();
+    if (oldSubscription) {
+        try {
+            await oldSubscription.unsubscribe();
+        } catch (error) {
+            console.warn('[SW] No se pudo cancelar suscripción anterior:', error);
+        }
+    }
+
+    const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+    });
+
+    const response = await fetch('/push/subscribe/', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': cachedPushConfig.csrfToken || '',
+        },
+        body: JSON.stringify({
+            endpoint: subscription.endpoint,
+            keys: subscriptionKeysToBase64(subscription),
+        }),
+    });
+
+    if (!response.ok) {
+        console.warn('[SW] Re-suscripción en background rechazada por servidor:', response.status);
+        return false;
+    }
+
+    const data = await response.json();
+    if (!data.success) {
+        console.warn('[SW] Re-suscripción en background falló:', data.error || 'error desconocido');
+        return false;
+    }
+
+    console.log('[SW] Re-suscripción en background completada');
+    return true;
+}
+
+async function handlePushSubscriptionChange() {
+    const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    clientList.forEach((client) => {
+        client.postMessage({ type: 'PUSH_RESUBSCRIBE_REQUIRED' });
+    });
+
+    if (clientList.length > 0) {
+        return;
+    }
+
+    try {
+        await resubscribePushInBackground();
+    } catch (error) {
+        console.error('[SW] Error en re-suscripción background:', error);
+    }
+}
+
 self.addEventListener('pushsubscriptionchange', (event) => {
     console.warn('[SW] Suscripción push cambió o expiró');
-
-    event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-            clientList.forEach((client) => {
-                client.postMessage({
-                    type: 'PUSH_RESUBSCRIBE_REQUIRED'
-                });
-            });
-        })
-    );
+    event.waitUntil(handlePushSubscriptionChange());
 });
 
 // ─────────────────────────────────────────────────
@@ -170,6 +257,15 @@ self.addEventListener('fetch', (event) => {
 
     // Ignorar requests a APIs externas
     if (!event.request.url.startsWith(self.location.origin)) {
+        return;
+    }
+
+    const url = new URL(event.request.url);
+
+    // No cachear rutas dinámicas de la app (solo estáticos y página offline)
+    const isStaticAsset = url.pathname.startsWith('/static/');
+    const isOfflineRoot = event.request.mode === 'navigate' && url.pathname === '/';
+    if (!isStaticAsset && !isOfflineRoot) {
         return;
     }
 
@@ -209,6 +305,14 @@ self.addEventListener('message', (event) => {
 
     if (event.data && event.data.type === 'SKIP_WAITING') {
         self.skipWaiting();
+    }
+
+    if (event.data && event.data.type === 'PUSH_CONFIG') {
+        cachedPushConfig = {
+            vapidPublicKey: event.data.vapidPublicKey || null,
+            csrfToken: event.data.csrfToken || '',
+            updatedAt: Date.now(),
+        };
     }
 });
 

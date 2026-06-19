@@ -140,18 +140,24 @@ def send_push_notification(subscription_info, title, body, url='/', tag='gasfaci
             },
             headers={
                 'Urgency': 'high',  # Prioridad alta para heads-up notification
-                'TTL': '60'  # Tiempo de vida: 60 segundos
+                'TTL': '86400'  # 24 h: tolera teléfonos dormidos o sin señal en ruta
             }
         )
         # Log sin emojis para evitar error de encoding en Windows
         title_log = title.encode('ascii', 'ignore').decode('ascii') or 'Notificacion'
-        audit_logger.info(f"PUSH_SENT | Title: {title_log} | To: {subscription_info.get('endpoint', '')[:50]}...")
+        endpoint_hint = subscription_info.get('endpoint', '')[:50]
+        audit_logger.info(
+            f"PUSH_SENT | Title: {title_log} | TTL: 86400 | Endpoint: {endpoint_hint}..."
+        )
         return True, None
         
     except WebPushException as e:
         error_msg = str(e)
         title_log = title.encode('ascii', 'ignore').decode('ascii') or 'Notificacion'
-        audit_logger.warning(f"PUSH_FAILED | Title: {title_log} | Error: {error_msg}")
+        endpoint_hint = subscription_info.get('endpoint', '')[:50]
+        audit_logger.warning(
+            f"PUSH_FAILED | Title: {title_log} | Endpoint: {endpoint_hint}... | Error: {error_msg}"
+        )
         
         # Si la suscripción expiró o es inválida, retornar código específico
         if _is_expired_subscription_error(e, error_msg):
@@ -235,6 +241,12 @@ def notificar_nuevo_pedido(pedido):
             errores_suscripcion.append(sub.id)
             ua_resumido = (sub.user_agent or 'sin_user_agent')[:80]
             errores_detalle.append(f"{sub.usuario.username}|{ua_resumido}")
+        elif error:
+            ua_resumido = (sub.user_agent or 'sin_user_agent')[:80]
+            audit_logger.warning(
+                f"PUSH_PEDIDO_FAIL | #{pedido.id} | User: {sub.usuario.username} | "
+                f"UA: {ua_resumido} | Error: {error}"
+            )
     
     # Desactivar suscripciones expiradas
     if errores_suscripcion:
@@ -244,7 +256,10 @@ def notificar_nuevo_pedido(pedido):
             f"PUSH_CLEANUP | Desactivadas {len(errores_suscripcion)} suscripciones expiradas | Afectados: {afectados}"
         )
     
-    audit_logger.info(f"PUSH_PEDIDO | #{pedido.id} -> {enviados}/{suscripciones.count()} camioneros notificados")
+    audit_logger.info(
+        f"PUSH_PEDIDO | #{pedido.id} | Origen: {pedido.origen} | "
+        f"{enviados}/{suscripciones.count()} camioneros notificados"
+    )
     return enviados
 
 

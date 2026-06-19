@@ -95,6 +95,130 @@ def today_chile():
     """Retorna fecha actual en Chile (evita problemas de UTC)."""
     return now_chile().date()
 
+
+MESES_ES_CAMIONERO = (
+    '', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+)
+
+
+def filtro_actividad_camionero_q(usuario):
+    """Pedidos visibles del camionero (entregas + tarreo propio)."""
+    return Q(entregador=usuario) | Q(
+        registrador=usuario,
+        origen__in=['tarreo', 'venta_extra'],
+    )
+
+
+def rango_dia_chile(fecha_dia):
+    """Rango [inicio, fin) del día en zona horaria Chile."""
+    tz_chile = ZoneInfo('America/Santiago')
+    inicio = timezone.make_aware(datetime.combine(fecha_dia, time.min), tz_chile)
+    fin = inicio + timedelta(days=1)
+    return inicio, fin
+
+
+def queryset_actividad_camionero_dia(usuario, fecha_dia):
+    """Pedidos del camionero en un día (todas las actividades visibles)."""
+    inicio, fin = rango_dia_chile(fecha_dia)
+    return (
+        Pedido.objects.filter(
+            fecha__gte=inicio,
+            fecha__lt=fin,
+        )
+        .filter(filtro_actividad_camionero_q(usuario))
+        .select_related('registrador')
+        .prefetch_related('detalles__balon')
+        .order_by('-fecha')
+    )
+
+
+def stats_ventas_camionero(queryset_entregados):
+    """Totales de entregas, monto y kilos para un queryset de pedidos entregados."""
+    stats = queryset_entregados.aggregate(
+        total_entregas=Count('id'),
+        total_monto=Sum('monto_total'),
+    )
+    total_kilos = (
+        DetallePedido.objects.filter(pedido__in=queryset_entregados.values('pk'))
+        .aggregate(total=Sum(F('cantidad') * F('balon__peso_neto_gas')))['total']
+        or 0
+    )
+    return {
+        'total_entregas': stats['total_entregas'] or 0,
+        'total_monto': stats['total_monto'] or 0,
+        'total_kilos': total_kilos,
+    }
+
+
+def _kilos_de_pedido(pedido):
+    """Misma lógica de kilos que usa stats_ventas_camionero, pedido con detalles precargados."""
+    return sum(
+        (detalle.cantidad or 0) * (detalle.balon.peso_neto_gas or 0)
+        for detalle in pedido.detalles.all()
+    )
+
+
+def _stats_dia_camionero(usuario, fecha_dia):
+    """
+    Mismo flujo que mis_entregas_camionero, aplicado a cualquier día.
+    pedidos del día → entregados → stats + desglose domicilio/tarreo.
+    """
+    pedidos_dia = queryset_actividad_camionero_dia(usuario, fecha_dia)
+    pedidos_entregados = pedidos_dia.filter(estado='entregado')
+    stats = stats_ventas_camionero(pedidos_entregados)
+
+    kilos_domicilio = 0
+    kilos_tarreo = 0
+    for pedido in pedidos_entregados:
+        kilos = _kilos_de_pedido(pedido)
+        if pedido.origen == 'tarreo':
+            kilos_tarreo += kilos
+        else:
+            kilos_domicilio += kilos
+
+    return {
+        'entregas': stats['total_entregas'],
+        'kilos': int(stats['total_kilos'] or 0),
+        'monto': int(stats['total_monto'] or 0),
+        'kilos_domicilio': int(kilos_domicilio),
+        'kilos_tarreo': int(kilos_tarreo),
+        'pedidos_entregados': pedidos_entregados,
+    }
+
+
+def parse_mes_param(request, default_hoy=True):
+    """Interpreta ?mes=YYYY-MM y devuelve (anio, mes) válidos."""
+    hoy = today_chile()
+    mes_param = request.GET.get('mes')
+    if mes_param:
+        try:
+            partes = mes_param.split('-')
+            anio = int(partes[0])
+            mes = int(partes[1])
+            if mes < 1 or mes > 12:
+                raise ValueError
+            return anio, mes
+        except (ValueError, IndexError):
+            pass
+    if default_hoy:
+        return hoy.year, hoy.month
+    return None, None
+
+
+def navegacion_mes(anio, mes):
+    """Mes anterior y siguiente para navegación del historial."""
+    if mes == 1:
+        mes_anterior = (anio - 1, 12)
+    else:
+        mes_anterior = (anio, mes - 1)
+    if mes == 12:
+        mes_siguiente = (anio + 1, 1)
+    else:
+        mes_siguiente = (anio, mes + 1)
+    return mes_anterior, mes_siguiente
+
+
 def get_balones_activos_ordenados(solo_activos=True):
     """Retorna los balones en el mismo orden usado por los sobres. Solo activos por defecto."""
     qs = TipoBalon.objects.filter(activo=True) if solo_activos else TipoBalon.objects.all()
@@ -1101,7 +1225,7 @@ def auditoria_lista(request):
 
     context = {
         'page_obj': page_obj,
-        'total_registros': registros.count(),
+        'total_registros': paginator.count,
     }
     return render(request, 'auditoria/lista_auditoria.html', context)
 
@@ -1309,27 +1433,19 @@ def transaccional_pedido(request):
             audit_logger.info(f"PEDIDO_CREATE | #{pedido.id} | By: {request.user.username}")
             
             # ══════════════════════════════════════════════════════
-            # NOTIFICACIONES PUSH A CAMIONEROS (ASÍNCRONO)
-            # Se ejecuta en segundo plano para no bloquear la respuesta
+            # NOTIFICACIONES PUSH A CAMIONEROS
+            # Envío directo (evita perder pushes si Gunicorn recicla el worker)
             # ══════════════════════════════════════════════════════
             if pedido.estado == 'pendiente' and pedido.origen == 'telefono':
-                import threading
-                
-                def enviar_notificaciones_async(pedido_id):
-                    try:
-                        from .push_notifications import notificar_nuevo_pedido
-                        from .models import Pedido
-                        pedido_obj = Pedido.objects.get(id=pedido_id)
-                        notificados = notificar_nuevo_pedido(pedido_obj)
-                        if notificados > 0:
-                            audit_logger.info(f"PUSH_SENT | Pedido #{pedido_id} -> {notificados} camioneros notificados")
-                    except Exception as e:
-                        audit_logger.warning(f"PUSH_ERROR | Pedido #{pedido_id} | Error: {str(e)}")
-                
-                # Ejecutar en hilo separado (no bloquea la respuesta)
-                thread = threading.Thread(target=enviar_notificaciones_async, args=(pedido.id,))
-                thread.daemon = True
-                thread.start()
+                try:
+                    from .push_notifications import notificar_nuevo_pedido
+                    notificados = notificar_nuevo_pedido(pedido)
+                    if notificados > 0:
+                        audit_logger.info(
+                            f"PUSH_SENT | Pedido #{pedido.id} -> {notificados} camioneros notificados"
+                        )
+                except Exception as e:
+                    audit_logger.warning(f"PUSH_ERROR | Pedido #{pedido.id} | Error: {str(e)}")
             
             messages.success(request, f"¡Pedido #{pedido.id} registrado correctamente con {detalles_guardados} producto(s)!")
             return redirect("index")
@@ -1531,13 +1647,15 @@ def mis_pedidos_hoy(request):
 
     pedidos_activos = pedidos_hoy.exclude(estado='cancelado')
     total_monto_hoy = pedidos_activos.aggregate(total=Sum('monto_total'))['total'] or 0
+    total_pedidos = pedidos_activos.count()
 
     context = {
         "pedidos_hoy": pedidos_hoy,
         "total_monto_hoy": total_monto_hoy,
         "es_telefonista": request.user.rol == "telefonista",
         "fecha_hoy": hoy,
-        "total_pedidos": pedidos_activos.count(),
+        "total_pedidos": total_pedidos,
+        "total_monto_hoy_int": int(total_monto_hoy),
     }
     return render(request, "pedidos/mis_pedidos_hoy.html", context)
 
@@ -1562,16 +1680,21 @@ def mis_pedidos_hoy_api(request):
 
     pedidos_activos = pedidos_hoy.exclude(estado='cancelado')
     total_monto_hoy = pedidos_activos.aggregate(total=Sum('monto_total'))['total'] or 0
+    total_pedidos = pedidos_activos.count()
 
     context = {
         'pedidos_hoy': pedidos_hoy,
         'total_monto_hoy': total_monto_hoy,
-        'total_pedidos': pedidos_activos.count(),
+        'total_pedidos': total_pedidos,
         'es_telefonista': request.user.rol == 'telefonista',
         'user': request.user,
     }
     html = render(request, 'partials/_mis_pedidos_cards.html', context).content.decode('utf-8')
-    return JsonResponse({'html': html, 'count': pedidos_activos.count()})
+    return JsonResponse({
+        'html': html,
+        'count': total_pedidos,
+        'total_monto_hoy': int(total_monto_hoy),
+    })
 
 
 # --- CAMIONERO ---
@@ -1583,36 +1706,17 @@ def mis_entregas_camionero(request):
     resp = require_roles(request, ["camionero"], "index", "Solo camioneros pueden ver sus entregas.")
     if resp:
         return resp
-    
-    # Zona horaria de Chile (America/Santiago)
-    tz_chile = ZoneInfo('America/Santiago')
-    ahora = timezone.now().astimezone(tz_chile)
-    hoy = ahora.date()
-    
-    # Rango de "Hoy" (inicio y fin del día)
-    inicio_dia = timezone.make_aware(datetime.combine(hoy, datetime.min.time()), timezone=tz_chile)
-    fin_dia = timezone.make_aware(datetime.combine(hoy, datetime.max.time()), timezone=tz_chile)
-    
-    # Todos los pedidos asignados a este camionero hoy (incluye cancelados para visibilidad)
-    pedidos_hoy = Pedido.objects.filter(
-        entregador=request.user,
-        fecha__gte=inicio_dia,
-        fecha__lte=fin_dia
-    ).order_by("-fecha").prefetch_related("detalles__balon")
 
-    # Solo los entregados para cálculos y estadísticas
+    hoy = today_chile()
+    pedidos_hoy = queryset_actividad_camionero_dia(request.user, hoy)
     pedidos_entregados = pedidos_hoy.filter(estado='entregado')
-    total_entregas_hoy = pedidos_entregados.count()
-    total_monto_hoy = pedidos_entregados.aggregate(total=Sum('monto_total'))['total'] or 0
-    total_kilos_hoy = DetallePedido.objects.filter(
-        pedido__in=pedidos_entregados
-    ).aggregate(total=Sum(F('cantidad') * F('balon__peso_neto_gas')))['total'] or 0
+    stats = stats_ventas_camionero(pedidos_entregados)
 
     context = {
         "pedidos_hoy": pedidos_hoy,
-        "total_entregas_hoy": total_entregas_hoy,
-        "total_monto_hoy": total_monto_hoy,
-        "total_kilos_hoy": total_kilos_hoy,
+        "total_entregas_hoy": stats['total_entregas'],
+        "total_monto_hoy": stats['total_monto'],
+        "total_kilos_hoy": stats['total_kilos'],
         "fecha_hoy": hoy,
     }
     return render(request, "entregas/mis_entregas_camionero.html", context)
@@ -1625,33 +1729,118 @@ def mis_entregas_camionero_api(request):
     if resp:
         return JsonResponse({'error': 'No autorizado'}, status=403)
 
-    tz_chile = ZoneInfo('America/Santiago')
-    ahora = timezone.now().astimezone(tz_chile)
-    hoy = ahora.date()
-    inicio_dia = timezone.make_aware(datetime.combine(hoy, datetime.min.time()), timezone=tz_chile)
-    fin_dia = timezone.make_aware(datetime.combine(hoy, datetime.max.time()), timezone=tz_chile)
-
-    pedidos_hoy = Pedido.objects.filter(
-        entregador=request.user,
-        fecha__gte=inicio_dia,
-        fecha__lte=fin_dia
-    ).order_by('-fecha').prefetch_related('detalles__balon')
-
+    hoy = today_chile()
+    pedidos_hoy = queryset_actividad_camionero_dia(request.user, hoy)
     pedidos_entregados = pedidos_hoy.filter(estado='entregado')
-    total_entregas_hoy = pedidos_entregados.count()
-    total_monto_hoy = pedidos_entregados.aggregate(total=Sum('monto_total'))['total'] or 0
-    total_kilos_hoy = DetallePedido.objects.filter(
-        pedido__in=pedidos_entregados
-    ).aggregate(total=Sum(F('cantidad') * F('balon__peso_neto_gas')))['total'] or 0
+    stats = stats_ventas_camionero(pedidos_entregados)
 
     context = {
         'pedidos_hoy': pedidos_hoy,
-        'total_entregas_hoy': total_entregas_hoy,
-        'total_monto_hoy': total_monto_hoy,
-        'total_kilos_hoy': total_kilos_hoy,
+        'total_entregas_hoy': stats['total_entregas'],
+        'total_monto_hoy': stats['total_monto'],
+        'total_kilos_hoy': stats['total_kilos'],
     }
     html = render(request, 'partials/_mis_entregas_camionero_cards.html', context).content.decode('utf-8')
-    return JsonResponse({'html': html, 'count': total_entregas_hoy})
+    return JsonResponse({'html': html, 'count': stats['total_entregas']})
+
+
+@login_required
+@never_cache
+def camionero_historial(request):
+    """Resumen mensual de ventas del camionero (kilos por día)."""
+    resp = require_roles(request, ['camionero'], 'index', 'Solo camioneros pueden ver su historial.')
+    if resp:
+        return resp
+
+    anio, mes = parse_mes_param(request)
+    _, ultimo_dia = monthrange(anio, mes)
+    hoy = today_chile()
+
+    filas_dias = []
+    total_kilos_mes = 0
+    total_monto_mes = 0
+    total_entregas_mes = 0
+    dias_con_venta = 0
+
+    for dia_num in range(ultimo_dia, 0, -1):
+        fecha_dia = date(anio, mes, dia_num)
+        datos = _stats_dia_camionero(request.user, fecha_dia)
+        entregas = datos['entregas']
+        tiene_venta = entregas > 0
+
+        if tiene_venta:
+            dias_con_venta += 1
+            total_kilos_mes += datos['kilos']
+            total_monto_mes += datos['monto']
+            total_entregas_mes += entregas
+
+        filas_dias.append({
+            'fecha': fecha_dia,
+            'es_hoy': fecha_dia == hoy,
+            'tiene_venta': tiene_venta,
+            'kilos': datos['kilos'],
+            'monto': datos['monto'],
+            'entregas': entregas,
+            'kilos_domicilio': datos['kilos_domicilio'],
+            'kilos_tarreo': datos['kilos_tarreo'],
+        })
+
+    mes_anterior, mes_siguiente = navegacion_mes(anio, mes)
+    mes_siguiente_habilitado = (
+        mes_siguiente[0] < hoy.year
+        or (mes_siguiente[0] == hoy.year and mes_siguiente[1] <= hoy.month)
+    )
+
+    context = {
+        'anio': anio,
+        'mes': mes,
+        'mes_nombre': MESES_ES_CAMIONERO[mes],
+        'mes_param': f'{anio:04d}-{mes:02d}',
+        'mes_anterior_param': f'{mes_anterior[0]:04d}-{mes_anterior[1]:02d}',
+        'mes_siguiente_param': f'{mes_siguiente[0]:04d}-{mes_siguiente[1]:02d}',
+        'mes_siguiente_habilitado': mes_siguiente_habilitado,
+        'filas_dias': filas_dias,
+        'total_kilos_mes': total_kilos_mes,
+        'total_monto_mes': total_monto_mes,
+        'total_entregas_mes': total_entregas_mes,
+        'dias_con_venta': dias_con_venta,
+        'hoy': hoy,
+    }
+    return render(request, 'entregas/historial_camionero.html', context)
+
+
+@login_required
+@never_cache
+def camionero_historial_dia(request, fecha):
+    """Detalle resumido de las ventas de un día específico."""
+    resp = require_roles(request, ['camionero'], 'index', 'Solo camioneros pueden ver su historial.')
+    if resp:
+        return resp
+
+    try:
+        fecha_dia = datetime.strptime(fecha, '%Y-%m-%d').date()
+    except ValueError:
+        messages.error(request, 'Fecha inválida.')
+        return redirect('entregas_historial')
+
+    datos = _stats_dia_camionero(request.user, fecha_dia)
+    pedidos_resumen = [
+        {'pedido': pedido, 'kilos': _kilos_de_pedido(pedido)}
+        for pedido in datos['pedidos_entregados']
+    ]
+
+    context = {
+        'fecha_dia': fecha_dia,
+        'fecha_param': fecha,
+        'mes_param': f'{fecha_dia.year:04d}-{fecha_dia.month:02d}',
+        'mes_nombre': MESES_ES_CAMIONERO[fecha_dia.month],
+        'pedidos_resumen': pedidos_resumen,
+        'total_entregas': datos['entregas'],
+        'total_monto': datos['monto'],
+        'total_kilos': datos['kilos'],
+        'es_hoy': fecha_dia == today_chile(),
+    }
+    return render(request, 'entregas/historial_camionero_dia.html', context)
 
 
 # Camionero: panel de entregas
@@ -1663,15 +1852,9 @@ def camionero_entregas(request):
         return resp
 
     user = request.user
-
-    # Zona horaria Chile
-    tz_chile = ZoneInfo('America/Santiago')
-    ahora = timezone.now().astimezone(tz_chile)
-    hoy = ahora.date()
-
-    # Rango preciso para "hoy"
-    inicio_dia = timezone.make_aware(datetime.combine(hoy, datetime.min.time()), tz_chile)
-    fin_dia   = timezone.make_aware(datetime.combine(hoy, datetime.max.time()), tz_chile)
+    hoy = today_chile()
+    inicio_dia, fin_dia = rango_dia_chile(hoy)
+    ahora = now_chile()
 
     # 1. Pedidos en ruta (asignados al camionero) → sin límite de fecha (pueden ser de días anteriores)
     pedidos_en_ruta = Pedido.objects.filter(
@@ -1679,37 +1862,40 @@ def camionero_entregas(request):
         entregador=user
     ).select_related('registrador').prefetch_related('detalles__balon').order_by("fecha")
 
-    # 2. Pedidos entregados HOY por este camionero
-    pedidos_entregados_hoy = Pedido.objects.filter(
-        estado="entregado",
-        entregador=user,
-        fecha__gte=inicio_dia,
-        fecha__lte=fin_dia
-    ).select_related('registrador').prefetch_related('detalles__balon').order_by("-fecha")
+    # 2. Pedidos entregados HOY (mismo criterio que mis_entregas_camionero)
+    pedidos_entregados_hoy = (
+        queryset_actividad_camionero_dia(user, hoy)
+        .filter(estado='entregado')
+        .select_related('registrador')
+        .prefetch_related('detalles__balon')
+        .order_by("-fecha")
+    )
 
     # 3. Pedidos pendientes DISPONIBLES HOY (sin asignar, origen telefónico)
-    # Solo mostramos los creados HOY para evitar que el camionero vea pedidos muy antiguos
     pendientes = Pedido.objects.filter(
         estado="pendiente",
         origen="telefono",
         entregador__isnull=True,
         fecha__gte=inicio_dia,
-        fecha__lte=fin_dia
+        fecha__lt=fin_dia,
     ).select_related('registrador').prefetch_related('detalles__balon').order_by("-fecha")
 
-    # Conteos para mejorar UX (badges, mensajes)
+    count_en_ruta = pedidos_en_ruta.count()
+    count_pendientes = pendientes.count()
+    count_entregados_hoy = pedidos_entregados_hoy.count()
+
     context = {
         "pedidos_en_ruta": pedidos_en_ruta,
         "pendientes": pendientes,
         "pedidos_entregados_hoy": pedidos_entregados_hoy,
 
-        "count_en_ruta": pedidos_en_ruta.count(),
-        "count_pendientes": pendientes.count(),
-        "count_entregados_hoy": pedidos_entregados_hoy.count(),
+        "count_en_ruta": count_en_ruta,
+        "count_pendientes": count_pendientes,
+        "count_entregados_hoy": count_entregados_hoy,
 
-        "hay_en_ruta": pedidos_en_ruta.exists(),
-        "hay_pendientes": pendientes.exists(),
-        "hay_entregados_hoy": pedidos_entregados_hoy.exists(),
+        "hay_en_ruta": count_en_ruta > 0,
+        "hay_pendientes": count_pendientes > 0,
+        "hay_entregados_hoy": count_entregados_hoy > 0,
 
         # Para mostrar la fecha en la interfaz
         "hoy": hoy,
@@ -1728,44 +1914,41 @@ def camionero_entregas_api(request):
         return JsonResponse({'error': 'No autorizado'}, status=403)
 
     user = request.user
+    hoy = today_chile()
+    inicio_dia, fin_dia = rango_dia_chile(hoy)
 
-    # Zona horaria Chile
-    tz_chile = ZoneInfo('America/Santiago')
-    ahora = timezone.now().astimezone(tz_chile)
-    hoy = ahora.date()
-
-    # Rango para "hoy"
-    inicio_dia = timezone.make_aware(datetime.combine(hoy, datetime.min.time()), tz_chile)
-    fin_dia = timezone.make_aware(datetime.combine(hoy, datetime.max.time()), tz_chile)
-
-    # Pedidos en ruta del camionero
     pedidos_en_ruta = Pedido.objects.filter(
         estado="en_ruta",
         entregador=user
     ).select_related('registrador').prefetch_related('detalles__balon').order_by("fecha")
 
-    # Pedidos pendientes disponibles hoy
     pendientes = Pedido.objects.filter(
         estado="pendiente",
         origen="telefono",
         entregador__isnull=True,
         fecha__gte=inicio_dia,
-        fecha__lte=fin_dia
+        fecha__lt=fin_dia,
     ).select_related('registrador').prefetch_related('detalles__balon').order_by("-fecha")
 
+    pedidos_en_ruta_list = list(pedidos_en_ruta)
+    pendientes_list = list(pendientes)
+    count_en_ruta = len(pedidos_en_ruta_list)
+    count_pendientes = len(pendientes_list)
+
     context = {
-        "pedidos_en_ruta": pedidos_en_ruta,
-        "pendientes": pendientes,
+        "pedidos_en_ruta": pedidos_en_ruta_list,
+        "pendientes": pendientes_list,
         "user": user,
+        "count_en_ruta": count_en_ruta,
+        "count_pendientes": count_pendientes,
     }
 
-    # Renderizar template parcial
     html = render(request, "partials/_entregas_cards.html", context).content.decode('utf-8')
     
     return JsonResponse({
         'html': html,
-        'count_en_ruta': pedidos_en_ruta.count(),
-        'count_pendientes': pendientes.count(),
+        'count_en_ruta': count_en_ruta,
+        'count_pendientes': count_pendientes,
     })
 
 
@@ -2170,17 +2353,19 @@ def consultas_pedidos(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    # Estadísticas para el panel
-    total_pedidos = queryset.count()
-    total_ventas = queryset.aggregate(total=Sum('monto_total'))['total'] or 0
-    total_ganancias = queryset.aggregate(total=Sum('ganancia_total'))['total'] or 0
+    # Estadísticas para el panel (una sola consulta agregada)
+    stats = queryset.aggregate(
+        total_pedidos=Count('id'),
+        total_ventas=Sum('monto_total'),
+        total_ganancias=Sum('ganancia_total'),
+    )
 
     context = {
         'page_obj': page_obj,
         'estadisticas': {
-            'total_pedidos': total_pedidos,
-            'total_ventas': total_ventas,
-            'total_ganancias': total_ganancias,
+            'total_pedidos': stats['total_pedidos'] or 0,
+            'total_ventas': stats['total_ventas'] or 0,
+            'total_ganancias': stats['total_ganancias'] or 0,
         },
         'estados_choices': Pedido.ESTADOS,
         'origenes_choices': Pedido.ORIGENES,
@@ -2222,13 +2407,20 @@ def exportar_pedidos_excel(queryset, rango_fechas):
         cell.alignment = Alignment(horizontal='center', vertical='center')
         cell.border = border
 
-    # Llenado de datos
+    # Llenado de datos (un solo recorrido; acumula totales en el mismo loop)
     row_num = 5
+    total_monto = 0.0
+    total_ganancia = 0.0
     for pedido in queryset:
-        productos_list = [f"{d.cantidad}×{d.balon.nombre}" for d in pedido.detalles.all()]
-        cantidad_total = sum(d.cantidad for d in pedido.detalles.all())
+        detalles = list(pedido.detalles.all())
+        productos_list = [f"{d.cantidad}×{d.balon.nombre}" for d in detalles]
+        cantidad_total = sum(d.cantidad for d in detalles)
         productos_str = " + ".join(productos_list) if productos_list else "—"
         ubicacion = f"{pedido.sector or '—'} / {pedido.direccion_entrega or '—'}"
+        monto = float(pedido.monto_total)
+        ganancia = float(pedido.ganancia_total)
+        total_monto += monto
+        total_ganancia += ganancia
 
         data = [
             pedido.id,
@@ -2238,8 +2430,8 @@ def exportar_pedidos_excel(queryset, rango_fechas):
             pedido.get_origen_display(),
             productos_str,
             cantidad_total,
-            float(pedido.monto_total),
-            float(pedido.ganancia_total),
+            monto,
+            ganancia,
             get_display_name(pedido.registrador),
             get_display_name(pedido.entregador),
             ubicacion
@@ -2257,9 +2449,6 @@ def exportar_pedidos_excel(queryset, rango_fechas):
     # Totales finales
     ws.cell(row=row_num, column=1).value = "TOTALES:"
     ws.cell(row=row_num, column=1).font = Font(bold=True)
-    
-    total_monto = sum(float(p.monto_total) for p in queryset)
-    total_ganancia = sum(float(p.ganancia_total) for p in queryset)
     
     ws.cell(row=row_num, column=8).value = total_monto
     ws.cell(row=row_num, column=8).number_format = '"$"#,##0'
@@ -4221,6 +4410,12 @@ def push_test(request):
     """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
+
+    if request.user.rol != 'camionero':
+        return JsonResponse({
+            'success': False,
+            'error': 'Solo los camioneros pueden probar notificaciones push',
+        }, status=403)
     
     from .push_notifications import test_push_notification
     
