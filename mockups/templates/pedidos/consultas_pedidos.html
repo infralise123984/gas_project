@@ -5,8 +5,6 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -209,28 +207,6 @@
 
 </div>
 
-<!-- Scripts -->
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    // Inicializar Flatpickr en rango
-    flatpickr("#rangoFechas", {
-        mode: "range",
-        dateFormat: "Y-m-d",
-        altInput: true,
-        altFormat: "d/m/Y",
-        locale: "es",
-        showMonths: 2,
-    });
-});
-
-// Exportar a Excel (agrega parámetro a la URL actual)
-function exportarExcel() {
-    const url = new URL(window.location.href);
-    url.searchParams.set('exportar', 'excel');
-    window.location.href = url.toString();
-}
-</script>
-
 <style>
     @media (max-width: 768px) {
         .table-responsive {
@@ -243,4 +219,28 @@ function exportarExcel() {
     }
 </style>
 
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js" defer></script>
+<script defer>
+document.addEventListener('DOMContentLoaded', function () {
+    flatpickr.localize(flatpickr.l10ns.es);
+    flatpickr("#rangoFechas", {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        altInput: true,
+        altFormat: "d/m/Y",
+        locale: "es",
+        showMonths: 2,
+    });
+});
+
+function exportarExcel() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('exportar', 'excel');
+    window.location.href = url.toString();
+}
+</script>
 {% endblock %}

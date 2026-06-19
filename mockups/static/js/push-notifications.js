@@ -75,6 +75,49 @@
         return data;
     }
 
+    async function sendPushConfigToServiceWorker() {
+        if (!('serviceWorker' in navigator) || !VAPID_PUBLIC_KEY) {
+            return;
+        }
+
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            const sw = registration.active || registration.waiting || registration.installing;
+            if (!sw) {
+                return;
+            }
+
+            sw.postMessage({
+                type: 'PUSH_CONFIG',
+                vapidPublicKey: VAPID_PUBLIC_KEY,
+                csrfToken: getCookie('csrftoken'),
+            });
+        } catch (error) {
+            console.warn('[Push] No se pudo enviar config al SW:', error.message);
+        }
+    }
+
+    async function syncOnVisibility() {
+        if (document.visibilityState !== 'visible') {
+            return;
+        }
+        if (!window.AUTO_SUBSCRIBE_PUSH || Notification.permission !== 'granted') {
+            return;
+        }
+
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            const subscription = await registration.pushManager.getSubscription();
+            if (subscription) {
+                await syncSubscriptionWithServer(subscription);
+                await sendPushConfigToServiceWorker();
+                console.log('[Push] Suscripción re-sincronizada al volver a la app');
+            }
+        } catch (error) {
+            console.warn('[Push] Falló sync al volver a visible:', error.message);
+        }
+    }
+
     async function getServerSubscriptionStatus() {
         try {
             const response = await fetch(PUSH_STATUS_URL, {
@@ -197,6 +240,7 @@
 
             if (data.success) {
                 console.log('[Push] Suscripción guardada en servidor');
+                await sendPushConfigToServiceWorker();
                 return { success: true, message: 'Notificaciones activadas correctamente' };
             } else {
                 console.error('[Push] Error guardando suscripción:', data.error);
@@ -285,6 +329,7 @@
         // Esperar a que el service worker esté listo
         const registration = await navigator.serviceWorker.ready;
         console.log('[Push] Service Worker activo:', registration.active?.state);
+        await sendPushConfigToServiceWorker();
 
         const status = await checkSubscriptionStatus();
         console.log('[Push] Estado actual:', status);
@@ -400,6 +445,9 @@
         handleButtonClick: handlePushButtonClick,
         isSupported: checkPushSupport
     };
+
+    // Re-sincronizar al volver a la PWA (p. ej. camionero abre tras ruta)
+    document.addEventListener('visibilitychange', syncOnVisibility);
 
     // Auto-inicializar cuando el DOM esté listo
     if (document.readyState === 'loading') {
