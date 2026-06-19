@@ -88,13 +88,17 @@
                         {% endif %}
                         <!-- Botón Cancelar (solo telefonista, solo pedidos pendientes) -->
                         {% if es_telefonista and pedido.estado == 'pendiente' and pedido.registrador == user %}
-                            <button type="button"
-                                    class="btn btn-outline-danger btn-sm mt-2 w-100"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#modalCancelarPedido"
-                                    data-pedido-id="{{ pedido.id }}">
-                                <i class="bi bi-x-circle me-1"></i>Cancelar Pedido
-                            </button>
+                            <form id="form-cancelar-{{ pedido.id }}" method="post" action="{% url 'pedidos_cancelar' pedido.id %}">
+                                {% csrf_token %}
+                                <button type="button"
+                                        class="btn btn-outline-danger btn-sm mt-2 w-100"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#modalCancelarPedido"
+                                        data-form-id="form-cancelar-{{ pedido.id }}"
+                                        data-pedido-numero="{{ pedido.id }}">
+                                    <i class="bi bi-x-circle me-1"></i>Cancelar Pedido
+                                </button>
+                            </form>
                         {% endif %}
                     </div>
                 </div>
