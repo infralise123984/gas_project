@@ -53,25 +53,32 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Volver</button>
-                <form id="formCancelarPedido" method="post" action="">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-x-circle me-1"></i>Sí, cancelar pedido
-                    </button>
-                </form>
+                <button type="button" class="btn btn-danger" id="btnConfirmarCancelarPedido">
+                    <i class="bi bi-x-circle me-1"></i>Sí, cancelar pedido
+                </button>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    const modalCancelar = document.getElementById('modalCancelarPedido');
-    modalCancelar.addEventListener('show.bs.modal', function (event) {
-        const btn = event.relatedTarget;
-        const pedidoId = btn.getAttribute('data-pedido-id');
-        document.getElementById('cancelarPedidoNumero').textContent = pedidoId;
-        document.getElementById('formCancelarPedido').action = '/pedidos/' + pedidoId + '/cancelar/';
+(function () {
+    let pendingFormId = null;
+    const modal = document.getElementById('modalCancelarPedido');
+    if (!modal) return;
+
+    modal.addEventListener('show.bs.modal', function (event) {
+        const btn = event.relatedTarget?.closest('[data-form-id]') || event.relatedTarget;
+        pendingFormId = btn?.dataset?.formId || null;
+        document.getElementById('cancelarPedidoNumero').textContent = btn?.dataset?.pedidoNumero || '—';
     });
+
+    document.getElementById('btnConfirmarCancelarPedido').addEventListener('click', function () {
+        if (pendingFormId) {
+            document.getElementById(pendingFormId).submit();
+        }
+    });
+})();
 </script>
 {% endif %}
 
