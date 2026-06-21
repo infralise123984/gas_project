@@ -147,7 +147,7 @@
                      data-refresh-url="{% url 'sobres_refrescar' sobre.id %}">
                     <span id="sobreSyncMessage">
                         <i class="bi bi-arrow-repeat me-2"></i>
-                        Al abrir se actualiza desde pedidos. Revisión automática cada 30 segundos (debug).
+                        Las ventas de la app se revisan al abrir y cada 5 minutos. Usa «Actualizar ahora» si necesitas el dato al instante.
                     </span>
                     <div class="d-flex align-items-center gap-2 ms-auto">
                         <button type="button"
@@ -156,7 +156,7 @@
                                 title="Traer ventas recientes de camioneros o bodega">
                             <i class="bi bi-arrow-clockwise me-1"></i>Actualizar ahora
                         </button>
-                        <span class="fw-semibold text-nowrap" id="sobreSyncTimestamp">Última revisión: —</span>
+                        <span class="fw-semibold text-nowrap" id="sobreSyncTimestamp">Última actualización: —</span>
                     </div>
                 </div>
                 {% endif %}
@@ -754,7 +754,7 @@ function applyLineaSync(linea, row) {
     return previousCalc !== nextCalc;
 }
 
-const SOBRE_SYNC_INTERVAL_MS = 30000; // DEBUG: 30 s — volver a 300000 (5 min) en producción
+const SOBRE_SYNC_INTERVAL_MS = 300000; // 5 minutos
 let sobreSyncPollTimer = null;
 let sobreSyncInFlight = false;
 
@@ -769,9 +769,9 @@ function setSobreSyncUiState({ loading = false, error = false } = {}) {
     }
 
     if (loading && message) {
-        message.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Actualizando ventas desde pedidos…';
+        message.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Actualizando ventas de la app…';
     } else if (!error && message) {
-        message.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Al abrir se actualiza desde pedidos. Revisión automática cada 30 segundos (debug).';
+        message.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Las ventas de la app se revisan al abrir y cada 5 minutos. Usa «Actualizar ahora» si necesitas el dato al instante.';
     }
 
     syncStatus.classList.toggle('alert-danger', error);
@@ -818,7 +818,6 @@ async function refreshSobreDinamicamente() {
             return;
         }
 
-        let filasAplicadas = 0;
         let filasConCambio = 0;
         let filasSinMatch = 0;
         data.lineas.forEach((linea) => {
@@ -827,7 +826,6 @@ async function refreshSobreDinamicamente() {
                 filasSinMatch += 1;
                 return;
             }
-            filasAplicadas += 1;
             if (applyLineaSync(linea, row)) {
                 filasConCambio += 1;
                 row.classList.add('table-info');
@@ -844,26 +842,14 @@ async function refreshSobreDinamicamente() {
 
         const timestamp = document.getElementById('sobreSyncTimestamp');
         if (timestamp && data.sincronizado_en) {
-            const resumen = `${filasAplicadas}/${data.lineas.length} líneas`;
-            const cambios = filasConCambio > 0 ? `, ${filasConCambio} con cambios` : ', sin cambios';
-            timestamp.textContent = `Última revisión: ${data.sincronizado_en} (${resumen}${cambios})`;
+            timestamp.textContent = `Última actualización: ${data.sincronizado_en}`;
         }
-
-        console.info('[SobreSync]', {
-            hora: data.sincronizado_en,
-            lineasJson: data.lineas.length,
-            filasTabla: filasEnTabla,
-            filasAplicadas,
-            filasConCambio,
-            filasSinMatch,
-            montoApp: data.monto_calculado_app,
-        });
 
         setSobreSyncUiState({ loading: false, error: false });
     } catch (error) {
         const timestamp = document.getElementById('sobreSyncTimestamp');
         if (timestamp) {
-            timestamp.textContent = 'Última revisión: error de conexión';
+            timestamp.textContent = 'Sin conexión — intenta «Actualizar ahora»';
         }
         setSobreSyncUiState({ loading: false, error: true });
     } finally {
