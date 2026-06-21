@@ -126,7 +126,7 @@ class HistorialPrecioBalon(models.Model):
     nombre_balon = models.CharField(
         max_length=100,
         verbose_name="Nombre del Balón (snapshot)",
-        null=True,          # ← temporal, para pasar la migración
+        null=True,
         blank=True,
     )
     
@@ -501,6 +501,8 @@ class SobreDiario(models.Model):
                 self.monto_declarado = nuevo_monto
                 self.diferencia = nueva_diferencia
                 super().save(update_fields=['monto_declarado', 'diferencia'])
+
+
 class LineaSobre(models.Model):
     """
     Línea de detalle por tipo de balón en el sobre (editable manualmente)
@@ -514,8 +516,6 @@ class LineaSobre(models.Model):
     
     # Precios snapshot (para consistencia histórica)
     precio_venta_unitario = models.DecimalField(max_digits=10, decimal_places=0, default=0)
-    
-    # ← AGREGAR ESTA LÍNEA
     nota = models.TextField(blank=True, verbose_name="Motivo del ajuste en esta línea")
     
     @property
@@ -536,38 +536,8 @@ class LineaSobre(models.Model):
 
     def __str__(self):
         return f"{self.balon.nombre} → {self.cantidad_declarada} (calc: {self.cantidad_calculada})"
-    """
-    Línea de detalle por tipo de balón en el sobre (editable manualmente)
-    """
-    sobre = models.ForeignKey(SobreDiario, on_delete=models.CASCADE, related_name='lineas')
-    balon = models.ForeignKey(TipoBalon, on_delete=models.PROTECT, verbose_name="Tipo de balón")
-    
-    # Cantidades
-    cantidad_calculada = models.PositiveIntegerField(default=0, verbose_name="Cantidad según app")
-    cantidad_declarada = models.PositiveIntegerField(default=0, verbose_name="Cantidad declarada")
-    
-    # Precios snapshot (para consistencia histórica)
-    precio_venta_unitario = models.DecimalField(max_digits=10, decimal_places=0, default=0)
-    
-    @property
-    def diferencia_cantidad(self):
-        return self.cantidad_declarada - self.cantidad_calculada
 
-    @property
-    def subtotal_calculado(self):
-        return self.cantidad_calculada * self.precio_venta_unitario
 
-    @property
-    def subtotal_declarado(self):
-        return self.cantidad_declarada * self.precio_venta_unitario
-
-    class Meta:
-        unique_together = ['sobre', 'balon']
-        ordering = ['balon__peso_neto_gas']
-
-    def __str__(self):
-        return f"{self.balon.nombre} → {self.cantidad_declarada} (calc: {self.cantidad_calculada})"
-    
 class HistorialCambioPedido(models.Model):
     pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name='historial_cambios')
     usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, verbose_name="Usuario que editó")
