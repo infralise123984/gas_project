@@ -1,4 +1,8 @@
-# mockups/views.py
+# ARCHIVO DE RESPALDO — NO IMPORTAR EN RUNTIME
+# Copia fiel del monolito views.py antes de modularizar (2026-06-21).
+# Rama: refactor/views-modular. Git conserva el historial; esto es referencia local.
+#
+# mockups/views.py (original)
 
 # ──────────────────────────────────────────────────────────────
 # 1. IMPORTACIONES
