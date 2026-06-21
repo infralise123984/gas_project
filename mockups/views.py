@@ -32,7 +32,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 # Librerías de terceros
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side 
-from openpyxl.utils import get_column_letter   # ← AGREGAR ESTA LÍNEA
+from openpyxl.utils import get_column_letter
 import pyotp
 import segno
 
@@ -428,7 +428,7 @@ def get_display_name(user):
 def index(request):
     """Dashboard principal. Muestra opciones según rol del usuario."""
     context = {
-        'hora_servidor': now_chile().isoformat(),  # ← Usando tu función local
+        'hora_servidor': now_chile().isoformat(),
     }
     return render(request, "index.html", context)
 
@@ -866,7 +866,7 @@ def historial_precios(request):
     balon_id = request.GET.get('balon')
     balon_seleccionado = None
     historial = []
-    precios_actuales = None  # ← nuevo
+    precios_actuales = None
 
     if balon_id:
         try:
@@ -915,7 +915,7 @@ def historial_precios(request):
         'balon_seleccionado': balon_seleccionado,
         'historial': historial,
         'chart_data': chart_data,
-        'precios_actuales': precios_actuales,  # ← nuevo
+        'precios_actuales': precios_actuales,
         'title': 'Historial de Cambios de Precios' + (f' - {balon_seleccionado.nombre}' if balon_seleccionado else '')
     }
 
@@ -1017,11 +1017,7 @@ def gestionar_balones_lista(request):
 # Admin/Jefe/Bodeguero: crear nuevo tipo de balón
 @login_required
 def gestionar_balones_crear(request):
-    """Crear nuevo tipo de balón en el sistema."""
-    """
-    Crea un nuevo tipo de balón desde la web.
-    Acceso: admin, jefe, bodeguero.
-    """
+    """Crear nuevo tipo de balón en el sistema. Acceso: admin, jefe, bodeguero."""
     resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para crear balones.")
     if resp:
         return resp
@@ -1071,11 +1067,7 @@ def gestionar_balones_crear(request):
 # Admin/Jefe/Bodeguero: editar tipo de balón existente
 @login_required
 def gestionar_balones_editar(request, balon_id):
-    """Modificar datos de un tipo de balón."""
-    """
-    Edita un tipo de balón existente desde la web.
-    Acceso: admin, jefe, bodeguero.
-    """
+    """Modificar datos de un tipo de balón existente. Acceso: admin, jefe, bodeguero."""
     resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para editar balones.")
     if resp:
         return resp
@@ -1165,11 +1157,7 @@ def gestionar_balones_editar(request, balon_id):
 @login_required
 @require_POST
 def gestionar_balones_eliminar(request, balon_id):
-    """Eliminar un tipo de balón (confirmar primero)."""
-    """
-    Elimina un tipo de balón (solo si no tiene pedidos asociados).
-    Solo para admin y jefe.
-    """
+    """Eliminar un tipo de balón sin pedidos asociados. Solo admin y jefe."""
     resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para eliminar balones.")
     if resp:
         return resp
@@ -1343,12 +1331,11 @@ def gestionar_sectores_eliminar(request, sector_id):
 @login_required
 @never_cache
 def transaccional_pedido(request):
-    """Registrar nueva venta o pedido. Registra usuario, origen, estado inicial."""
-    """
-    Vista principal para Telefonistas y Bodegueros.
-    Gestiona la creación de pedidos con sus detalles (inline formsets).
-    - Telefonistas: Crea pedidos 'pendientes' con precio domicilio.
-    - Bodegueros: Crea pedidos 'entregados' con precio local.
+    """Registrar nueva venta o pedido según rol del usuario.
+
+    Vista principal para Telefonistas y Bodegueros con detalles inline.
+    - Telefonistas: pedidos 'pendientes' con precio domicilio.
+    - Bodegueros: pedidos 'entregados' con precio local.
     """
     resp = require_roles(request, ["telefonista", "bodeguero"], "index", "Solo telefonista y/o bodeguero pueden generar pedidos.")
     if resp:
@@ -1472,15 +1459,14 @@ def transaccional_pedido(request):
 # Telefonista/Bodeguero: editar pedido existente
 @login_required
 def editar_pedido(request, pedido_id):
-    """Modificar pedido pendiente/en_ruta. Solo registrador puede editar."""
-    """
-    Edición de pedidos con reglas específicas por rol:
-    - Telefonista: solo sus propios pedidos
-    - Camionero: solo los que tiene en ruta (estado 'en_ruta')
-    - Bodeguero: pedidos propios + pedidos de telefonistas
-    - Jefe/Admin: cualquier pedido
+    """Modificar pedido pendiente o en ruta con reglas por rol.
+
+    - Telefonista: solo sus propios pedidos.
+    - Camionero: solo los que tiene en ruta (estado 'en_ruta').
+    - Bodeguero: pedidos propios + pedidos de telefonistas.
+    - Jefe/Admin: cualquier pedido.
     Solo permite editar si está pendiente o en ruta.
-    Registra todo cambio en HistorialCambioPedido.
+    Registra cambios en HistorialCambioPedido.
     """
     pedido = get_object_or_404(Pedido, id=pedido_id)
 
@@ -1541,7 +1527,7 @@ def editar_pedido(request, pedido_id):
         formset = DetalleFormSetEdit(
             request.POST, 
             instance=pedido,
-            form_kwargs={'user': request.user}  # ← Pasar usuario para precios correctos
+            form_kwargs={'user': request.user}
         )
 
         if form_cabecera.is_valid() and formset.is_valid():
@@ -2253,7 +2239,7 @@ def tarreo_pedido(request):
                     precio_compra_unitario=balon.precio_compra,
                     # NO pasamos subtotal aquí — se calcula solo
                 )
-                detalle.save()  # ← guarda sin tocar subtotal
+                detalle.save()
 
                 # Acumular total usando el property subtotal (como en transaccional)
                 total_monto += detalle.subtotal
@@ -3208,9 +3194,9 @@ def detalle_pedido(request, pedido_id):
 # Jefe/Bodeguero: listar sobres diarios creados
 @login_required
 def lista_sobres_diarios(request):
-    """Ver sobres operativos filtrados por fecha de creacion."""
-    """
-    Listado para seleccionar qué sobre abrir/editar (Bodega o Camionero).
+    """Listar sobres operativos filtrados por fecha de creación.
+
+    Permite seleccionar qué sobre abrir/editar (Bodega o Camionero).
     Si hay más de un sobre del día, muestra lista para elegir.
     """
     if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
@@ -3266,16 +3252,13 @@ def get_rango_utc_para_fecha(fecha_objetivo):
 # Jefe/Bodeguero: editar sobre diario
 @login_required
 def editar_sobre_diario(request):
-    """Modificar monto declarado, gastos y notas de un sobre."""
-    """
-    Vista para editar un sobre diario.
-    
-    IMPORTANTE: La URL debe ser:
-    - /sobres/editar/?sobre_id=123  (FORMA CORRECTA - carga sobre específico)
-    
-    ANTIGUAS (deprecadas pero soportadas por compatibilidad):
-    - /sobres/editar/?bodega=1&fecha=...  (crea/busca sobre y redirige con sobre_id)
-    - /sobres/editar/?camionero=5&fecha=...  (crea/busca sobre y redirige con sobre_id)
+    """Editar monto declarado, gastos y notas de un sobre diario.
+
+    URL preferida: /sobres/editar/?sobre_id=123
+
+    URLs legacy (deprecadas, soportadas por compatibilidad):
+    - /sobres/editar/?bodega=1&fecha=...
+    - /sobres/editar/?camionero=5&fecha=...
     """
     resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para editar sobres.")
     if resp:
@@ -3564,18 +3547,10 @@ def refrescar_sobre_diario(request, sobre_id):
         'sincronizado_en': now_chile().strftime('%H:%M:%S'),
     })
 
-# ══════════════════════════════════════════════════════════════
-# 
-# ══════════════════════════════════════════════════════════════
-
 # Jefe/Bodeguero: crear nuevo sobre diario
 @login_required
 def crear_sobre_nuevo(request):
-    """Crear sobre para cierres de caja día a día."""
-    """
-    Vista para crear un nuevo sobre manualmente con fecha específica.
-    OPCIONAL - Solo si necesitas crear sobres post-cierre.
-    """
+    """Crear sobre manualmente con fecha específica para cierres de caja."""
     if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
         messages.error(request, "Acceso no permitido.")
         return redirect('index')
@@ -3631,11 +3606,10 @@ def crear_sobre_nuevo(request):
 # Jefe/Bodeguero: crear sobre para cierre posterior
 @login_required
 def crear_sobre_post_cierre(request, sobre_id):
-    """Crear nuevo sobre basado en uno anterior (para seguimiento)."""
-    """
-    Crea un nuevo sobre SOLO si el anterior está cerrado.
-    Hereda: tipo, trabajador del sobre anterior.
-    Parámetro POST: fecha_correspondiente (opcional, default = hoy).
+    """Crear nuevo sobre basado en uno anterior cerrado.
+
+    Hereda tipo y trabajador del sobre anterior.
+    Parámetro POST opcional: fecha_correspondiente (default = hoy).
     """
     resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para crear un nuevo sobre.")
     if resp:
@@ -3810,11 +3784,7 @@ def historial_sobres(request):
 # Jefe/Bodeguero: imprimir sobre para descarga/impresión
 @login_required
 def imprimir_sobre_diario(request, sobre_id):
-    """Generar PDF o versión imprimible del sobre."""
-    """
-    Genera una página HTML optimizada para impresión del sobre diario.
-    Formato compacto similar a Excel.
-    """
+    """Generar versión imprimible del sobre (HTML compacto, estilo Excel)."""
     if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
         messages.error(request, "No tienes permiso para imprimir sobres.")
         return redirect('index')
@@ -4359,11 +4329,7 @@ def push_subscribe(request):
 # Usuario: desuscribirse de notificaciones
 @login_required
 def push_unsubscribe(request):
-    """Desregistrar endpoint de suscripción."""
-    """
-    Desactiva la suscripción push del usuario actual.
-    Endpoint: POST /push/unsubscribe/
-    """
+    """Desactivar suscripción push del usuario. Endpoint: POST /push/unsubscribe/."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
     
@@ -4402,12 +4368,7 @@ def push_unsubscribe(request):
 # Usuario: probar enviar notificación push
 @login_required
 def push_test(request):
-    """Enviar notificación de prueba al usuario actual."""
-    """
-    Envía una notificación de prueba al usuario actual.
-    Solo para testing/debugging.
-    Endpoint: POST /push/test/
-    """
+    """Enviar notificación de prueba al usuario actual. Endpoint: POST /push/test/."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
 
@@ -4430,11 +4391,7 @@ def push_test(request):
 # Usuario: ver estado de suscripción push
 @login_required  
 def push_status(request):
-    """Obtener estado actual de suscripción push del usuario."""
-    """
-    Retorna el estado de las suscripciones push del usuario actual.
-    Endpoint: GET /push/status/
-    """
+    """Estado de suscripciones push del usuario. Endpoint: GET /push/status/."""
     from .models import PushSubscription
     from django.conf import settings
     
@@ -4461,12 +4418,7 @@ def push_status(request):
 
 # PWA: servir service worker para notificaciones offline
 def service_worker(request):
-    """Archivo service worker para soporte de notificaciones push del navegador."""
-    """
-    Sirve el Service Worker desde la raíz del sitio.
-    Esto es necesario para que el SW tenga scope '/' y pueda
-    manejar notificaciones push en todo el sitio.
-    """
+    """Sirve el Service Worker desde la raíz para scope '/' y notificaciones push en todo el sitio."""
     import os
     from django.conf import settings as django_settings
     

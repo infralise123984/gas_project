@@ -37,7 +37,7 @@ class TipoBalonAdmin(admin.ModelAdmin):
 @admin.register(HistorialPrecioBalon)
 class HistorialPrecioBalonAdmin(admin.ModelAdmin):
     list_display = (
-        'nombre_balon',                    # ← snapshot del nombre
+        'nombre_balon',
         'precio_compra_anterior',
         'precio_local_anterior',
         'precio_domicilio_anterior',
@@ -50,7 +50,7 @@ class HistorialPrecioBalonAdmin(admin.ModelAdmin):
         # 'activo_anterior',  # opcional, si quieres filtrar por estado disponible
     )
     search_fields = (
-        'nombre_balon',                    # ← buscamos por el nombre snapshot
+        'nombre_balon',
         'actualizado_por__username',
         'actualizado_por__first_name',
         'actualizado_por__last_name',
@@ -118,7 +118,7 @@ class PedidoAdmin(admin.ModelAdmin):
         'sector',
         'resumen_productos'
     )
-    list_filter = ('estado', 'origen', 'registrador__rol', 'entregador', 'metodo_pago')  # ← quitamos 'fecha'
+    list_filter = ('estado', 'origen', 'registrador__rol', 'entregador', 'metodo_pago')
     search_fields = ('id', 'sector', 'direccion_entrega', 'registrador__username', 'entregador__username')
     readonly_fields = ('fecha', 'monto_total', 'ganancia_total', 'resumen_productos')
     inlines = [DetallePedidoInline, HistorialEstadoPedidoInline]
