@@ -261,7 +261,7 @@ def get_pedidos_queryset_para_sobre(sobre):
 def sincronizar_sobre_desde_pedidos(sobre, crear_lineas_faltantes=True):
     """
     Refresca cantidades calculadas del sobre abierto usando los pedidos vigentes.
-    Si la cantidad declarada seguía igual a la calculada anterior, también la actualiza.
+    No modifica cantidad_declarada en líneas existentes (solo el bodeguero/camionero la fija al guardar borrador).
     """
     if not sobre.pk or sobre.cerrado:
         return False
@@ -305,10 +305,6 @@ def sincronizar_sobre_desde_pedidos(sobre, crear_lineas_faltantes=True):
             if old_calc != qty_calc:
                 linea.cantidad_calculada = qty_calc
                 update_fields.append('cantidad_calculada')
-
-                if int(linea.cantidad_declarada or 0) == old_calc:
-                    linea.cantidad_declarada = qty_calc
-                    update_fields.append('cantidad_declarada')
 
             if update_fields:
                 linea.save(update_fields=update_fields)
@@ -3354,13 +3350,10 @@ def editar_sobre_diario(request):
         # REDIRECT CON sobre_id (forma correcta)
         return redirect(f"{reverse('sobres_editar')}?sobre_id={sobre.id}")
 
-    # ═══════════════════════════════════════════════════════════
-    # Crear o actualizar líneas de balones
-    # Se hace siempre: tanto si el sobre es nuevo como si ya existe
-    # ═══════════════════════════════════════════════════════════
-    
-    # Preparar datos para crear líneas (si es necesario)
-    sincronizar_sobre_desde_pedidos(sobre)
+    # Sobres con líneas: la actualización desde pedidos va por AJAX al cargar y cada 5 min.
+    # Sobres vacíos (recién creados): una sync inicial para armar el formset de balones.
+    if request.method != "POST" and not sobre.lineas.exists():
+        sincronizar_sobre_desde_pedidos(sobre)
 
     # Preparar los formsets
     formset_lineas = LineaSobreFormSet(
@@ -3408,49 +3401,20 @@ def editar_sobre_diario(request):
         sobre.creado_por = request.user
         sobre.save()
 
-        sincronizar_sobre_desde_pedidos(sobre)
-        formset_lineas = LineaSobreFormSet(
-            request.POST or None,
-            instance=sobre,
-            prefix='lineas'
-        )
-
         # Ahora sí validar y guardar los formsets
         if all([
             formset_lineas.is_valid(),
             formset_pagos.is_valid(),
             formset_gastos.is_valid()
         ]):
-            for form in formset_lineas.forms:
-                if not form.cleaned_data:
-                    continue
-
-                snapshot_key = f"calc_snapshot_{form.instance.id}"
-                snapshot_value = request.POST.get(snapshot_key)
-                if snapshot_value is None:
-                    continue
-
-                try:
-                    snapshot_calculada = int(snapshot_value)
-                except (TypeError, ValueError):
-                    continue
-
-                cantidad_declarada = form.cleaned_data.get('cantidad_declarada')
-                if cantidad_declarada is None:
-                    continue
-
-                if int(cantidad_declarada) == snapshot_calculada:
-                    cantidad_actual = int(form.instance.cantidad_calculada or 0)
-                    form.cleaned_data['cantidad_declarada'] = cantidad_actual
-                    form.instance.cantidad_declarada = cantidad_actual
-
             # Guardar todos los formsets en una transacción atómica
             with transaction.atomic():
                 formset_lineas.save()
                 formset_pagos.save()
                 formset_gastos.save()
 
-                # Recalcular totales del sobre
+                # Actualizar solo cantidades calculadas; preservar declaradas guardadas en borrador
+                sincronizar_sobre_desde_pedidos(sobre)
                 sobre.save()
 
             # Si se presionó el botón "Cerrar"
@@ -3532,11 +3496,11 @@ def refrescar_sobre_diario(request, sobre_id):
     if sobre.cerrado:
         return JsonResponse({'ok': True, 'cerrado': True, 'lineas': []})
 
-    sincronizar_sobre_desde_pedidos(sobre, crear_lineas_faltantes=False)
+    sincronizar_sobre_desde_pedidos(sobre)
     sobre.refresh_from_db()
 
     lineas = list(
-        sobre.lineas.values('id', 'cantidad_calculada', 'cantidad_declarada')
+        sobre.lineas.values('id', 'balon_id', 'cantidad_calculada', 'cantidad_declarada')
     )
 
     return JsonResponse({

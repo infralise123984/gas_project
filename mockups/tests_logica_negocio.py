@@ -275,6 +275,30 @@ class SobreSincronizacionTests(LogicaNegocioFixturesMixin, TestCase):
         self.assertEqual(linea.cantidad_calculada, 3)
         self.assertEqual(linea.cantidad_declarada, 1, 'Debe conservar el ajuste manual del bodeguero')
 
+    def test_sincronizar_no_toca_declarada_aunque_coincida_con_calculada_anterior(self):
+        """Tras guardar borrador, la declarada queda fija aunque lleguen más pedidos."""
+        self._crear_pedido_entregado(
+            registrador=self.bodeguero,
+            origen='local',
+            lineas=[(self.balon_11, 2)],
+        )
+        sobre = self._crear_sobre_bodega()
+        sincronizar_sobre_desde_pedidos(sobre)
+        linea = sobre.lineas.get(balon=self.balon_11)
+        self.assertEqual(linea.cantidad_calculada, 2)
+        self.assertEqual(linea.cantidad_declarada, 2)
+
+        self._crear_pedido_entregado(
+            registrador=self.bodeguero,
+            origen='local',
+            lineas=[(self.balon_11, 1)],
+        )
+        sincronizar_sobre_desde_pedidos(sobre)
+        linea.refresh_from_db()
+
+        self.assertEqual(linea.cantidad_calculada, 3)
+        self.assertEqual(linea.cantidad_declarada, 2)
+
     def test_monto_declarado_y_diferencia_cuadran(self):
         self._crear_pedido_entregado(
             registrador=self.bodeguero,
