@@ -327,12 +327,12 @@ class Pedido(models.Model):
         verbose_name_plural = "Pedidos"
         ordering = ["-fecha"]
         indexes = [
-            models.Index(fields=["fecha"]),
-            models.Index(fields=["estado"]),
-            models.Index(fields=["origen"]),
-            models.Index(fields=["registrador"]),
-            models.Index(fields=["entregador"]),
-            models.Index(fields=["sector"]),
+            models.Index(fields=["fecha"], name="mockups_ped_fecha_49bdbd_idx"),
+            models.Index(fields=["estado"], name="mockups_ped_estado_372ad8_idx"),
+            models.Index(fields=["origen"], name="mockups_ped_origen_a47a8e_idx"),
+            models.Index(fields=["registrador"], name="mockups_ped_registr_b26b12_idx"),
+            models.Index(fields=["entregador"], name="mockups_ped_entrega_5c30fe_idx"),
+            models.Index(fields=["sector"], name="mockups_ped_sector_37b274_idx"),
         ]
 
 
@@ -445,9 +445,15 @@ class SobreDiario(models.Model):
         # unique_together = ['fecha_correspondiente', 'trabajador', 'tipo']
         ordering = ['-fecha_correspondiente', '-fecha']
         indexes = [
-            models.Index(fields=['fecha_correspondiente']),
-            models.Index(fields=['fecha_correspondiente', 'tipo', 'cerrado']),
-            models.Index(fields=['trabajador', 'fecha_correspondiente']),
+            models.Index(fields=['fecha_correspondiente'], name='mockups_sob_fecha_c_da54a1_idx'),
+            models.Index(
+                fields=['fecha_correspondiente', 'tipo', 'cerrado'],
+                name='mockups_sob_fecha_c_b292d1_idx',
+            ),
+            models.Index(
+                fields=['trabajador', 'fecha_correspondiente'],
+                name='mockups_sob_trabaja_f16ee6_idx',
+            ),
         ]
 
     def __str__(self):
