@@ -445,7 +445,7 @@
                                     data-bs-toggle="modal" data-bs-target="#modalCerrarSobre">
                                 <i class="bi bi-lock-fill me-2"></i>Guardar y Cerrar Sobre
                             </button>
-                            {% if request.user.rol in 'jefe,admin' %}
+                            {% if request.user.rol == 'jefe' or request.user.rol == 'admin' %}
                             <button type="button" class="btn btn-outline-info btn-lg px-4" data-bs-toggle="modal" data-bs-target="#modalCrearSobreAdicional">
                                 <i class="bi bi-plus-circle me-2"></i>Crear Sobre Adicional
                             </button>
