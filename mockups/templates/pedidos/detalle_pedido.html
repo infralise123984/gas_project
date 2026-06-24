@@ -8,7 +8,7 @@
 
     <!-- Encabezado con botón volver y estado actual -->
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
-        <a href="{% if request.user.rol in 'jefe,admin' %}{% url 'pedidos_consulta' %}{% else %}{% url 'pedidos_mios' %}{% endif %}" 
+        <a href="{% if request.user.rol == 'jefe' or request.user.rol == 'admin' %}{% url 'pedidos_consulta' %}{% else %}{% url 'pedidos_mios' %}{% endif %}" 
            class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left me-2"></i>Volver
         </a>
@@ -201,7 +201,7 @@
 
     <!-- Botón volver (centrado abajo) -->
     <div class="text-center mt-5">
-        <a href="{% if request.user.rol in 'jefe,admin' %}{% url 'pedidos_consulta' %}{% else %}{% url 'pedidos_mios' %}{% endif %}" 
+        <a href="{% if request.user.rol == 'jefe' or request.user.rol == 'admin' %}{% url 'pedidos_consulta' %}{% else %}{% url 'pedidos_mios' %}{% endif %}" 
            class="btn btn-primary btn-lg px-5 py-3">
             <i class="bi bi-arrow-left-circle me-2"></i>Volver a la lista
         </a>
