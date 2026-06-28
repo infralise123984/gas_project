@@ -62,7 +62,7 @@
                 {% endif %}
 
                 <!-- Telefonista / Bodeguero: Nuevo Pedido + Pedidos Hoy -->
-                {% if user.rol in "telefonista,bodeguero" %}
+                {% if user.rol == "telefonista" or user.rol == "bodeguero" %}
                 <div class="col-12 col-md-8">
                     <a href="{% url 'pedidos_crear' %}" 
                        class="btn btn-success btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
@@ -80,7 +80,7 @@
                 {% endif %}
 
                 <!-- Jefe / Admin: Reportes, Precios, Historial Pedidos -->
-                {% if user.rol in "jefe,admin" %}
+                {% if user.rol == "jefe" or user.rol == "admin" %}
                 <div class="col-12 col-md-8">
                     <a href="{% url 'reportes_ventas' %}" 
                        class="btn btn-info btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">

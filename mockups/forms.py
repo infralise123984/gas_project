@@ -374,7 +374,6 @@ class BaseLineaSobreFormSet(BaseInlineFormSet):
         super().clean()
         if any(self.errors):
             return
-        # Aquí podrías agregar validaciones extras si quieres (ej: suma mínima de declaradas)
 
 
 LineaSobreFormSet = inlineformset_factory(
