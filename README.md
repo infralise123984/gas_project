@@ -11,8 +11,10 @@ Reemplaza planillas de Excel y grupos de WhatsApp por una solución moderna, seg
 
 ### Gestión de Usuarios y Roles
 - **5 roles diferenciados**: Telefonista, Bodeguero, Camionero, Jefe y Administrador
-- Cada rol tiene acceso solo a las vistas que necesita
+- Cada rol accede solo a las vistas autorizadas mediante `require_roles()` (HTML) y `require_roles_api()` (JSON)
+- Auditoría automática de accesos denegados (`AuditoriaAccion`)
 - Creación de usuarios desde panel administrativo
+- Autenticación con 2FA (TOTP) opcional
 
 ### Pedidos y Ventas
 - **Telefonista**: Registro de pedidos a domicilio con dirección, sector y múltiples balones
@@ -51,9 +53,11 @@ Reemplaza planillas de Excel y grupos de WhatsApp por una solución moderna, seg
 - Historial automático de cambios de precio
 
 ### Auditoría y Seguridad
-- Log de todas las acciones críticas (crear, editar, eliminar)
-- Registro de quién hizo qué y cuándo
-- Tests de seguridad incluidos
+- Validación unificada de roles: `require_roles()` (vistas HTML) y `require_roles_api()` (endpoints JSON/AJAX)
+- Registro automático de accesos denegados (`PERM_DENIED`) en `AuditoriaAccion` y `security_logger`
+- Log de todas las acciones críticas (crear, editar, eliminar, login, logout)
+- Protección anti-forgery CSRF, rotación de sesión en 2FA
+- Rate-limiting de intentos de login (django-axes)
 
 ---
 
@@ -61,7 +65,7 @@ Reemplaza planillas de Excel y grupos de WhatsApp por una solución moderna, seg
 
 | Componente | Tecnología |
 |------------|------------|
-| Backend | Django 5.1 (Python 3.12) |
+| Backend | Django 5.1 (Python 3.13) |
 | Frontend | Bootstrap 5 + Bootstrap Icons |
 | Base de datos | MySQL (dev) / PostgreSQL (prod) |
 | PWA | Service Worker + Web Push API |
@@ -117,20 +121,55 @@ VAPID_ADMIN_EMAIL=mailto:admin@tudominio.com
 
 ---
 
-## Estructura del Proyecto
+## Arquitectura Modular
+
+El proyecto fue refactorizado de un `views.py` monolítico (4400+ líneas) a una arquitectura modular para facilitar el mantenimiento:
 
 ```
 gas_project/
-├── gasmanager/          # Configuración Django (settings, urls)
-├── mockups/             # App principal
-│   ├── models.py        # Usuario, Pedido, TipoBalon, SobreDiario, etc.
-│   ├── views.py         # Vistas por rol
-│   ├── forms.py         # Formularios
-│   ├── push_notifications.py  # Sistema de notificaciones
-│   ├── templates/       # HTML (Bootstrap 5)
-│   ├── static/          # CSS, JS, manifest.json, sw.js
-│   └── management/      # Comandos personalizados
+├── gasmanager/              # Configuración Django
+│   ├── settings.py
+│   ├── urls.py              # Rutas (usa from mockups import views)
+│   └── wsgi.py
+├── mockups/                 # App principal
+│   ├── models.py            # Usuario, Pedido, TipoBalon, SobreDiario, etc.
+│   ├── forms.py             # Formularios
+│   ├── push_notifications.py
+│   │
+│   ├── views/               # Vistas HTTP (modular)
+│   │   ├── __init__.py      # Re-exporta todo para retrocompatibilidad
+│   │   ├── auth.py          # Login, logout, perfil, 2FA, crear usuario
+│   │   ├── pedidos.py       # Crear, editar, cancelar, consultar pedidos
+│   │   ├── entregas.py      # Vistas del camionero (ruta, entregas, tarreo)
+│   │   ├── sobres.py        # Sobres diarios, cierre de caja
+│   │   ├── catalogos.py     # Balones, sectores, precios, auditoría
+│   │   ├── reportes.py      # Reportes de ventas y sobres
+│   │   └── push.py          # Suscripciones web push + service worker
+│   │
+│   ├── services/            # Lógica de negocio reutilizable
+│   │   ├── camionero.py     # Querysets, stats y kilos del camionero
+│   │   ├── sobres.py        # Sincronización de sobres desde pedidos
+│   │   ├── catalogos.py     # Consultas de balones activos ordenados
+│   │   └── exports.py       # Exportación a Excel (.xlsx)
+│   │
+│   ├── utils/               # Utilidades compartidas
+│   │   ├── fechas.py        # Zona horaria Chile, rangos UTC, parseo de meses
+│   │   └── permisos.py      # require_roles(), require_roles_api(), IP, display
+│   │
+│   ├── templates/           # HTML (Bootstrap 5)
+│   ├── static/              # CSS, JS, manifest.json, sw.js
+│   ├── management/          # Comandos personalizados
+│   ├── migrations/          # Migraciones de base de datos
+│   │
+│   ├── tests.py                      # Tests de flujo 2FA
+│   ├── tests_logica_negocio.py       # Tests de lógica y matemática
+│   └── views_monolith_backup.py      # Backup del monolito original (referencia)
+│
 ├── requirements.txt
+├── requirements-render.txt  # Dependencias producción (Render)
+├── render.yaml              # Configuración Render.com
+├── build.sh                 # Script de build
+├── Procfile                 # Comando de inicio
 └── manage.py
 ```
 
@@ -143,6 +182,28 @@ El proyecto está configurado para Render con:
 - `build.sh` - Script de construcción
 - `Procfile` - Comando de inicio
 - `requirements-render.txt` - Dependencias de producción
+
+---
+
+## Tests
+
+```bash
+# Todos los tests
+python manage.py test mockups -v 2
+
+# Solo lógica de negocio
+python manage.py test mockups.tests_logica_negocio -v 2
+
+# Solo flujo 2FA
+python manage.py test mockups.tests -v 2
+```
+
+Los tests cubren:
+- Totales de pedidos (monto, ganancia, kilos)
+- Sincronización de sobres (cuadre de cantidades y montos)
+- Flujo completo de autenticación con 2FA (TOTP)
+- Bloqueo tras 5 intentos fallidos
+- Coherencia de fechas Chile/UTC
 
 ---
 
