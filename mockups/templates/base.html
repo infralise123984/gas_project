@@ -179,7 +179,7 @@
             <div class="collapse navbar-collapse" id="navbarMain">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     {% if user.is_authenticated %}
-                    {% if user.rol in "telefonista" %}
+                    {% if user.rol == "telefonista" %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'pedidos_crear' %}active{% endif %}"
                             href="{% url 'pedidos_crear' %}">
@@ -193,7 +193,7 @@
                         </a>
                     </li>
                     {% endif %}
-                    {% if user.rol in "bodeguero" %}
+                    {% if user.rol == "bodeguero" %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'pedidos_crear' %}active{% endif %}"
                             href="{% url 'pedidos_crear' %}">
@@ -239,7 +239,7 @@
                         </a>
                     </li>
                     {% endif %}
-                    {% if user.rol in "jefe,admin" %}
+                    {% if user.rol == "jefe" or user.rol == "admin" %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'reportes_ventas' or request.resolver_match.url_name == 'reportes_sobres' %}active{% endif %}"
                            href="#" data-bs-toggle="dropdown" aria-expanded="false">

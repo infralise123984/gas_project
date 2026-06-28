@@ -1,4 +1,8 @@
-# mockups/views.py
+# ARCHIVO DE RESPALDO — NO IMPORTAR EN RUNTIME
+# Copia fiel del monolito views.py antes de modularizar (2026-06-21).
+# Rama: refactor/views-modular. Git conserva el historial; esto es referencia local.
+#
+# mockups/views.py (original)
 
 # ──────────────────────────────────────────────────────────────
 # 1. IMPORTACIONES
@@ -32,7 +36,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 # Librerías de terceros
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side 
-from openpyxl.utils import get_column_letter   # ← AGREGAR ESTA LÍNEA
+from openpyxl.utils import get_column_letter
 import pyotp
 import segno
 
@@ -261,7 +265,7 @@ def get_pedidos_queryset_para_sobre(sobre):
 def sincronizar_sobre_desde_pedidos(sobre, crear_lineas_faltantes=True):
     """
     Refresca cantidades calculadas del sobre abierto usando los pedidos vigentes.
-    Si la cantidad declarada seguía igual a la calculada anterior, también la actualiza.
+    No modifica cantidad_declarada en líneas existentes (solo el bodeguero/camionero la fija al guardar borrador).
     """
     if not sobre.pk or sobre.cerrado:
         return False
@@ -305,10 +309,6 @@ def sincronizar_sobre_desde_pedidos(sobre, crear_lineas_faltantes=True):
             if old_calc != qty_calc:
                 linea.cantidad_calculada = qty_calc
                 update_fields.append('cantidad_calculada')
-
-                if int(linea.cantidad_declarada or 0) == old_calc:
-                    linea.cantidad_declarada = qty_calc
-                    update_fields.append('cantidad_declarada')
 
             if update_fields:
                 linea.save(update_fields=update_fields)
@@ -428,7 +428,7 @@ def get_display_name(user):
 def index(request):
     """Dashboard principal. Muestra opciones según rol del usuario."""
     context = {
-        'hora_servidor': now_chile().isoformat(),  # ← Usando tu función local
+        'hora_servidor': now_chile().isoformat(),
     }
     return render(request, "index.html", context)
 
@@ -866,7 +866,7 @@ def historial_precios(request):
     balon_id = request.GET.get('balon')
     balon_seleccionado = None
     historial = []
-    precios_actuales = None  # ← nuevo
+    precios_actuales = None
 
     if balon_id:
         try:
@@ -915,7 +915,7 @@ def historial_precios(request):
         'balon_seleccionado': balon_seleccionado,
         'historial': historial,
         'chart_data': chart_data,
-        'precios_actuales': precios_actuales,  # ← nuevo
+        'precios_actuales': precios_actuales,
         'title': 'Historial de Cambios de Precios' + (f' - {balon_seleccionado.nombre}' if balon_seleccionado else '')
     }
 
@@ -1017,11 +1017,7 @@ def gestionar_balones_lista(request):
 # Admin/Jefe/Bodeguero: crear nuevo tipo de balón
 @login_required
 def gestionar_balones_crear(request):
-    """Crear nuevo tipo de balón en el sistema."""
-    """
-    Crea un nuevo tipo de balón desde la web.
-    Acceso: admin, jefe, bodeguero.
-    """
+    """Crear nuevo tipo de balón en el sistema. Acceso: admin, jefe, bodeguero."""
     resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para crear balones.")
     if resp:
         return resp
@@ -1071,11 +1067,7 @@ def gestionar_balones_crear(request):
 # Admin/Jefe/Bodeguero: editar tipo de balón existente
 @login_required
 def gestionar_balones_editar(request, balon_id):
-    """Modificar datos de un tipo de balón."""
-    """
-    Edita un tipo de balón existente desde la web.
-    Acceso: admin, jefe, bodeguero.
-    """
+    """Modificar datos de un tipo de balón existente. Acceso: admin, jefe, bodeguero."""
     resp = require_roles(request, ["jefe", "admin", "bodeguero"], "index", "No tienes permiso para editar balones.")
     if resp:
         return resp
@@ -1165,11 +1157,7 @@ def gestionar_balones_editar(request, balon_id):
 @login_required
 @require_POST
 def gestionar_balones_eliminar(request, balon_id):
-    """Eliminar un tipo de balón (confirmar primero)."""
-    """
-    Elimina un tipo de balón (solo si no tiene pedidos asociados).
-    Solo para admin y jefe.
-    """
+    """Eliminar un tipo de balón sin pedidos asociados. Solo admin y jefe."""
     resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para eliminar balones.")
     if resp:
         return resp
@@ -1343,12 +1331,11 @@ def gestionar_sectores_eliminar(request, sector_id):
 @login_required
 @never_cache
 def transaccional_pedido(request):
-    """Registrar nueva venta o pedido. Registra usuario, origen, estado inicial."""
-    """
-    Vista principal para Telefonistas y Bodegueros.
-    Gestiona la creación de pedidos con sus detalles (inline formsets).
-    - Telefonistas: Crea pedidos 'pendientes' con precio domicilio.
-    - Bodegueros: Crea pedidos 'entregados' con precio local.
+    """Registrar nueva venta o pedido según rol del usuario.
+
+    Vista principal para Telefonistas y Bodegueros con detalles inline.
+    - Telefonistas: pedidos 'pendientes' con precio domicilio.
+    - Bodegueros: pedidos 'entregados' con precio local.
     """
     resp = require_roles(request, ["telefonista", "bodeguero"], "index", "Solo telefonista y/o bodeguero pueden generar pedidos.")
     if resp:
@@ -1472,15 +1459,14 @@ def transaccional_pedido(request):
 # Telefonista/Bodeguero: editar pedido existente
 @login_required
 def editar_pedido(request, pedido_id):
-    """Modificar pedido pendiente/en_ruta. Solo registrador puede editar."""
-    """
-    Edición de pedidos con reglas específicas por rol:
-    - Telefonista: solo sus propios pedidos
-    - Camionero: solo los que tiene en ruta (estado 'en_ruta')
-    - Bodeguero: pedidos propios + pedidos de telefonistas
-    - Jefe/Admin: cualquier pedido
+    """Modificar pedido pendiente o en ruta con reglas por rol.
+
+    - Telefonista: solo sus propios pedidos.
+    - Camionero: solo los que tiene en ruta (estado 'en_ruta').
+    - Bodeguero: pedidos propios + pedidos de telefonistas.
+    - Jefe/Admin: cualquier pedido.
     Solo permite editar si está pendiente o en ruta.
-    Registra todo cambio en HistorialCambioPedido.
+    Registra cambios en HistorialCambioPedido.
     """
     pedido = get_object_or_404(Pedido, id=pedido_id)
 
@@ -1541,7 +1527,7 @@ def editar_pedido(request, pedido_id):
         formset = DetalleFormSetEdit(
             request.POST, 
             instance=pedido,
-            form_kwargs={'user': request.user}  # ← Pasar usuario para precios correctos
+            form_kwargs={'user': request.user}
         )
 
         if form_cabecera.is_valid() and formset.is_valid():
@@ -2253,7 +2239,7 @@ def tarreo_pedido(request):
                     precio_compra_unitario=balon.precio_compra,
                     # NO pasamos subtotal aquí — se calcula solo
                 )
-                detalle.save()  # ← guarda sin tocar subtotal
+                detalle.save()
 
                 # Acumular total usando el property subtotal (como en transaccional)
                 total_monto += detalle.subtotal
@@ -3208,9 +3194,9 @@ def detalle_pedido(request, pedido_id):
 # Jefe/Bodeguero: listar sobres diarios creados
 @login_required
 def lista_sobres_diarios(request):
-    """Ver sobres operativos filtrados por fecha de creacion."""
-    """
-    Listado para seleccionar qué sobre abrir/editar (Bodega o Camionero).
+    """Listar sobres operativos filtrados por fecha de creación.
+
+    Permite seleccionar qué sobre abrir/editar (Bodega o Camionero).
     Si hay más de un sobre del día, muestra lista para elegir.
     """
     if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
@@ -3266,16 +3252,13 @@ def get_rango_utc_para_fecha(fecha_objetivo):
 # Jefe/Bodeguero: editar sobre diario
 @login_required
 def editar_sobre_diario(request):
-    """Modificar monto declarado, gastos y notas de un sobre."""
-    """
-    Vista para editar un sobre diario.
-    
-    IMPORTANTE: La URL debe ser:
-    - /sobres/editar/?sobre_id=123  (FORMA CORRECTA - carga sobre específico)
-    
-    ANTIGUAS (deprecadas pero soportadas por compatibilidad):
-    - /sobres/editar/?bodega=1&fecha=...  (crea/busca sobre y redirige con sobre_id)
-    - /sobres/editar/?camionero=5&fecha=...  (crea/busca sobre y redirige con sobre_id)
+    """Editar monto declarado, gastos y notas de un sobre diario.
+
+    URL preferida: /sobres/editar/?sobre_id=123
+
+    URLs legacy (deprecadas, soportadas por compatibilidad):
+    - /sobres/editar/?bodega=1&fecha=...
+    - /sobres/editar/?camionero=5&fecha=...
     """
     resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para editar sobres.")
     if resp:
@@ -3371,13 +3354,10 @@ def editar_sobre_diario(request):
         # REDIRECT CON sobre_id (forma correcta)
         return redirect(f"{reverse('sobres_editar')}?sobre_id={sobre.id}")
 
-    # ═══════════════════════════════════════════════════════════
-    # Crear o actualizar líneas de balones
-    # Se hace siempre: tanto si el sobre es nuevo como si ya existe
-    # ═══════════════════════════════════════════════════════════
-    
-    # Preparar datos para crear líneas (si es necesario)
-    sincronizar_sobre_desde_pedidos(sobre)
+    # Sobres con líneas: la actualización desde pedidos va por AJAX al cargar y cada 5 min.
+    # Sobres vacíos (recién creados): una sync inicial para armar el formset de balones.
+    if request.method != "POST" and not sobre.lineas.exists():
+        sincronizar_sobre_desde_pedidos(sobre)
 
     # Preparar los formsets
     formset_lineas = LineaSobreFormSet(
@@ -3425,49 +3405,20 @@ def editar_sobre_diario(request):
         sobre.creado_por = request.user
         sobre.save()
 
-        sincronizar_sobre_desde_pedidos(sobre)
-        formset_lineas = LineaSobreFormSet(
-            request.POST or None,
-            instance=sobre,
-            prefix='lineas'
-        )
-
         # Ahora sí validar y guardar los formsets
         if all([
             formset_lineas.is_valid(),
             formset_pagos.is_valid(),
             formset_gastos.is_valid()
         ]):
-            for form in formset_lineas.forms:
-                if not form.cleaned_data:
-                    continue
-
-                snapshot_key = f"calc_snapshot_{form.instance.id}"
-                snapshot_value = request.POST.get(snapshot_key)
-                if snapshot_value is None:
-                    continue
-
-                try:
-                    snapshot_calculada = int(snapshot_value)
-                except (TypeError, ValueError):
-                    continue
-
-                cantidad_declarada = form.cleaned_data.get('cantidad_declarada')
-                if cantidad_declarada is None:
-                    continue
-
-                if int(cantidad_declarada) == snapshot_calculada:
-                    cantidad_actual = int(form.instance.cantidad_calculada or 0)
-                    form.cleaned_data['cantidad_declarada'] = cantidad_actual
-                    form.instance.cantidad_declarada = cantidad_actual
-
             # Guardar todos los formsets en una transacción atómica
             with transaction.atomic():
                 formset_lineas.save()
                 formset_pagos.save()
                 formset_gastos.save()
 
-                # Recalcular totales del sobre
+                # Actualizar solo cantidades calculadas; preservar declaradas guardadas en borrador
+                sincronizar_sobre_desde_pedidos(sobre)
                 sobre.save()
 
             # Si se presionó el botón "Cerrar"
@@ -3549,11 +3500,11 @@ def refrescar_sobre_diario(request, sobre_id):
     if sobre.cerrado:
         return JsonResponse({'ok': True, 'cerrado': True, 'lineas': []})
 
-    sincronizar_sobre_desde_pedidos(sobre, crear_lineas_faltantes=False)
+    sincronizar_sobre_desde_pedidos(sobre)
     sobre.refresh_from_db()
 
     lineas = list(
-        sobre.lineas.values('id', 'cantidad_calculada', 'cantidad_declarada')
+        sobre.lineas.values('id', 'balon_id', 'cantidad_calculada', 'cantidad_declarada')
     )
 
     return JsonResponse({
@@ -3564,18 +3515,10 @@ def refrescar_sobre_diario(request, sobre_id):
         'sincronizado_en': now_chile().strftime('%H:%M:%S'),
     })
 
-# ══════════════════════════════════════════════════════════════
-# 
-# ══════════════════════════════════════════════════════════════
-
 # Jefe/Bodeguero: crear nuevo sobre diario
 @login_required
 def crear_sobre_nuevo(request):
-    """Crear sobre para cierres de caja día a día."""
-    """
-    Vista para crear un nuevo sobre manualmente con fecha específica.
-    OPCIONAL - Solo si necesitas crear sobres post-cierre.
-    """
+    """Crear sobre manualmente con fecha específica para cierres de caja."""
     if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
         messages.error(request, "Acceso no permitido.")
         return redirect('index')
@@ -3631,11 +3574,10 @@ def crear_sobre_nuevo(request):
 # Jefe/Bodeguero: crear sobre para cierre posterior
 @login_required
 def crear_sobre_post_cierre(request, sobre_id):
-    """Crear nuevo sobre basado en uno anterior (para seguimiento)."""
-    """
-    Crea un nuevo sobre SOLO si el anterior está cerrado.
-    Hereda: tipo, trabajador del sobre anterior.
-    Parámetro POST: fecha_correspondiente (opcional, default = hoy).
+    """Crear nuevo sobre basado en uno anterior cerrado.
+
+    Hereda tipo y trabajador del sobre anterior.
+    Parámetro POST opcional: fecha_correspondiente (default = hoy).
     """
     resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "No tienes permiso para crear un nuevo sobre.")
     if resp:
@@ -3810,11 +3752,7 @@ def historial_sobres(request):
 # Jefe/Bodeguero: imprimir sobre para descarga/impresión
 @login_required
 def imprimir_sobre_diario(request, sobre_id):
-    """Generar PDF o versión imprimible del sobre."""
-    """
-    Genera una página HTML optimizada para impresión del sobre diario.
-    Formato compacto similar a Excel.
-    """
+    """Generar versión imprimible del sobre (HTML compacto, estilo Excel)."""
     if request.user.rol not in ['bodeguero', 'jefe', 'admin']:
         messages.error(request, "No tienes permiso para imprimir sobres.")
         return redirect('index')
@@ -4359,11 +4297,7 @@ def push_subscribe(request):
 # Usuario: desuscribirse de notificaciones
 @login_required
 def push_unsubscribe(request):
-    """Desregistrar endpoint de suscripción."""
-    """
-    Desactiva la suscripción push del usuario actual.
-    Endpoint: POST /push/unsubscribe/
-    """
+    """Desactivar suscripción push del usuario. Endpoint: POST /push/unsubscribe/."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
     
@@ -4402,12 +4336,7 @@ def push_unsubscribe(request):
 # Usuario: probar enviar notificación push
 @login_required
 def push_test(request):
-    """Enviar notificación de prueba al usuario actual."""
-    """
-    Envía una notificación de prueba al usuario actual.
-    Solo para testing/debugging.
-    Endpoint: POST /push/test/
-    """
+    """Enviar notificación de prueba al usuario actual. Endpoint: POST /push/test/."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
 
@@ -4430,11 +4359,7 @@ def push_test(request):
 # Usuario: ver estado de suscripción push
 @login_required  
 def push_status(request):
-    """Obtener estado actual de suscripción push del usuario."""
-    """
-    Retorna el estado de las suscripciones push del usuario actual.
-    Endpoint: GET /push/status/
-    """
+    """Estado de suscripciones push del usuario. Endpoint: GET /push/status/."""
     from .models import PushSubscription
     from django.conf import settings
     
@@ -4461,12 +4386,7 @@ def push_status(request):
 
 # PWA: servir service worker para notificaciones offline
 def service_worker(request):
-    """Archivo service worker para soporte de notificaciones push del navegador."""
-    """
-    Sirve el Service Worker desde la raíz del sitio.
-    Esto es necesario para que el SW tenga scope '/' y pueda
-    manejar notificaciones push en todo el sitio.
-    """
+    """Sirve el Service Worker desde la raíz para scope '/' y notificaciones push en todo el sitio."""
     import os
     from django.conf import settings as django_settings
     

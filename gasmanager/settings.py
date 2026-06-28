@@ -20,8 +20,8 @@ load_dotenv()  # Carga las variables de entorno desde el archivo .env
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 AUTH_USER_MODEL = "mockups.Usuario"
-LOGIN_URL = '/auth/login/'     # ← Ruta correcta de tu página de login
-LOGIN_REDIRECT_URL = '/'       # ← después de loguearse, va al index    (o puedes dejar '/')
+LOGIN_URL = '/auth/login/'
+LOGIN_REDIRECT_URL = '/'
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 

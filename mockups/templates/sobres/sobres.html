@@ -142,14 +142,22 @@
                 {% endif %}
 
                 {% if not sobre.cerrado %}
-                <div class="alert alert-secondary d-flex align-items-center justify-content-between gap-3 mb-4 py-2 px-3 small"
+                <div class="alert alert-secondary d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4 py-2 px-3 small"
                      id="sobreSyncStatus"
                      data-refresh-url="{% url 'sobres_refrescar' sobre.id %}">
-                    <span>
+                    <span id="sobreSyncMessage">
                         <i class="bi bi-arrow-repeat me-2"></i>
-                        Sincronización automática activa. El sobre revisa pedidos nuevos cada 60 segundos.
+                        Las ventas de la app se revisan al abrir y cada 5 minutos. Usa «Actualizar ahora» si necesitas el dato al instante.
                     </span>
-                    <span class="fw-semibold text-nowrap" id="sobreSyncTimestamp">Última revisión: {{ hora_actual }}</span>
+                    <div class="d-flex align-items-center gap-2 ms-auto">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-primary"
+                                id="sobreSyncManualBtn"
+                                title="Traer ventas recientes de camioneros o bodega">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Actualizar ahora
+                        </button>
+                        <span class="fw-semibold text-nowrap" id="sobreSyncTimestamp">Última actualización: —</span>
+                    </div>
                 </div>
                 {% endif %}
 
@@ -173,7 +181,8 @@
                                 <tbody>
                                     {% for form in formset_lineas %}
                                     <tr data-index="{{ forloop.counter0 }}"
-                                        data-linea-id="{{ form.instance.id }}"
+                                        data-linea-id="{{ form.instance.pk|default:'' }}"
+                                        data-balon-id="{{ form.instance.balon.pk }}"
                                         data-last-calculada="{{ form.instance.cantidad_calculada|default:0 }}"
                                         data-precio="{{ form.instance.precio_venta_unitario|unlocalize }}"
                                         data-peso="{{ form.instance.balon.peso_neto_gas|unlocalize }}">
@@ -196,7 +205,7 @@
                                         <td class="text-center align-middle">
                                             {{ form.id }}
                                             <input type="hidden"
-                                                   name="calc_snapshot_{{ form.instance.id }}"
+                                                   name="calc_snapshot_{{ form.instance.pk }}"
                                                    value="{{ form.instance.cantidad_calculada|default:0 }}"
                                                    class="calc-snapshot-input">
                                             {% if sobre.cerrado %}
@@ -436,7 +445,7 @@
                                     data-bs-toggle="modal" data-bs-target="#modalCerrarSobre">
                                 <i class="bi bi-lock-fill me-2"></i>Guardar y Cerrar Sobre
                             </button>
-                            {% if request.user.rol in 'jefe,admin' %}
+                            {% if request.user.rol == 'jefe' or request.user.rol == 'admin' %}
                             <button type="button" class="btn btn-outline-info btn-lg px-4" data-bs-toggle="modal" data-bs-target="#modalCrearSobreAdicional">
                                 <i class="bi bi-plus-circle me-2"></i>Crear Sobre Adicional
                             </button>
@@ -688,7 +697,7 @@ function updateTotals() {
 }
 
 function syncDeclaradaInputState(input) {
-    const row = input.closest('tr[data-linea-id]');
+    const row = input.closest('#sobreTable tbody tr[data-index]');
     if (!row) return;
 
     const currentCalc = parseInt(row.dataset.lastCalculada) || 0;
@@ -696,42 +705,82 @@ function syncDeclaradaInputState(input) {
     input.dataset.userEdited = currentValue === currentCalc ? '0' : '1';
 }
 
-function applyLineaSync(linea) {
-    const row = document.querySelector(`#sobreTable tbody tr[data-linea-id="${linea.id}"]`);
-    if (!row) return;
+function buildLineaRowMaps() {
+    const byId = new Map();
+    const byBalon = new Map();
+
+    document.querySelectorAll('#sobreTable tbody tr[data-index]').forEach((row) => {
+        const lineaId = (row.dataset.lineaId || '').trim();
+        const balonId = (row.dataset.balonId || '').trim();
+        if (lineaId) byId.set(lineaId, row);
+        if (balonId) byBalon.set(balonId, row);
+    });
+
+    return { byId, byBalon };
+}
+
+function findLineaRow(linea, rowMaps) {
+    if (!rowMaps) return null;
+
+    const lineaId = linea.id != null ? String(linea.id) : '';
+    const balonId = linea.balon_id != null ? String(linea.balon_id) : '';
+
+    if (lineaId && rowMaps.byId.has(lineaId)) {
+        return rowMaps.byId.get(lineaId);
+    }
+    if (balonId && rowMaps.byBalon.has(balonId)) {
+        return rowMaps.byBalon.get(balonId);
+    }
+    return null;
+}
+
+function applyLineaSync(linea, row) {
+    if (!row) return false;
 
     const calculadaCelda = row.querySelector('.calculada-celda');
-    const inputDeclarada = row.querySelector('input[name*="cantidad_declarada"]');
     const snapshotInput = row.querySelector('.calc-snapshot-input');
     const previousCalc = parseInt(row.dataset.lastCalculada) || 0;
     const nextCalc = parseInt(linea.cantidad_calculada) || 0;
 
     if (calculadaCelda) {
-        calculadaCelda.textContent = nextCalc;
+        calculadaCelda.textContent = String(nextCalc);
     }
 
-    if (inputDeclarada) {
-        const currentDeclarada = parseInt(inputDeclarada.value) || 0;
-        const userEdited = inputDeclarada.dataset.userEdited === '1';
-
-        if (!userEdited || currentDeclarada === previousCalc) {
-            inputDeclarada.value = parseInt(linea.cantidad_declarada) || 0;
-        }
-    }
-
-    row.dataset.lastCalculada = nextCalc;
+    row.dataset.lastCalculada = String(nextCalc);
     if (snapshotInput) {
-        snapshotInput.value = nextCalc;
+        snapshotInput.value = String(nextCalc);
     }
 
-    if (inputDeclarada) {
-        syncDeclaradaInputState(inputDeclarada);
+    return previousCalc !== nextCalc;
+}
+
+const SOBRE_SYNC_INTERVAL_MS = 300000; // 5 minutos
+let sobreSyncPollTimer = null;
+let sobreSyncInFlight = false;
+
+function setSobreSyncUiState({ loading = false, error = false } = {}) {
+    const syncStatus = document.getElementById('sobreSyncStatus');
+    const message = document.getElementById('sobreSyncMessage');
+    const manualBtn = document.getElementById('sobreSyncManualBtn');
+    if (!syncStatus) return;
+
+    if (manualBtn) {
+        manualBtn.disabled = loading;
     }
+
+    if (loading && message) {
+        message.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Actualizando ventas de la app…';
+    } else if (!error && message) {
+        message.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Las ventas de la app se revisan al abrir y cada 5 minutos. Usa «Actualizar ahora» si necesitas el dato al instante.';
+    }
+
+    syncStatus.classList.toggle('alert-danger', error);
+    syncStatus.classList.toggle('alert-secondary', !error);
 }
 
 async function refreshSobreDinamicamente() {
     const syncStatus = document.getElementById('sobreSyncStatus');
-    if (!syncStatus) return;
+    if (!syncStatus || sobreSyncInFlight) return;
 
     const csrfTokenInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
     const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
@@ -739,9 +788,13 @@ async function refreshSobreDinamicamente() {
         return;
     }
 
+    sobreSyncInFlight = true;
+    setSobreSyncUiState({ loading: true });
+
     try {
         const response = await fetch(syncStatus.dataset.refreshUrl, {
             method: 'POST',
+            cache: 'no-store',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
                 'X-CSRFToken': csrfToken
@@ -757,24 +810,62 @@ async function refreshSobreDinamicamente() {
             return;
         }
 
-        data.lineas.forEach(applyLineaSync);
+        const rowMaps = buildLineaRowMaps();
+        const filasEnTabla = rowMaps.byBalon.size || rowMaps.byId.size;
+
+        if (data.lineas.length > 0 && filasEnTabla === 0) {
+            window.location.reload();
+            return;
+        }
+
+        let filasConCambio = 0;
+        let filasSinMatch = 0;
+        data.lineas.forEach((linea) => {
+            const row = findLineaRow(linea, rowMaps);
+            if (!row) {
+                filasSinMatch += 1;
+                return;
+            }
+            if (applyLineaSync(linea, row)) {
+                filasConCambio += 1;
+                row.classList.add('table-info');
+                window.setTimeout(() => row.classList.remove('table-info'), 1200);
+            }
+        });
+
+        if (filasSinMatch > 0 && filasSinMatch === data.lineas.length) {
+            window.location.reload();
+            return;
+        }
+
         updateTotals();
 
         const timestamp = document.getElementById('sobreSyncTimestamp');
         if (timestamp && data.sincronizado_en) {
-            timestamp.textContent = `Última revisión: ${data.sincronizado_en}`;
+            timestamp.textContent = `Última actualización: ${data.sincronizado_en}`;
         }
 
-        syncStatus.classList.remove('alert-danger');
-        syncStatus.classList.add('alert-secondary');
+        setSobreSyncUiState({ loading: false, error: false });
     } catch (error) {
         const timestamp = document.getElementById('sobreSyncTimestamp');
         if (timestamp) {
-            timestamp.textContent = 'Última revisión: error de conexión';
+            timestamp.textContent = 'Sin conexión — intenta «Actualizar ahora»';
         }
-        syncStatus.classList.remove('alert-secondary');
-        syncStatus.classList.add('alert-danger');
+        setSobreSyncUiState({ loading: false, error: true });
+    } finally {
+        sobreSyncInFlight = false;
     }
+}
+
+function iniciarSobreSyncPolling() {
+    if (sobreSyncPollTimer) return;
+    sobreSyncPollTimer = window.setInterval(refreshSobreDinamicamente, SOBRE_SYNC_INTERVAL_MS);
+}
+
+function detenerSobreSyncPolling() {
+    if (!sobreSyncPollTimer) return;
+    clearInterval(sobreSyncPollTimer);
+    sobreSyncPollTimer = null;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -797,8 +888,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // Calcular totales al cargar la página
     updateTotals();
 
-    if (document.getElementById('sobreSyncStatus')) {
-        window.setInterval(refreshSobreDinamicamente, 60000);
+    const syncStatus = document.getElementById('sobreSyncStatus');
+    const manualBtn = document.getElementById('sobreSyncManualBtn');
+    if (syncStatus) {
+        refreshSobreDinamicamente();
+        iniciarSobreSyncPolling();
+
+        if (manualBtn) {
+            manualBtn.addEventListener('click', refreshSobreDinamicamente);
+        }
+
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) {
+                detenerSobreSyncPolling();
+            } else {
+                refreshSobreDinamicamente();
+                iniciarSobreSyncPolling();
+            }
+        });
     }
 });
 
