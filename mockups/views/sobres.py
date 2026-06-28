@@ -365,6 +365,67 @@ def refrescar_sobre_diario(request, sobre_id):
     })
 
 
+# Jefe/Bodeguero: crear nuevo sobre diario
+@login_required
+def crear_sobre_nuevo(request):
+    """Formulario página completa (crear_sobre.html) — legacy, sin URL en urls.py.
+
+    El flujo real de bodega es el modal en lista_sobres → editar_sobre_diario
+    (forzar_nuevo) o modales en sobres.html → crear_sobre_post_cierre.
+    """
+    resp = require_roles(request, ["bodeguero", "jefe", "admin"], "index", "Acceso no permitido.")
+    if resp:
+        return resp
+
+    if request.method == "POST":
+        es_bodega = request.POST.get('tipo') == 'bodega'
+        camionero_id = request.POST.get('camionero')
+        fecha_correspondiente_str = request.POST.get('fecha_correspondiente')
+
+        if not fecha_correspondiente_str:
+            messages.error(request, "Debe especificar una fecha para el sobre.")
+            return redirect('sobres_lista')
+
+        try:
+            fecha_correspondiente = datetime.strptime(fecha_correspondiente_str, "%Y-%m-%d").date()
+        except ValueError:
+            messages.error(request, "Fecha inválida.")
+            return redirect('sobres_lista')
+
+        if es_bodega:
+            tipo_sobre = 'bodega'
+            trabajador = None
+        elif camionero_id:
+            tipo_sobre = 'camion'
+            trabajador = get_object_or_404(Usuario, id=camionero_id, rol='camionero')
+        else:
+            messages.error(request, "Debe seleccionar un tipo de sobre válido.")
+            return redirect('sobres_lista')
+
+        # Crear el sobre
+        sobre = SobreDiario.objects.create(
+            fecha=today_chile(),
+            fecha_correspondiente=fecha_correspondiente,
+            tipo=tipo_sobre,
+            trabajador=trabajador,
+            creado_por=request.user,
+        )
+        messages.success(request, f"Sobre creado para la fecha {fecha_correspondiente.strftime('%d/%m/%Y')}.")
+        
+        # Redirigir a editar ese sobre
+        return redirect(f"{reverse('sobres_editar')}?sobre_id={sobre.id}")
+
+    # Formulario
+    hoy = today_chile()
+    camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+
+    return render(request, 'sobres/crear_sobre.html', {
+        'hoy': hoy,
+        'camioneros': camioneros,
+    })
+
+
+
 # Jefe/Bodeguero: crear sobre para cierre posterior
 @login_required
 def crear_sobre_post_cierre(request, sobre_id):
