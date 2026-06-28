@@ -11,6 +11,26 @@ from django.core.exceptions import ValidationError
 import re
 
 
+class Bodega(models.Model):
+    """Sucursal o unidad de negocio independiente."""
+    nombre = models.CharField(
+        max_length=100, unique=True, verbose_name="Nombre"
+    )
+    direccion = models.CharField(
+        max_length=250, blank=True, verbose_name="Dirección"
+    )
+    activo = models.BooleanField(default=True, verbose_name="Activo")
+    creado_el = models.DateTimeField(auto_now_add=True, verbose_name="Creado el")
+
+    class Meta:
+        verbose_name = "Bodega"
+        verbose_name_plural = "Bodegas"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
 class Usuario(AbstractUser):
     ROLES = [
         ("telefonista", "Telefonista"),
@@ -34,6 +54,15 @@ class Usuario(AbstractUser):
     totp_activo = models.BooleanField(default=False, verbose_name="2FA activo")
     totp_ultimo_verificado = models.DateTimeField(
         blank=True, null=True, verbose_name="Último código 2FA verificado en"
+    )
+
+    # Multi-bodega
+    bodega = models.ForeignKey(
+        'Bodega',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='trabajadores',
+        verbose_name="Bodega asignada"
     )
 
     def __str__(self):
@@ -164,9 +193,15 @@ class Sector(models.Model):
 
     nombre = models.CharField(
         max_length=100,
-        unique=True,
         verbose_name="Nombre",
         help_text="Usa el mismo texto que hoy se guarda en Pedido.sector para facilitar la futura migración."
+    )
+    bodega = models.ForeignKey(
+        'Bodega',
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='sectores',
+        verbose_name="Bodega"
     )
     codigo = models.SlugField(
         max_length=120,
@@ -213,6 +248,12 @@ class Sector(models.Model):
         verbose_name = "Sector"
         verbose_name_plural = "Sectores"
         ordering = ["zona", "nombre"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['nombre', 'bodega'],
+                name='unique_nombre_bodega'
+            )
+        ]
 
 
 class Pedido(models.Model):
@@ -303,6 +344,15 @@ class Pedido(models.Model):
 
     monto_total     = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Monto total venta")
     ganancia_total  = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Ganancia total")
+
+    # Multi-bodega
+    bodega = models.ForeignKey(
+        'Bodega',
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='pedidos',
+        verbose_name="Bodega"
+    )
 
     def calcular_totales(self):
         """Actualiza monto_total y ganancia_total sumando los detalles"""
@@ -419,6 +469,15 @@ class SobreDiario(models.Model):
     )
     creado_el = models.DateTimeField(auto_now_add=True)
     actualizado_el = models.DateTimeField(auto_now=True)
+    
+    # Multi-bodega
+    bodega = models.ForeignKey(
+        'Bodega',
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='sobres',
+        verbose_name="Bodega"
+    )
     
     # Montos
     monto_calculado_app = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Monto según pedidos en app")
