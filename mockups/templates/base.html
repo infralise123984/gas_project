@@ -179,6 +179,7 @@
             <div class="collapse navbar-collapse" id="navbarMain">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     {% if user.is_authenticated %}
+                    {# ── TELEFONISTA ── #}
                     {% if user.rol == "telefonista" %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'pedidos_crear' %}active{% endif %}"
@@ -193,6 +194,7 @@
                         </a>
                     </li>
                     {% endif %}
+                    {# ── BODEGUERO ── #}
                     {% if user.rol == "bodeguero" %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'pedidos_crear' %}active{% endif %}"
@@ -207,18 +209,13 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'sobre' %}active{% endif %}"
+                        <a class="nav-link {% if request.resolver_match.url_name == 'sobres_lista' %}active{% endif %}"
                             href="{% url 'sobres_lista' %}">
-                            <i class="bi bi-envelope-plus-fill"></i> Sobres
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'balones_lista' %}active{% endif %}"
-                            href="{% url 'balones_lista' %}">
-                            <i class="bi bi-droplet-half"></i> Balones
+                            <i class="bi bi-envelope"></i> Sobres
                         </a>
                     </li>
                     {% endif %}
+                    {# ── CAMIONERO ── #}
                     {% if user.rol == "camionero" %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'entregas_lista' %}active{% endif %}"
@@ -239,71 +236,49 @@
                         </a>
                     </li>
                     {% endif %}
+                    {# ── JEFE / ADMIN ── #}
                     {% if user.rol == "jefe" or user.rol == "admin" %}
+                    {% if bodega_activa or user.rol == "admin" %}
+                    {# Mostrar solo si hay bodega seleccionada (admin puede ver todo) #}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'reportes_ventas' or request.resolver_match.url_name == 'reportes_sobres' %}active{% endif %}"
-                           href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle {% if 'reportes' in request.resolver_match.url_name %}active{% endif %}"
+                           href="#" data-bs-toggle="dropdown">
                             <i class="bi bi-graph-up"></i> Reportes
                         </a>
                         <ul class="dropdown-menu">
-                            <li>
-                                <a class="dropdown-item {% if request.resolver_match.url_name == 'reportes_ventas' %}active{% endif %}"
-                                   href="{% url 'reportes_ventas' %}">
-                                    <i class="bi bi-graph-up-arrow me-2 text-primary"></i>Ventas (app)
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item {% if request.resolver_match.url_name == 'reportes_sobres' %}active{% endif %}"
-                                   href="{% url 'reportes_sobres' %}">
-                                    <i class="bi bi-envelope-paper-fill me-2" style="color:#6f42c1;"></i>Sobres diarios
-                                </a>
-                            </li>
+                            <li><a class="dropdown-item" href="{% url 'reportes_ventas' %}"><i class="bi bi-bar-chart me-2"></i>Ventas</a></li>
+                            <li><a class="dropdown-item" href="{% url 'reportes_sobres' %}"><i class="bi bi-envelope-paper me-2"></i>Sobres</a></li>
                         </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'precios_lista' %}active{% endif %}"
-                            href="{% url 'precios_lista' %}">
-                            <i class="bi bi-currency-dollar"></i> Precios
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if 'pedidos_consulta' in request.resolver_match.url_name or 'sobres' in request.resolver_match.url_name or 'precios' in request.resolver_match.url_name %}{% endif %}"
+                           href="#" data-bs-toggle="dropdown">
+                            <i class="bi bi-box-seam"></i> Operaciones
                         </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'pedidos_consulta' %}"><i class="bi bi-search me-2"></i>Consultar Pedidos</a></li>
+                            <li><a class="dropdown-item" href="{% url 'sobres_lista' %}"><i class="bi bi-envelope me-2"></i>Sobres Diarios</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'precios_lista' %}"><i class="bi bi-currency-dollar me-2"></i>Precios</a></li>
+                            <li><a class="dropdown-item" href="{% url 'balones_lista' %}"><i class="bi bi-droplet me-2"></i>Balones</a></li>
+                            <li><a class="dropdown-item" href="{% url 'sectores_lista' %}"><i class="bi bi-geo-alt me-2"></i>Sectores</a></li>
+                        </ul>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'balones_lista' %}active{% endif %}"
-                            href="{% url 'balones_lista' %}">
-                            <i class="bi bi-droplet-half"></i> Gestionar Balones
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'sectores_lista' or request.resolver_match.url_name == 'sectores_crear' or request.resolver_match.url_name == 'sectores_editar' %}active{% endif %}"
-                            href="{% url 'sectores_lista' %}">
-                            <i class="bi bi-geo-alt"></i> Sectores
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'pedidos_consulta' %}active{% endif %}"
-                            href="{% url 'pedidos_consulta' %}">
-                            <i class="bi bi-search"></i> Consultar Pedidos
-                        </a>
-                    </li>
+                    {% endif %}
                     {% if user.rol == "admin" %}
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'auditoria_lista' %}active{% endif %}"
-                            href="{% url 'auditoria_lista' %}">
-                            <i class="bi bi-shield-check"></i> Auditoría
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                            <i class="bi bi-gear"></i> Admin
                         </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'auth_crear_usuario' %}"><i class="bi bi-person-plus me-2"></i>Crear Usuario</a></li>
+                            <li><a class="dropdown-item" href="{% url 'admin_usuarios_bodega' %}"><i class="bi bi-people me-2"></i>Asignar Bodegas</a></li>
+                            <li><a class="dropdown-item" href="{% url 'admin_crear_bodega' %}"><i class="bi bi-shop me-2"></i>Crear Bodega</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'auditoria_lista' %}"><i class="bi bi-shield-check me-2"></i>Auditoría</a></li>
+                        </ul>
                     </li>
                     {% endif %}
-                    {% endif %}
-                    {% if user.is_superuser %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'auth_crear_usuario' %}">
-                            <i class="bi bi-person-plus"></i> Crear Usuario
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'admin_crear_bodega' %}">
-                            <i class="bi bi-gear"></i> Panel Admin
-                        </a>
-                    </li>
                     {% endif %}
                     {% endif %}
                 </ul>
