@@ -546,7 +546,10 @@ def historial_sobres(request):
         monthrange(primer_dia_mes.year, primer_dia_mes.month)[1],
     )
 
-    todos_sobres = SobreDiario.objects.select_related('trabajador', 'creado_por').prefetch_related('lineas')
+    todos_sobres = filtrar_por_bodega(
+        SobreDiario.objects.select_related('trabajador', 'creado_por').prefetch_related('lineas'),
+        request
+    )
 
     if modo_historial == 'mes':
         todos_sobres = todos_sobres.filter(
