@@ -101,6 +101,7 @@ urlpatterns = [
     # MULTI-BODEGA (admin/jefe)
     # ────────────────────────────────────────────────
     path('bodegas/cambiar/', views.cambiar_bodega, name='bodegas_cambiar'),
+    path('admin/bodegas/', views.admin_lista_bodegas, name='admin_lista_bodegas'),
     path('admin/usuarios-bodega/', views.admin_usuarios_bodega, name='admin_usuarios_bodega'),
     path('admin/crear-bodega/', views.admin_crear_bodega, name='admin_crear_bodega'),
 ]

@@ -271,9 +271,9 @@
                             <i class="bi bi-gear"></i> Admin
                         </a>
                         <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{% url 'admin_lista_bodegas' %}"><i class="bi bi-shop me-2"></i>Gestionar Bodegas</a></li>
                             <li><a class="dropdown-item" href="{% url 'auth_crear_usuario' %}"><i class="bi bi-person-plus me-2"></i>Crear Usuario</a></li>
                             <li><a class="dropdown-item" href="{% url 'admin_usuarios_bodega' %}"><i class="bi bi-people me-2"></i>Asignar Bodegas</a></li>
-                            <li><a class="dropdown-item" href="{% url 'admin_crear_bodega' %}"><i class="bi bi-shop me-2"></i>Crear Bodega</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{% url 'auditoria_lista' %}"><i class="bi bi-shield-check me-2"></i>Auditoría</a></li>
                         </ul>
