@@ -52,7 +52,7 @@ USE_THOUSAND_SEPARATOR = True  # Esto es clave para activar los separadores de m
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
+    # 'django.contrib.admin',  # Deshabilitado: usamos vistas admin custom
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
