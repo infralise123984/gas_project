@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Gestionar Bodegas - GasFácil{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-shop me-2"></i> Bodegas</h2>
+        {% if user.rol == "admin" %}
+        <a href="{% url 'admin_crear_bodega' %}" class="btn btn-success">
+            <i class="bi bi-plus-lg me-1"></i> Nueva Bodega
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        {% for b in bodegas %}
+        <div class="col">
+            <div class="card h-100 shadow-sm {% if not b.activo %}border-danger opacity-75{% endif %}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-shop me-2 text-primary"></i>{{ b.nombre }}
+                        </h5>
+                        {% if user.rol == "admin" %}
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="bodega_id" value="{{ b.id }}">
+                            <input type="hidden" name="accion" value="toggle_activo">
+                            <button type="submit" class="btn btn-sm {% if b.activo %}btn-outline-danger{% else %}btn-outline-success{% endif %}"
+                                    title="{% if b.activo %}Desactivar{% else %}Activar{% endif %}">
+                                {% if b.activo %}<i class="bi bi-toggle-on"></i> Activa{% else %}<i class="bi bi-toggle-off"></i> Inactiva{% endif %}
+                            </button>
+                        </form>
+                        {% else %}
+                            {% if b.activo %}
+                            <span class="badge bg-success">Activa</span>
+                            {% else %}
+                            <span class="badge bg-danger">Inactiva</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+
+                    {% if b.direccion %}
+                    <p class="text-muted small mb-3"><i class="bi bi-geo-alt me-1"></i>{{ b.direccion }}</p>
+                    {% endif %}
+
+                    <div class="row text-center small">
+                        <div class="col">
+                            <div class="fw-bold text-primary">{{ b.total_pedidos }}</div>
+                            <div class="text-muted">Pedidos</div>
+                        </div>
+                        <div class="col">
+                            <div class="fw-bold text-success">{{ b.total_usuarios }}</div>
+                            <div class="text-muted">Usuarios</div>
+                        </div>
+                        <div class="col">
+                            <div class="fw-bold text-info">{{ b.total_sobres }}</div>
+                            <div class="text-muted">Sobres</div>
+                        </div>
+                    </div>
+                </div>
+
+                {% if user.rol == "admin" %}
+                <div class="card-footer bg-transparent">
+                    <form method="post" class="row g-1">
+                        {% csrf_token %}
+                        <input type="hidden" name="bodega_id" value="{{ b.id }}">
+                        <input type="hidden" name="accion" value="editar">
+                        <div class="col-8">
+                            <input type="text" name="nombre" value="{{ b.nombre }}" class="form-control form-control-sm" maxlength="100">
+                        </div>
+                        <div class="col-4">
+                            <button type="submit" class="btn btn-outline-primary btn-sm w-100"><i class="bi bi-check"></i></button>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12 text-center text-muted py-5">
+            <i class="bi bi-shop fs-1 d-block mb-3"></i>
+            No hay bodegas creadas.
+            <br>
+            <a href="{% url 'admin_crear_bodega' %}" class="btn btn-success mt-3">Crear primera bodega</a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

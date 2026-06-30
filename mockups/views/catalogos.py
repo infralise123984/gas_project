@@ -587,3 +587,45 @@ def admin_crear_bodega(request):
         'bodegas_existentes': bodegas_existentes,
     })
 
+
+@login_required
+def admin_lista_bodegas(request):
+    """Listar y gestionar bodegas (activar/desactivar, editar). Admin y jefe."""
+    resp = require_roles(request, ["admin", "jefe"], "index", "No tienes permiso.")
+    if resp:
+        return resp
+
+    bodegas = Bodega.objects.all().order_by('nombre')
+
+    if request.method == 'POST':
+        bodega_id = request.POST.get('bodega_id')
+        accion = request.POST.get('accion')
+        bodega = get_object_or_404(Bodega, id=bodega_id)
+
+        if accion == 'toggle_activo' and request.user.rol == 'admin':
+            bodega.activo = not bodega.activo
+            bodega.save(update_fields=['activo'])
+            estado = "activada" if bodega.activo else "desactivada"
+            messages.success(request, f"Bodega '{bodega.nombre}' {estado}.")
+        elif accion == 'editar' and request.user.rol == 'admin':
+            nombre = request.POST.get('nombre', '').strip()
+            direccion = request.POST.get('direccion', '').strip()
+            if nombre:
+                bodega.nombre = nombre
+                bodega.direccion = direccion
+                bodega.save(update_fields=['nombre', 'direccion'])
+                messages.success(request, f"Bodega '{bodega.nombre}' actualizada.")
+            else:
+                messages.error(request, "El nombre es obligatorio.")
+        return redirect('admin_lista_bodegas')
+
+    # Stats por bodega
+    for b in bodegas:
+        b.total_pedidos = b.pedidos.count()
+        b.total_usuarios = b.trabajadores.count()
+        b.total_sobres = b.sobres.count()
+
+    return render(request, 'admin/lista_bodegas.html', {
+        'bodegas': bodegas,
+    })
+
