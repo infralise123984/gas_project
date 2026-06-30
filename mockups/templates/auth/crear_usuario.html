@@ -104,6 +104,20 @@
                                 {% endfor %}
                             </div>
 
+                            <!-- Bodega -->
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Bodega</label>
+                                <select name="bodega" class="form-select form-select-lg{% if form.bodega.errors %} is-invalid{% endif %}">
+                                    <option value="">— Sin bodega —</option>
+                                    {% for b in form.fields.bodega.queryset %}
+                                    <option value="{{ b.id }}" {% if form.bodega.value|stringformat:"s" == b.id|stringformat:"s" %}selected{% endif %}>{{ b.nombre }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% for error in form.bodega.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
                             <!-- Contraseñas -->
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Contraseña <span class="text-danger">*</span></label>

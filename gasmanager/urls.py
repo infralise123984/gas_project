@@ -120,4 +120,5 @@ urlpatterns = [
     # ────────────────────────────────────────────────
     path('bodegas/cambiar/', views.cambiar_bodega, name='bodegas_cambiar'),
     path('admin/usuarios-bodega/', views.admin_usuarios_bodega, name='admin_usuarios_bodega'),
+    path('admin/crear-bodega/', views.admin_crear_bodega, name='admin_crear_bodega'),
 ]
