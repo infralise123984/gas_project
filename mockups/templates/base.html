@@ -309,6 +309,37 @@
                 </ul>
                 <ul class="navbar-nav ms-auto">
                     {% if user.is_authenticated %}
+                    {% if user.rol == "admin" or user.rol == "jefe" %}
+                    <!-- Bodega switcher -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" role="button"
+                           data-bs-toggle="dropdown" aria-expanded="false" title="Cambiar bodega">
+                            <i class="bi bi-shop fs-5"></i>
+                            <span class="d-none d-md-inline small">
+                                {% if bodega_activa %}{{ bodega_activa.nombre }}{% else %}Todas las bodegas{% endif %}
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            {% if user.rol == "admin" %}
+                            <li>
+                                <a class="dropdown-item{% if not bodega_activa %} active{% endif %}"
+                                   href="{% url 'bodegas_cambiar' %}?next={{ request.path }}">
+                                    <i class="bi bi-globe me-1"></i> Todas las bodegas
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
+                            {% for b in bodegas_disponibles %}
+                            <li>
+                                <a class="dropdown-item{% if bodega_activa and bodega_activa.id == b.id %} active{% endif %}"
+                                   href="{% url 'bodegas_cambiar' %}?bodega_id={{ b.id }}&next={{ request.path }}">
+                                    <i class="bi bi-shop me-1"></i> {{ b.nombre }}
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </li>
+                    {% endif %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle d-flex align-items-center gap-2 ps-2 pe-3" href="#" role="button" data-bs-toggle="dropdown"
                             aria-expanded="false" title="Perfil de usuario">

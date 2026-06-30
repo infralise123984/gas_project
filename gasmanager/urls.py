@@ -114,4 +114,9 @@ urlpatterns = [
     
     # Service Worker debe servirse desde la raíz para tener scope completo
     path('sw.js', views.service_worker, name='service_worker'),
+
+    # ────────────────────────────────────────────────
+    # MULTI-BODEGA (admin/jefe)
+    # ────────────────────────────────────────────────
+    path('bodegas/cambiar/', views.cambiar_bodega, name='bodegas_cambiar'),
 ]

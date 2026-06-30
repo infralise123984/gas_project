@@ -30,6 +30,7 @@ from mockups.utils.fechas import (
     now_chile,
 )
 from mockups.utils.permisos import get_client_ip, require_roles
+from mockups.models import Bodega
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -47,6 +48,17 @@ def index(request):
     context = {
         'hora_servidor': now_chile().isoformat(),
     }
+    # Poner bodegas disponibles en context para admin/jefe
+    if request.user.is_authenticated:
+        from mockups.utils.permisos import get_bodega_actual
+        bodega = get_bodega_actual(request)
+        if bodega:
+            context['bodega_activa'] = bodega
+        if request.user.rol in ('jefe', 'admin'):
+            bodegas_qs = Bodega.objects.filter(activo=True)
+            if request.user.bodega:
+                bodegas_qs = bodegas_qs | Bodega.objects.filter(id=request.user.bodega_id)
+            context['bodegas_disponibles'] = bodegas_qs.distinct()
     return render(request, "index.html", context)
 
 
@@ -478,4 +490,35 @@ def crear_usuario(request):
         )
 
     return render(request, "auth/crear_usuario.html", {"form": form})
+
+
+
+# ──────────────────────────────────────────────────────────────
+# BODEGA SWITCHER (admin / jefe)
+# ──────────────────────────────────────────────────────────────
+
+@login_required
+def cambiar_bodega(request):
+    """Cambia la bodega activa en sesión para admin/jefe."""
+    bodega_id = request.GET.get('bodega_id')
+    next_url = request.GET.get('next', '/')
+
+    if request.user.rol not in ('admin', 'jefe'):
+        messages.error(request, "No tienes permiso para cambiar de bodega.")
+        return redirect(next_url)
+
+    if bodega_id:
+        bodega = Bodega.objects.filter(id=bodega_id, activo=True).first()
+        if bodega:
+            request.session['active_bodega_id'] = bodega.id
+            messages.info(request, f"Bodega cambiada a: {bodega.nombre}")
+        else:
+            messages.warning(request, "Bodega no encontrada o inactiva.")
+    else:
+        # Sin bodega_id → ver todas (solo admin)
+        if 'active_bodega_id' in request.session:
+            del request.session['active_bodega_id']
+            messages.info(request, "Mostrando datos de todas las bodegas.")
+
+    return redirect(next_url)
 
