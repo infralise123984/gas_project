@@ -74,6 +74,7 @@ def get_bodega_actual(request):
     - admin (bodega=None): lee 'active_bodega_id' de la sesión
     - jefe: su propia bodega asignada
     - otros roles: request.user.bodega directamente
+    Retorna None si no hay bodega seleccionada (admin sin sesión activa).
     """
     if request.user.rol == 'admin' and request.user.bodega is None:
         bodega_id = request.session.get('active_bodega_id')
@@ -82,3 +83,15 @@ def get_bodega_actual(request):
             return Bodega.objects.filter(id=bodega_id, activo=True).first()
         return None
     return request.user.bodega
+
+
+def filtrar_por_bodega(qs, request):
+    """Aplica filtro de bodega a un queryset.
+
+    Si get_bodega_actual() retorna None (admin sin selección),
+    NO filtra — muestra todo. En cualquier otro caso, filtra.
+    """
+    bodega = get_bodega_actual(request)
+    if bodega is not None:
+        return qs.filter(bodega=bodega)
+    return qs

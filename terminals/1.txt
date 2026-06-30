@@ -1,0 +1,16 @@
+---
+pid: 2564
+cwd: "C:\Users\tokyo-3\Desktop\proyecto\gas_project"
+command: "cd \"C:\\Users\\tokyo-3\\Desktop\\proyecto\\gas_project\"; .\\venv\\Scripts\\python.exe manage.py test mockups.tests security_tests -v 0 2>&1 | Select-Object -Last 8"
+started_at: 2026-06-21T14:13:28.576Z
+running_for_ms: 3535004  
+---
+AXES: New login failure by {username: "********************", ip_address: "********************", user_agent: 
+"<unknown>", path_info: "/auth/login/"}. Created new record in the database.
+[2026-06-21 10:13:58,403] WARNING security LOGIN_FAIL | User: ' UNION SELECT * FROM usuarios-- | IP: 127.0.0.1
+AXES: New login failure by {username: "********************", ip_address: "********************", user_agent: 
+"<unknown>", path_info: "/auth/login/"}. Created new record in the database.
+[2026-06-21 10:13:58,803] WARNING security LOGIN_FAIL | User: 1; DROP TABLE usuarios;-- | IP: 127.0.0.1
+----------------------------------------------------------------------
+Ran 34 tests in 20.111s
+OK
