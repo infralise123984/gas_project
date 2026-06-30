@@ -6,7 +6,7 @@ from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory, BaseInlineFormSet
 from django.utils.safestring import mark_safe
-from .models import Pedido, DetallePedido, TipoBalon, Sector, SobreDiario, LineaSobre, LineaPago, LineaGasto, Usuario
+from .models import Pedido, DetallePedido, TipoBalon, Sector, SobreDiario, LineaSobre, LineaPago, LineaGasto, Usuario, Bodega
 
 
 def get_sector_choices(include_blank=True, include_inactive=False, selected_value=None):
@@ -97,6 +97,14 @@ class CrearUsuarioSeguroForm(forms.Form):
     rol = forms.ChoiceField(
         label="Rol",
         choices=[("", "— Seleccionar rol —")] + Usuario.ROLES,
+        widget=forms.Select(attrs={
+            'class': 'form-select form-select-lg',
+        }),
+    )
+    bodega = forms.ModelChoiceField(
+        label="Bodega",
+        queryset=Bodega.objects.filter(activo=True).order_by('nombre'),
+        required=False,
         widget=forms.Select(attrs={
             'class': 'form-select form-select-lg',
         }),

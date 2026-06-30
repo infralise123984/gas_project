@@ -449,7 +449,9 @@ def crear_usuario(request):
                     password=data['password1'],
                 )
                 user.is_active = True
-                user.save(update_fields=['is_active'])
+                if data.get('bodega'):
+                    user.bodega = data['bodega']
+                user.save(update_fields=['is_active', 'bodega'])
 
             AuditoriaAccion.registrar(
                 request=request,
@@ -461,6 +463,7 @@ def crear_usuario(request):
                     'nombre': user.get_full_name(),
                     'rol': user.rol,
                     'telefono': user.telefono,
+                    'bodega': user.bodega.nombre if user.bodega else None,
                 }
             )
             audit_logger.info(f"USER_CREATE | New: {user.username} | By: {request.user.username}")

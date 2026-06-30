@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from mockups.forms import (
@@ -540,5 +541,49 @@ def admin_usuarios_bodega(request):
     return render(request, 'admin/usuarios_bodega.html', {
         'usuarios': usuarios,
         'bodegas': bodegas,
+    })
+
+
+@login_required
+def admin_crear_bodega(request):
+    """Crear nueva bodega. Solo admin."""
+    resp = require_roles(request, ["admin"], "index", "No tienes permiso.")
+    if resp:
+        return resp
+
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre', '').strip()
+        direccion = request.POST.get('direccion', '').strip()
+        copiar_precios_de = request.POST.get('copiar_precios_de')
+
+        if not nombre:
+            messages.error(request, "El nombre es obligatorio.")
+            return redirect('admin_crear_bodega')
+
+        if Bodega.objects.filter(nombre__iexact=nombre).exists():
+            messages.error(request, f"Ya existe una bodega llamada '{nombre}'.")
+            return redirect('admin_crear_bodega')
+
+        bodega = Bodega.objects.create(nombre=nombre, direccion=direccion)
+
+        # Opcional: copiar sectores de otra bodega
+        if copiar_precios_de:
+            bodega_origen = Bodega.objects.filter(id=copiar_precios_de).first()
+            if bodega_origen:
+                for sector in bodega_origen.sectores.all():
+                    Sector.objects.create(
+                        nombre=sector.nombre,
+                        codigo=f"{slugify(nombre)}-{sector.codigo}"[:120],
+                        zona=sector.zona,
+                        activo=sector.activo,
+                        bodega=bodega,
+                    )
+
+        messages.success(request, f"Bodega '{nombre}' creada correctamente.")
+        return redirect('admin_usuarios_bodega')
+
+    bodegas_existentes = Bodega.objects.filter(activo=True).order_by('nombre')
+    return render(request, 'admin/crear_bodega.html', {
+        'bodegas_existentes': bodegas_existentes,
     })
 
