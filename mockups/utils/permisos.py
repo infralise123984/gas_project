@@ -66,3 +66,19 @@ def get_display_name(user):
         return "—"
     nombre = (user.get_full_name() or "").strip()
     return nombre if nombre else user.username
+
+
+def get_bodega_actual(request):
+    """Retorna la Bodega activa según el contexto del usuario.
+
+    - admin (bodega=None): lee 'active_bodega_id' de la sesión
+    - jefe: su propia bodega asignada
+    - otros roles: request.user.bodega directamente
+    """
+    if request.user.rol == 'admin' and request.user.bodega is None:
+        bodega_id = request.session.get('active_bodega_id')
+        if bodega_id:
+            from mockups.models import Bodega
+            return Bodega.objects.filter(id=bodega_id, activo=True).first()
+        return None
+    return request.user.bodega

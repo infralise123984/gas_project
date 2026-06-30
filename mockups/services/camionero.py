@@ -17,7 +17,7 @@ def filtro_actividad_camionero_q(usuario):
 def queryset_actividad_camionero_dia(usuario, fecha_dia):
     """Pedidos del camionero en un día (todas las actividades visibles)."""
     inicio, fin = rango_dia_chile(fecha_dia)
-    return (
+    qs = (
         Pedido.objects.filter(
             fecha__gte=inicio,
             fecha__lt=fin,
@@ -27,6 +27,9 @@ def queryset_actividad_camionero_dia(usuario, fecha_dia):
         .prefetch_related('detalles__balon')
         .order_by('-fecha')
     )
+    if usuario.bodega:
+        qs = qs.filter(bodega=usuario.bodega)
+    return qs
 
 
 def stats_ventas_camionero(queryset_entregados):

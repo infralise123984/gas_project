@@ -19,7 +19,7 @@ from mockups.models import (
 from mockups.utils.fechas import (
     today_chile,
 )
-from mockups.utils.permisos import require_roles
+from mockups.utils.permisos import require_roles, get_bodega_actual
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -99,6 +99,7 @@ def reporte_ventas(request):
         estado="entregado",
         fecha__gte=dt_inicio,
         fecha__lte=dt_fin,
+        bodega=get_bodega_actual(request),
     ).select_related('registrador', 'entregador').prefetch_related('detalles__balon')
     
     if filtro_origen:

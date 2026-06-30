@@ -33,6 +33,7 @@ def get_pedidos_queryset_para_sobre(sobre):
             fecha__lte=fin_dia,
             origen='local',
             estado='entregado',
+            bodega=sobre.bodega,
         )
 
     return Pedido.objects.filter(
@@ -40,6 +41,7 @@ def get_pedidos_queryset_para_sobre(sobre):
         fecha__lte=fin_dia,
         estado='entregado',
         entregador=sobre.trabajador,
+        bodega=sobre.bodega,
     )
 
 

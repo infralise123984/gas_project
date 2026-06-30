@@ -22,7 +22,7 @@ from mockups.models import (
     TipoBalon,
 )
 from mockups.services.catalogos import get_balones_activos_ordenados
-from mockups.utils.permisos import require_roles
+from mockups.utils.permisos import require_roles, get_bodega_actual
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -404,7 +404,8 @@ def gestionar_sectores_lista(request):
     if resp:
         return resp
 
-    sectores = list(Sector.objects.all().order_by('zona', 'nombre'))
+    bodega = get_bodega_actual(request)
+    sectores = list(Sector.objects.filter(bodega=bodega).order_by('zona', 'nombre'))
     conteos_pedidos = {
         item['sector']: item['total']
         for item in Pedido.objects.exclude(sector='').values('sector').annotate(total=Count('id'))

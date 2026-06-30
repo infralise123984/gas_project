@@ -30,4 +30,4 @@ from mockups.utils.fechas import (  # noqa: F401
     rango_dia_chile,
     today_chile,
 )
-from mockups.utils.permisos import get_client_ip, get_display_name, require_roles, require_roles_api  # noqa: F401
+from mockups.utils.permisos import get_client_ip, get_display_name, require_roles, require_roles_api, get_bodega_actual  # noqa: F401
