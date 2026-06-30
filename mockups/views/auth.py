@@ -522,3 +522,36 @@ def cambiar_bodega(request):
 
     return redirect(next_url)
 
+
+
+# ──────────────────────────────────────────────────────────────
+# ADMIN: ASIGNAR BODEGAS A USUARIOS
+# ──────────────────────────────────────────────────────────────
+
+@login_required
+def asignar_bodega_usuarios(request):
+    """Admin asigna bodega a cada usuario (evita cruce de datos entre bodegas)."""
+    if request.user.rol != 'admin':
+        messages.error(request, "Solo administradores pueden asignar bodegas.")
+        return redirect('index')
+
+    bodegas = Bodega.objects.filter(activo=True).order_by('nombre')
+
+    if request.method == 'POST':
+        for usuario in Usuario.objects.all():
+            bodega_id = request.POST.get(f'bodega_{usuario.id}')
+            if bodega_id:
+                usuario.bodega_id = int(bodega_id)
+            else:
+                usuario.bodega = None  # admin sin bodega fija
+            usuario.save(update_fields=['bodega'])
+
+        messages.success(request, "Bodegas asignadas correctamente.")
+        return redirect('index')
+
+    usuarios = Usuario.objects.all().order_by('rol', 'username')
+    return render(request, 'auth/asignar_bodega_usuarios.html', {
+        'usuarios': usuarios,
+        'bodegas': bodegas,
+    })
+
