@@ -19,7 +19,7 @@ from mockups.models import (
 from mockups.utils.fechas import (
     today_chile,
 )
-from mockups.utils.permisos import require_roles, get_bodega_actual
+from mockups.utils.permisos import require_roles, filtrar_por_bodega
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -95,12 +95,11 @@ def reporte_ventas(request):
     # ═══════════════════════════════════════════════════════════
     # 2. CONSULTA BASE
     # ═══════════════════════════════════════════════════════════
-    pedidos = Pedido.objects.filter(
+    pedidos = filtrar_por_bodega(Pedido.objects.filter(
         estado="entregado",
         fecha__gte=dt_inicio,
         fecha__lte=dt_fin,
-        bodega=get_bodega_actual(request),
-    ).select_related('registrador', 'entregador').prefetch_related('detalles__balon')
+    ), request).select_related('registrador', 'entregador').prefetch_related('detalles__balon')
     
     if filtro_origen:
         pedidos = pedidos.filter(origen=filtro_origen)

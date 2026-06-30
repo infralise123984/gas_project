@@ -33,7 +33,7 @@ from mockups.utils.fechas import (
     now_chile,
     today_chile,
 )
-from mockups.utils.permisos import require_roles, require_roles_api, get_bodega_actual
+from mockups.utils.permisos import require_roles, require_roles_api, get_bodega_actual, filtrar_por_bodega
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -65,18 +65,19 @@ def lista_sobres_diarios(request):
         fecha_filtro = hoy
         messages.warning(request, "La fecha indicada no es valida. Se mostro la fecha de hoy.")
 
-    camioneros = Usuario.objects.filter(
-        rol='camionero', is_active=True,
-        bodega=get_bodega_actual(request)
-    ).order_by('first_name', 'last_name')
+    bodega_actual = get_bodega_actual(request)
+
+    camioneros_qs = Usuario.objects.filter(rol='camionero', is_active=True)
+    if bodega_actual:
+        camioneros_qs = camioneros_qs.filter(bodega=bodega_actual)
+    camioneros = camioneros_qs.order_by('first_name', 'last_name')
 
     inicio_dia, fin_dia = get_rango_utc_para_fecha(fecha_filtro)
 
-    sobres_del_dia = SobreDiario.objects.filter(
+    sobres_del_dia = filtrar_por_bodega(SobreDiario.objects.filter(
         fecha__gte=inicio_dia,
         fecha__lte=fin_dia,
-        bodega=get_bodega_actual(request),
-    ).select_related('trabajador', 'creado_por').order_by('-fecha', '-id')
+    ), request).select_related('trabajador', 'creado_por').order_by('-fecha', '-id')
 
     # Sobres de bodega creados en la fecha seleccionada
     sobres_bodega = list(sobres_del_dia.filter(tipo='bodega'))

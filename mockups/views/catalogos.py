@@ -15,14 +15,16 @@ from mockups.forms import (
 )
 from mockups.models import (
     AuditoriaAccion,
+    Bodega,
     DetallePedido,
     HistorialPrecioBalon,
     Pedido,
     Sector,
     TipoBalon,
+    Usuario,
 )
 from mockups.services.catalogos import get_balones_activos_ordenados
-from mockups.utils.permisos import require_roles, get_bodega_actual
+from mockups.utils.permisos import require_roles, filtrar_por_bodega
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -404,8 +406,9 @@ def gestionar_sectores_lista(request):
     if resp:
         return resp
 
-    bodega = get_bodega_actual(request)
-    sectores = list(Sector.objects.filter(bodega=bodega).order_by('zona', 'nombre'))
+    sectores = list(
+        filtrar_por_bodega(Sector.objects.all().order_by('zona', 'nombre'), request)
+    )
     conteos_pedidos = {
         item['sector']: item['total']
         for item in Pedido.objects.exclude(sector='').values('sector').annotate(total=Count('id'))
@@ -504,4 +507,38 @@ def gestionar_sectores_eliminar(request, sector_id):
         messages.success(request, f"Sector '{nombre}' eliminado correctamente.")
 
     return redirect('sectores_lista')
+
+
+# ──────────────────────────────────────────────────────────────
+# ADMIN: ASIGNACIÓN DE BODEGA A USUARIOS
+# ──────────────────────────────────────────────────────────────
+
+@login_required
+def admin_usuarios_bodega(request):
+    """Lista usuarios y permite asignar/editar su bodega. Solo admin."""
+    resp = require_roles(request, ["admin"], "index", "No tienes permiso.")
+    if resp:
+        return resp
+
+    bodegas = Bodega.objects.filter(activo=True).order_by('nombre')
+    usuarios = Usuario.objects.all().order_by('rol', 'username')
+
+    if request.method == 'POST':
+        for usuario in usuarios:
+            bodega_id_key = f'bodega_{usuario.id}'
+            if bodega_id_key in request.POST:
+                new_bodega_id = request.POST.get(bodega_id_key)
+                if new_bodega_id:
+                    usuario.bodega_id = int(new_bodega_id)
+                else:
+                    usuario.bodega = None
+                usuario.save(update_fields=['bodega'])
+
+        messages.success(request, "Bodegas asignadas correctamente.")
+        return redirect('admin_usuarios_bodega')
+
+    return render(request, 'admin/usuarios_bodega.html', {
+        'usuarios': usuarios,
+        'bodegas': bodegas,
+    })
 
