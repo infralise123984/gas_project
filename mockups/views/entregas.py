@@ -280,6 +280,7 @@ def camionero_entregas_api(request):
         entregador__isnull=True,
         fecha__gte=inicio_dia,
         fecha__lt=fin_dia,
+        bodega=user.bodega,
     ).select_related('registrador').prefetch_related('detalles__balon').order_by("-fecha")
 
     pedidos_en_ruta_list = list(pedidos_en_ruta)
@@ -527,6 +528,7 @@ def tarreo_pedido(request):
             estado='entregado',  # venta directa → entregado inmediatamente
             fecha=timezone.now(),
         )
+        pedido.bodega = request.user.bodega
         pedido.save()
 
         # Procesar detalles (similar a transaccional_pedido)

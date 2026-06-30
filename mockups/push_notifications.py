@@ -186,11 +186,12 @@ def notificar_nuevo_pedido(pedido):
     if pedido.estado != 'pendiente' or pedido.origen not in ['telefono', 'tarreo']:
         return 0
     
-    # Obtener suscripciones activas de camioneros
+    # Obtener suscripciones activas de camioneros de la misma bodega
     suscripciones = PushSubscription.objects.filter(
         usuario__rol='camionero',
         usuario__is_active=True,
-        activa=True
+        activa=True,
+        usuario__bodega=pedido.bodega,
     ).select_related('usuario')
     
     if not suscripciones.exists():

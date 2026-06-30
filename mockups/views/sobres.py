@@ -33,7 +33,7 @@ from mockups.utils.fechas import (
     now_chile,
     today_chile,
 )
-from mockups.utils.permisos import require_roles, require_roles_api
+from mockups.utils.permisos import require_roles, require_roles_api, get_bodega_actual
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -65,13 +65,17 @@ def lista_sobres_diarios(request):
         fecha_filtro = hoy
         messages.warning(request, "La fecha indicada no es valida. Se mostro la fecha de hoy.")
 
-    camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+    camioneros = Usuario.objects.filter(
+        rol='camionero', is_active=True,
+        bodega=get_bodega_actual(request)
+    ).order_by('first_name', 'last_name')
 
     inicio_dia, fin_dia = get_rango_utc_para_fecha(fecha_filtro)
 
     sobres_del_dia = SobreDiario.objects.filter(
         fecha__gte=inicio_dia,
         fecha__lte=fin_dia,
+        bodega=get_bodega_actual(request),
     ).select_related('trabajador', 'creado_por').order_by('-fecha', '-id')
 
     # Sobres de bodega creados en la fecha seleccionada
@@ -195,6 +199,7 @@ def editar_sobre_diario(request):
                 trabajador=trabajador,
                 creado_por=usuario,
                 fecha_correspondiente=fecha_objetivo,
+                bodega=usuario.bodega,
             )
             creado = True
         
@@ -409,6 +414,7 @@ def crear_sobre_nuevo(request):
             tipo=tipo_sobre,
             trabajador=trabajador,
             creado_por=request.user,
+            bodega=request.user.bodega,
         )
         messages.success(request, f"Sobre creado para la fecha {fecha_correspondiente.strftime('%d/%m/%Y')}.")
         
@@ -466,6 +472,7 @@ def crear_sobre_post_cierre(request, sobre_id):
             tipo=sobre_anterior.tipo,
             trabajador=sobre_anterior.trabajador,
             creado_por=request.user,
+            bodega=sobre_anterior.bodega,
             cerrado=False,  # IMPORTANTE: Asegurar que el nuevo sobre está ABIERTO
         )
         

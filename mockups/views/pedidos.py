@@ -80,6 +80,7 @@ def transaccional_pedido(request):
             pedido.origen = "local" if es_bodeguero else "telefono"
             pedido.estado = "entregado" if es_bodeguero else "pendiente"
             pedido.fecha = now_chile()
+            pedido.bodega = request.user.bodega
             pedido.save()
 
             # Guardar detalles del pedido
