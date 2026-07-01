@@ -17,19 +17,24 @@
 {% if pedidos_hoy %}
     {% for pedido in pedidos_hoy %}
     <div class="card shadow mb-4 border-3 border-{% if pedido.estado == 'entregado' %}success{% elif pedido.estado == 'en_ruta' %}warning{% elif pedido.estado == 'cancelado' %}danger{% else %}info{% endif %}">
+        {% if pedido.estado == 'en_ruta' %}
+        <div class="bg-warning text-dark text-center fw-bold py-2 fs-5">
+            <i class="bi bi-truck me-2"></i>PEDIDO EN RUTA — AÚN NO ENTREGADO
+        </div>
+        {% endif %}
         {% if pedido.estado == 'cancelado' %}
         <div class="bg-danger text-white text-center fw-bold py-2 fs-5">
             <i class="bi bi-x-circle-fill me-2"></i>PEDIDO CANCELADO
         </div>
         {% endif %}
-        <div class="card-body p-4 text-center{% if pedido.estado == 'cancelado' %} bg-danger bg-opacity-10{% endif %}">
+        <div class="card-body p-4 text-center{% if pedido.estado == 'cancelado' %} bg-danger bg-opacity-10{% elif pedido.estado == 'en_ruta' %} bg-warning bg-opacity-10{% endif %}">
 
             <!-- Número de pedido grande -->
             <h4 class="fw-bold mb-3 {% if pedido.estado == 'cancelado' %}text-danger{% else %}text-dark{% endif %}">Pedido #{{ pedido.id }}</h4>
 
             <!-- Productos (lista clara) -->
             <div class="mb-4">
-                <h5 class="fw-bold mb-2">Productos{% if pedido.estado != 'cancelado' %} entregados{% endif %}:</h5>
+                <h5 class="fw-bold mb-2">Productos{% if pedido.estado == 'en_ruta' %} a entregar{% elif pedido.estado == 'entregado' %} entregados{% endif %}:</h5>
                 <ul class="list-group list-group-flush">
                     {% for detalle in pedido.detalles.all %}
                     <li class="list-group-item d-flex justify-content-between align-items-center fs-5{% if pedido.estado == 'cancelado' %} bg-transparent{% endif %}">
@@ -69,7 +74,7 @@
 
             <!-- Fecha y hora -->
             <small class="text-muted d-block">
-                {% if pedido.estado == 'cancelado' %}Cancelado{% elif pedido.estado == 'en_ruta' %}En ruta desde{% else %}Entregado{% endif %}: {{ pedido.fecha|date:"d/m/Y H:i" }}
+                {% if pedido.estado == 'cancelado' %}Cancelado{% elif pedido.estado == 'en_ruta' %}<span class="text-warning fw-semibold">En ruta</span> desde{% else %}Entregado{% endif %}: {{ pedido.fecha|date:"d/m/Y H:i" }}
             </small>
 
         </div>
