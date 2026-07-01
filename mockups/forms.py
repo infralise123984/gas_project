@@ -751,14 +751,20 @@ class SectorForm(forms.ModelForm):
             'activo': 'Disponible para uso futuro',
         }
 
+    def __init__(self, *args, **kwargs):
+        self._bodega = kwargs.pop('bodega', None)
+        super().__init__(*args, **kwargs)
+
     def clean_nombre(self):
         nombre = (self.cleaned_data.get('nombre') or '').strip()
         if not nombre:
             raise forms.ValidationError('Debes ingresar un nombre de sector.')
 
         queryset = Sector.objects.filter(nombre__iexact=nombre)
+        if self._bodega:
+            queryset = queryset.filter(bodega=self._bodega)
         if self.instance.pk:
             queryset = queryset.exclude(pk=self.instance.pk)
         if queryset.exists():
-            raise forms.ValidationError('Ya existe un sector con ese nombre.')
+            raise forms.ValidationError('Ya existe un sector con ese nombre en esta bodega.')
         return nombre
