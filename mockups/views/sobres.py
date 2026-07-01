@@ -122,6 +122,11 @@ def editar_sobre_diario(request):
     # CASO 1: Si viene sobre_id, cargar directamente ese sobre
     if sobre_id:
         sobre = get_object_or_404(SobreDiario, id=sobre_id)
+        # Validar que el sobre pertenece a la bodega del usuario
+        bodega_actual = get_bodega_actual(request)
+        if bodega_actual and sobre.bodega != bodega_actual:
+            messages.error(request, "Este sobre no pertenece a tu bodega.")
+            return redirect('sobres_lista')
         if sobre.tipo == 'bodega':
             titulo = "Sobre Diario - Bodega"
         else:
@@ -351,6 +356,9 @@ def refrescar_sobre_diario(request, sobre_id):
         return resp
 
     sobre = get_object_or_404(SobreDiario, id=sobre_id)
+    bodega_actual = get_bodega_actual(request)
+    if bodega_actual and sobre.bodega != bodega_actual:
+        return JsonResponse({'ok': False, 'error': 'Sobre no pertenece a tu bodega.'}, status=403)
 
     if sobre.cerrado:
         return JsonResponse({'ok': True, 'cerrado': True, 'lineas': []})
@@ -448,6 +456,11 @@ def crear_sobre_post_cierre(request, sobre_id):
 
     # Obtener el sobre anterior
     sobre_anterior = get_object_or_404(SobreDiario, id=sobre_id)
+    # Validar bodega
+    bodega_actual = get_bodega_actual(request)
+    if bodega_actual and sobre_anterior.bodega != bodega_actual:
+        messages.error(request, "Este sobre no pertenece a tu bodega.")
+        return redirect('sobres_lista')
     
     # Validar que el sobre anterior esté CERRADO (salvo que se fuerce por jefe/admin)
     forzar = request.POST.get('forzar_creacion') == '1'
@@ -627,6 +640,10 @@ def imprimir_sobre_diario(request, sobre_id):
         return resp
 
     sobre = get_object_or_404(SobreDiario, id=sobre_id)
+    bodega_actual = get_bodega_actual(request)
+    if bodega_actual and sobre.bodega != bodega_actual:
+        messages.error(request, "Este sobre no pertenece a tu bodega.")
+        return redirect('sobres_lista')
     lineas = sobre.lineas.all().annotate(
         tipo_orden=Case(
             When(balon__tipo_gas='normal', then=Value(0)),

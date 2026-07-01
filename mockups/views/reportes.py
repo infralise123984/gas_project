@@ -19,7 +19,7 @@ from mockups.models import (
 from mockups.utils.fechas import (
     today_chile,
 )
-from mockups.utils.permisos import require_roles, filtrar_por_bodega
+from mockups.utils.permisos import require_roles, filtrar_por_bodega, filtrar_por_bodega
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -419,11 +419,11 @@ def reporte_sobres(request):
     # ═══════════════════════════════════════════════════════════
     # 2. QUERYSET BASE — solo sobres cerrados del mes
     # ═══════════════════════════════════════════════════════════
-    sobres_qs = SobreDiario.objects.filter(
+    sobres_qs = filtrar_por_bodega(SobreDiario.objects.filter(
         fecha_correspondiente__gte=fecha_inicio,
         fecha_correspondiente__lte=fecha_fin,
         cerrado=True,
-    ).select_related('trabajador').prefetch_related(
+    ), request).select_related('trabajador').prefetch_related(
         'lineas__balon', 'pagos', 'gastos'
     )
 

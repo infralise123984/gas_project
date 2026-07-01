@@ -30,7 +30,7 @@ from mockups.utils.fechas import (
     now_chile,
     parse_fecha_rango,
 )
-from mockups.utils.permisos import require_roles, require_roles_api
+from mockups.utils.permisos import require_roles, require_roles_api, filtrar_por_bodega, get_bodega_actual
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -491,11 +491,11 @@ def consultas_pedidos(request):
         messages.warning(request, "Formato de fechas inválido. Usa el selector de fechas.")
 
     # Queryset base optimizado
-    queryset = Pedido.objects.select_related(
+    queryset = filtrar_por_bodega(Pedido.objects.select_related(
         "registrador", "entregador"
     ).prefetch_related(
         "detalles__balon"
-    ).order_by("-fecha")
+    ).order_by("-fecha"), request)
 
     # Aplicación de filtros
     if fecha_inicio and fecha_fin:
@@ -564,6 +564,12 @@ def detalle_pedido(request, pedido_id):
 
     try:
         pedido = Pedido.objects.select_related('registrador', 'entregador').prefetch_related('detalles__balon').get(id=pedido_id)
+
+        # Validación de bodega
+        bodega_usuario = get_bodega_actual(request)
+        if bodega_usuario and pedido.bodega != bodega_usuario:
+            messages.error(request, "Este pedido no pertenece a tu bodega.")
+            return redirect('index')
 
         # Validación de propiedad: si no es jefe/admin, verificar relación
         if request.user.rol not in ["jefe", "admin"]:
