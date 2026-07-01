@@ -60,7 +60,7 @@ def mis_entregas_camionero(request):
     stats = stats_ventas_camionero(pedidos_entregados)
 
     context = {
-        "pedidos_hoy": pedidos_hoy,
+        "pedidos_hoy": pedidos_entregados,  # Solo entregados — "Mis Entregas" muestra lo completado
         "total_entregas_hoy": stats['total_entregas'],
         "total_monto_hoy": stats['total_monto'],
         "total_kilos_hoy": stats['total_kilos'],
@@ -83,7 +83,7 @@ def mis_entregas_camionero_api(request):
     stats = stats_ventas_camionero(pedidos_entregados)
 
     context = {
-        'pedidos_hoy': pedidos_hoy,
+        'pedidos_hoy': pedidos_entregados,  # Solo entregados
         'total_entregas_hoy': stats['total_entregas'],
         'total_monto_hoy': stats['total_monto'],
         'total_kilos_hoy': stats['total_kilos'],
