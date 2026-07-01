@@ -272,82 +272,78 @@ def notificar_recordatorio_pendientes():
     Returns:
         Dict con estadísticas de envío
     """
-    from .models import Pedido, PushSubscription
+    from .models import Pedido, PushSubscription, Bodega
     from django.utils import timezone
     from datetime import timedelta
     
-    # Obtener pedidos pendientes de más de 5 minutos
+    # Obtener pedidos pendientes de más de 5 minutos, agrupados por bodega
     limite = timezone.now() - timedelta(minutes=5)
-    pedidos_pendientes = Pedido.objects.filter(
-        estado='pendiente',
-        origen__in=['telefono', 'tarreo'],
-        fecha__lt=limite
-    ).order_by('fecha')
+    bodegas_con_pendientes = Bodega.objects.filter(
+        pedidos__estado='pendiente',
+        pedidos__origen__in=['telefono', 'tarreo'],
+        pedidos__fecha__lt=limite,
+        activo=True,
+    ).distinct()
     
-    if not pedidos_pendientes.exists():
-        return {'enviados': 0, 'pedidos': 0}
+    if not bodegas_con_pendientes.exists():
+        return {'enviados': 0, 'pedidos': 0, 'bodegas': 0}
     
-    # Obtener suscripciones activas
-    suscripciones = PushSubscription.objects.filter(
-        usuario__rol='camionero',
-        usuario__is_active=True,
-        activa=True
-    ).select_related('usuario')
+    total_enviados = 0
+    total_pedidos = 0
     
-    if not suscripciones.exists():
-        return {'enviados': 0, 'pedidos': pedidos_pendientes.count()}
-    
-    # Mensaje de recordatorio
-    count = pedidos_pendientes.count()
-    title = f'⏰ {count} pedido{"s" if count > 1 else ""} pendiente{"s" if count > 1 else ""}'
-    
-    body = _resumen_ubicaciones_pedidos(pedidos_pendientes)
-    if count > 3:
-        body += " y más..."
-    
-    enviados = 0
-    errores = []
-    errores_detalle = []
-    
-    for sub in suscripciones:
-        subscription_info = {
-            'endpoint': sub.endpoint,
-            'keys': {
-                'p256dh': sub.p256dh,
-                'auth': sub.auth
+    for bodega in bodegas_con_pendientes:
+        pedidos_pendientes = Pedido.objects.filter(
+            estado='pendiente',
+            origen__in=['telefono', 'tarreo'],
+            fecha__lt=limite,
+            bodega=bodega,
+        ).order_by('fecha')
+        
+        if not pedidos_pendientes.exists():
+            continue
+        
+        # Solo camioneros de esta bodega
+        suscripciones = PushSubscription.objects.filter(
+            usuario__rol='camionero',
+            usuario__is_active=True,
+            usuario__bodega=bodega,
+            activa=True
+        ).select_related('usuario')
+        
+        if not suscripciones.exists():
+            continue
+        
+        count = pedidos_pendientes.count()
+        total_pedidos += count
+        
+        body = _resumen_ubicaciones_pedidos(pedidos_pendientes)
+        if count > 3:
+            body += " y más..."
+        
+        for sub in suscripciones:
+            subscription_info = {
+                'endpoint': sub.endpoint,
+                'keys': {'p256dh': sub.p256dh, 'auth': sub.auth}
             }
-        }
-        
-        success, error = send_push_notification(
-            subscription_info=subscription_info,
-            title=title,
-            body=body,
-            url='/entregas/',
-            tag='recordatorio-pendientes',
-            extra_data={'tipo': 'recordatorio', 'count': count}
-        )
-        
-        if success:
-            enviados += 1
-        elif error == 'subscription_expired':
-            errores.append(sub.id)
-            ua_resumido = (sub.user_agent or 'sin_user_agent')[:80]
-            errores_detalle.append(f"{sub.usuario.username}|{ua_resumido}")
+            success, error = send_push_notification(
+                subscription_info=subscription_info,
+                title=f'⏰ {count} pedido{"s" if count > 1 else ""} pendiente{"s" if count > 1 else ""}',
+                body=body,
+                url='/entregas/',
+                tag='recordatorio-pendientes',
+                extra_data={'tipo': 'recordatorio', 'count': count}
+            )
+            if success:
+                total_enviados += 1
+            elif error == 'subscription_expired':
+                PushSubscription.objects.filter(id=sub.id).update(activa=False)
     
-    # Limpiar suscripciones expiradas
-    if errores:
-        PushSubscription.objects.filter(id__in=errores).update(activa=False)
-        afectados = '; '.join(errores_detalle[:10])
-        audit_logger.info(
-            f"PUSH_CLEANUP_RECORDATORIO | Desactivadas {len(errores)} suscripciones expiradas | Afectados: {afectados}"
-        )
-    
-    audit_logger.info(f"PUSH_RECORDATORIO | {count} pedidos -> {enviados} notificaciones enviadas")
+    audit_logger.info(f"PUSH_RECORDATORIO | {total_pedidos} pedidos -> {total_enviados} notificaciones")
     
     return {
-        'enviados': enviados,
-        'pedidos': count,
-        'suscripciones_activas': suscripciones.count()
+        'enviados': total_enviados,
+        'pedidos': total_pedidos,
+        'bodegas': bodegas_con_pendientes.count(),
     }
 
 

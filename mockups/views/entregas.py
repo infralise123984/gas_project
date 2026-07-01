@@ -222,13 +222,14 @@ def camionero_entregas(request):
         .order_by("-fecha")
     )
 
-    # 3. Pedidos pendientes DISPONIBLES HOY (sin asignar, origen telefónico)
+    # 3. Pedidos pendientes DISPONIBLES HOY
     pendientes = Pedido.objects.filter(
         estado="pendiente",
         origen="telefono",
         entregador__isnull=True,
         fecha__gte=inicio_dia,
         fecha__lt=fin_dia,
+        bodega=user.bodega,
     ).select_related('registrador').prefetch_related('detalles__balon').order_by("-fecha")
 
     count_en_ruta = pedidos_en_ruta.count()
@@ -324,7 +325,8 @@ def camionero_tomar_pedido(request, pedido_id):
                 id=pedido_id,
                 estado="pendiente",
                 entregador__isnull=True,
-                origen="telefono"
+                origen="telefono",
+                bodega=request.user.bodega,
             )
             estado_anterior = pedido.estado
             pedido.estado = "en_ruta"
