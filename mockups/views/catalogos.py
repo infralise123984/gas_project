@@ -25,7 +25,7 @@ from mockups.models import (
     Usuario,
 )
 from mockups.services.catalogos import get_balones_activos_ordenados
-from mockups.utils.permisos import require_roles, filtrar_por_bodega
+from mockups.utils.permisos import require_roles, filtrar_por_bodega, get_bodega_actual
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -435,16 +435,20 @@ def gestionar_sectores_crear(request):
         return resp
 
     if request.method == 'POST':
-        form = SectorForm(request.POST)
+        bodega = get_bodega_actual(request)
+        form = SectorForm(request.POST, bodega=bodega)
         if form.is_valid():
-            sector = form.save()
+            sector = form.save(commit=False)
+            sector.bodega = bodega
+            sector.save()
             messages.success(request, f"Sector '{sector.nombre}' creado correctamente.")
             return redirect('sectores_lista')
         for field, errors in form.errors.items():
             for error in errors:
                 messages.error(request, f"{field}: {error}")
     else:
-        form = SectorForm()
+        bodega = get_bodega_actual(request)
+        form = SectorForm(bodega=bodega)
 
     context = {
         'form': form,
@@ -463,9 +467,13 @@ def gestionar_sectores_editar(request, sector_id):
         return resp
 
     sector = get_object_or_404(Sector, id=sector_id)
+    bodega = get_bodega_actual(request)
+    if bodega and sector.bodega != bodega:
+        messages.error(request, "Este sector no pertenece a tu bodega.")
+        return redirect('sectores_lista')
 
     if request.method == 'POST':
-        form = SectorForm(request.POST, instance=sector)
+        form = SectorForm(request.POST, instance=sector, bodega=bodega)
         if form.is_valid():
             sector = form.save()
             messages.success(request, f"Sector '{sector.nombre}' actualizado correctamente.")
@@ -474,7 +482,7 @@ def gestionar_sectores_editar(request, sector_id):
             for error in errors:
                 messages.error(request, f"{field}: {error}")
     else:
-        form = SectorForm(instance=sector)
+        form = SectorForm(instance=sector, bodega=bodega)
 
     context = {
         'form': form,
@@ -495,6 +503,11 @@ def gestionar_sectores_eliminar(request, sector_id):
         return resp
 
     sector = get_object_or_404(Sector, id=sector_id)
+    bodega = get_bodega_actual(request)
+    if bodega and sector.bodega != bodega:
+        messages.error(request, "Este sector no pertenece a tu bodega.")
+        return redirect('sectores_lista')
+
     nombre = sector.nombre
     pedidos_asociados = Pedido.objects.filter(sector=nombre).count()
     sector.delete()
