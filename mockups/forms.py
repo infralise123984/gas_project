@@ -9,9 +9,15 @@ from django.utils.safestring import mark_safe
 from .models import Pedido, DetallePedido, TipoBalon, Sector, SobreDiario, LineaSobre, LineaPago, LineaGasto, Usuario, Bodega
 
 
-def get_sector_choices(include_blank=True, include_inactive=False, selected_value=None):
-    """Retorna opciones de sector priorizando el catálogo administrable y usando fallback legacy."""
+def get_sector_choices(include_blank=True, include_inactive=False, selected_value=None, bodega=None):
+    """Retorna opciones de sector del catálogo administrable, filtradas por bodega.
+
+    Si se especifica bodega y no tiene sectores propios, retorna lista vacía
+    (sin fallback a Pedido.SECTORES, que es global).
+    """
     queryset = Sector.objects.all()
+    if bodega:
+        queryset = queryset.filter(bodega=bodega)
     if not include_inactive:
         queryset = queryset.filter(activo=True)
 
@@ -27,6 +33,9 @@ def get_sector_choices(include_blank=True, include_inactive=False, selected_valu
             if opciones_zona:
                 grouped_choices.append((zona_label, opciones_zona))
         choices = grouped_choices
+    elif bodega:
+        # Bodega específica sin sectores → no usar fallback global
+        choices = []
     else:
         choices = list(Pedido.SECTORES)
 
@@ -318,6 +327,7 @@ class PedidoCabeceraForm(forms.ModelForm):
     )
 
     def __init__(self, *args, **kwargs):
+        bodega = kwargs.pop('bodega', None)
         super().__init__(*args, **kwargs)
 
         valor_actual = None
@@ -326,7 +336,9 @@ class PedidoCabeceraForm(forms.ModelForm):
         elif self.instance and self.instance.pk:
             valor_actual = (self.instance.sector or '').strip()
 
-        self.fields['sector'].choices = get_sector_choices(selected_value=valor_actual)
+        self.fields['sector'].choices = get_sector_choices(
+            selected_value=valor_actual, bodega=bodega
+        )
     
     class Meta:
         model = Pedido

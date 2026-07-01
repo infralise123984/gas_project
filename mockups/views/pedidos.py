@@ -66,7 +66,7 @@ def transaccional_pedido(request):
             messages.warning(request, "Este pedido ya fue registrado o el formulario expiró.")
             return redirect("index")
 
-        form_cabecera = PedidoCabeceraForm(request.POST)
+        form_cabecera = PedidoCabeceraForm(request.POST, bodega=request.user.bodega)
         formset = DetalleFormSet(
             request.POST,
             instance=Pedido(),
@@ -156,7 +156,7 @@ def transaccional_pedido(request):
             messages.error(request, "Hay errores en el formulario. Revisa los campos marcados.")
 
     else:
-        form_cabecera = PedidoCabeceraForm()
+        form_cabecera = PedidoCabeceraForm(bodega=request.user.bodega)
         formset = DetalleFormSet(
             instance=Pedido(),
             form_kwargs={'user': request.user}
@@ -243,7 +243,7 @@ def editar_pedido(request, pedido_id):
             'estado': pedido.estado,
         }
 
-        form_cabecera = PedidoCabeceraForm(request.POST, instance=pedido)
+        form_cabecera = PedidoCabeceraForm(request.POST, instance=pedido, bodega=request.user.bodega)
         formset = DetalleFormSetEdit(
             request.POST, 
             instance=pedido,
@@ -313,7 +313,7 @@ def editar_pedido(request, pedido_id):
         else:
             messages.error(request, "Por favor corrige los errores en el formulario.")
     else:
-        form_cabecera = PedidoCabeceraForm(instance=pedido)
+        form_cabecera = PedidoCabeceraForm(instance=pedido, bodega=request.user.bodega)
         formset = DetalleFormSetEdit(
             instance=pedido,
             form_kwargs={'user': request.user}
