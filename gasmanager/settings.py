@@ -93,6 +93,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'mockups.context_processors.vapid_public_key',  # Push notifications
+                'mockups.context_processors.bodega_context',  # Multi-bodega navbar
             ],
         },
     },
