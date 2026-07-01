@@ -162,6 +162,19 @@
             font-size: 0.85rem;
             color: #6c757d;
         }
+
+        .navbar-bodega-pill {
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+            padding: 0.35rem 1rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: 1px solid rgba(255,255,255,0.25);
+        }
+        .navbar-bodega-pill:hover {
+            background: rgba(255,255,255,0.25);
+        }
     </style>
 
     {% block extra_head %}{% endblock %}
@@ -289,7 +302,7 @@
                     <li class="nav-item dropdown me-1">
                         <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" role="button"
                            data-bs-toggle="dropdown" aria-expanded="false" title="Cambiar bodega">
-                            <span class="bg-white bg-opacity-25 text-white px-3 py-2 rounded-pill fw-semibold small">
+                            <span class="navbar-bodega-pill">
                                 <i class="bi bi-shop me-1"></i>
                                 {% if bodega_activa %}{{ bodega_activa.nombre }}{% else %}Todas las bodegas{% endif %}
                             </span>
@@ -330,7 +343,7 @@
                     {% elif user.is_authenticated and bodega_activa and user.rol != "admin" and user.rol != "jefe" %}
                     <!-- Bodega badge (no admin/jefe, solo ver su bodega) -->
                     <li class="nav-item d-none d-md-flex align-items-center">
-                        <span class="bg-white bg-opacity-20 text-white px-3 py-1 rounded-pill small">
+                        <span class="navbar-bodega-pill">
                             <i class="bi bi-shop me-1"></i> {{ bodega_activa.nombre }}
                         </span>
                     </li>
