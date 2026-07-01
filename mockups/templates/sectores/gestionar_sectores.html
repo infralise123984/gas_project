@@ -12,7 +12,14 @@
                     <h2 class="text-primary fw-bold mb-1">
                         <i class="bi bi-geo-alt me-2"></i>Gestión de Sectores
                     </h2>
-                    <p class="text-muted mb-0">Catálogo administrable para preparar la migración futura sin tocar pedidos históricos.</p>
+                    <p class="text-muted mb-0">
+                        {% if bodega_activa %}
+                        <span class="badge bg-success me-2"><i class="bi bi-shop me-1"></i>{{ bodega_activa.nombre }}</span>
+                        {% else %}
+                        <span class="badge bg-secondary me-2"><i class="bi bi-globe me-1"></i>Todas las bodegas</span>
+                        {% endif %}
+                        Catálogo administrable para preparar la migración futura.
+                    </p>
                 </div>
                 <a href="{% url 'sectores_crear' %}" class="btn btn-success btn-lg px-4 shadow">
                     <i class="bi bi-plus-circle me-2"></i>Nuevo Sector
@@ -41,6 +48,7 @@
                                     <th class="ps-3">Nombre</th>
                                     <th>Código</th>
                                     <th class="text-center">Zona</th>
+                                    <th>Bodega</th>
                                     <th class="text-center">Estado</th>
                                     <th class="text-center">Pedidos históricos</th>
                                     <th class="text-center">Acciones</th>
@@ -54,6 +62,11 @@
                                     <td class="text-center">
                                         <span class="badge {% if sector.zona == 'sur' %}bg-danger-subtle text-danger{% elif sector.zona == 'norte' %}bg-info-subtle text-info{% else %}bg-secondary{% endif %}">
                                             {{ sector.get_zona_display }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success bg-opacity-10 text-success">
+                                            <i class="bi bi-shop me-1"></i>{{ sector.bodega.nombre }}
                                         </span>
                                     </td>
                                     <td class="text-center">

@@ -402,13 +402,14 @@ def auditoria_lista(request):
 
 @login_required
 def gestionar_sectores_lista(request):
-    """Listar sectores del catálogo administrable."""
+    """Listar sectores del catálogo administrable, filtrados por bodega activa."""
     resp = require_roles(request, ["jefe", "admin"], "index", "No tienes permiso para gestionar sectores.")
     if resp:
         return resp
 
+    bodega = get_bodega_actual(request)
     sectores = list(
-        filtrar_por_bodega(Sector.objects.all().order_by('zona', 'nombre'), request)
+        filtrar_por_bodega(Sector.objects.select_related('bodega').order_by('zona', 'nombre'), request)
     )
     conteos_pedidos = {
         item['sector']: item['total']
@@ -420,6 +421,7 @@ def gestionar_sectores_lista(request):
 
     context = {
         'sectores': sectores,
+        'bodega_activa': bodega,
         'title': 'Gestión de Sectores',
         'puede_eliminar': request.user.rol == 'admin',
     }
