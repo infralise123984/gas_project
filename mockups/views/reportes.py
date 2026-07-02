@@ -441,7 +441,9 @@ def reporte_sobres(request):
     TIPO_PAGO_DISPLAY = {
         'abono': 'Abono Caja', 'transferencia': 'Transferencia',
         'visa': 'Visa/POS', 'cheque': 'Cheque',
-        'efectivo': 'Efectivo', 'otro': 'Otro',
+        'efectivo': 'Efectivo', 'pits': 'Pits',
+        'monedas': 'Monedas', 'cupon': 'Cupón',
+        'otro': 'Otro',
     }
 
     def calcular_metricas(sobres_lista):
