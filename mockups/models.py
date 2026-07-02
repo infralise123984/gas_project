@@ -567,9 +567,6 @@ class LineaPago(models.Model):
         ('visa', 'Visa'),
         ('cheque', 'Cheque'),
         ('efectivo', 'Efectivo'),
-        ('pits', 'Pits'),
-        ('monedas', 'Monedas'),
-        ('cupon', 'Cupón'),
         ('otro', 'Otro'),
     ]
 
