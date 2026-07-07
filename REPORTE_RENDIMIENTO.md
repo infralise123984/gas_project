@@ -1,13 +1,31 @@
 # Reporte de Análisis de Rendimiento — GasFácil / Kim Gas
 
 **Proyecto:** Django 5.x + Bootstrap 5 + MySQL/PostgreSQL  
-**Fecha del análisis:** 19 de junio de 2026  
-**Última actualización:** 21 de junio de 2026 — Fase 1 cerrada (sobres AJAX 5 min, UI operativa)
-**Rama de trabajo actual:** `refactor/cambios-criticos-validacion` (desde `develop-new`)  
-**Alcance:** Revisión estática + registro de cambios aplicados en código  
-**Objetivo:** Identificar problemas potenciales de rendimiento y proponer medidas futuras
+**Fecha del análisis inicial:** 19 de junio de 2026  
+**Última actualización:** 7 de julio de 2026 — Auditoría multi-bodega  
+**Ramas:** `feature/multi-bodega` (feature), `develop-new` (dev), `v2-main` (prod)  
+**Alcance:** Revisión estática + registro de cambios aplicados  
+**Objetivo:** Identificar problemas de rendimiento y proponer medidas
 
 **Leyenda de estado:** ✅ Implementado · 🔶 Parcial · ⏳ Pendiente
+
+---
+
+## Registro de cambios — Auditoría Multi-Bodega (7-jul-2026)
+
+Rama `feature/multi-bodega`. Se analizó el impacto de los nuevos modelos (Bodega), FKs, filtros `bodega=`, context processors, y vistas modificadas.
+
+| # | Estado | Severidad | Archivo | Problema | Recomendación |
+|---|--------|-----------|---------|----------|---------------|
+| MB1 | ⏳ | 🔴 ALTA | `context_processors.py:21-42` | `bodega_context` ejecuta 1-2 DB queries por request autenticado, incluso en AJAX | Cachear `bodegas_disponibles` en `request.session`; refrescar solo en `cambiar_bodega` |
+| MB2 | ⏳ | 🟡 MEDIA | `permisos.py:91` | `filtrar_por_bodega()` llama a `get_bodega_actual()` internamente; vistas que ya la obtuvieron duplican la query | Pasar el objeto bodega como parámetro en vez de recalcular |
+| MB3 | ⏳ | 🟡 MEDIA | `migrations/0030` | Índices compuestos de SobreDiario no incluyen `bodega`; todas las queries ahora filtran por bodega | Agregar `Index(fields=['bodega', 'fecha_correspondiente', 'tipo', 'cerrado'])` |
+| MB4 | ⏳ | 🟢 BAJA | `sobres.py:78` | `select_related('trabajador', 'creado_por')` no incluye `'bodega'`; templates acceden a `sobre.bodega.nombre` | Agregar `'bodega'` al `select_related` |
+| MB5 | ⏳ | 🟢 BAJA | `sobres.py:68,78` | `lista_sobres_diarios` llama `get_bodega_actual()` dos veces (directa + vía `filtrar_por_bodega`) | Reutilizar la variable `bodega_actual` ya obtenida |
+| MB6 | ✅ | — | `push_notifications.py` | `notificar_nuevo_pedido()` y `notificar_recordatorio()` ya filtran por `pedido.bodega` y `usuario__bodega` | Sin acción |
+| MB7 | ✅ | — | `services/sobres.py` | `get_pedidos_queryset_para_sobre()` ya incluye `bodega=sobre.bodega` en ambos branches | Sin acción |
+
+**Resumen multi-bodega:** 0 errores lógicos, 0 fugas de datos. Los 5 hallazgos son solo de optimización (queries extras). MB1 es el prioritario para producción.
 
 ---
 
@@ -276,14 +294,16 @@ Cuellos de botella a medio plazo: **reportes mensuales (C2, C3)**, **búsqueda `
 | Categoría | Implementados | Parciales | Pendientes |
 |-----------|---------------|-----------|------------|
 | Críticos (C1–C5) | 0 | 1 (C1) | 4 |
-| Altos (A1–A8) | 5 (incl. A1 optimizado) | 1 (A4) | 2 |
+| Altos (A1–A8) | 5 | 1 (A4) | 2 |
 | Medios (M1–M17) | 8 | 0 | 9 |
+| Multi-Bodega (MB1–MB7) | 2 | 0 | 5 |
 | **Fase 1 (plan)** | **7/7 ítems** | — | — |
-| **Total accionable** | **13** | **2** | **15** |
+| **Total accionable** | **15** | **2** | **20** |
 
 Este documento sirve como guía viva: actualizar la columna **Estado** al implementar cada ítem.
 
 ---
 
 *Generado por análisis estático del repositorio `gas_project`.*  
-*Registro de implementación: 19 y 21 de junio de 2026 — rama `refactor/cambios-criticos-validacion` (commits `ca8c553`, `bd63100`, cierre Fase 1).*
+*Registro de implementación: 19 y 21 de junio de 2026 — rama `refactor/cambios-criticos-validacion`.*  
+*Auditoría multi-bodega: 7 de julio de 2026 — rama `feature/multi-bodega`.*
