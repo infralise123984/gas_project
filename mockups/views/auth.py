@@ -480,7 +480,8 @@ def crear_usuario(request):
                 }
             )
         security_logger.warning(
-            f"USER_CREATE_REJECTED | By: {request.user.username} | Username: {attempted_username or '-'} | Errors: {form.errors.as_json()}"
+            f"USER_CREATE_REJECTED | By: {request.user.username} | "
+            f"Username: {attempted_username or '-'} | Errors: {list(form.errors.keys())}"
         )
 
     return render(request, "auth/crear_usuario.html", {"form": form})
