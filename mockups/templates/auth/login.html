@@ -1,38 +1,157 @@
-<!-- templates/login.html -->
+<!-- templates/auth/login.html -->
 {% extends 'base.html' %}
 
-{% block title %}Iniciar Sesión - GasFácil{% endblock %}
+{% block title %}Iniciar Sesión - ValGas{% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-center justify-content-center min-vh-100">
-    <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white text-center py-3">
-                <h4 class="mb-0">Iniciar sesión</h4>
+<div class="d-flex align-items-center justify-content-center min-vh-100" style="margin-top: -56px;">
+    <div class="col-11 col-sm-8 col-md-6 col-lg-5 col-xl-4">
+
+        <!-- Logo + Brand -->
+        <div class="text-center mb-4">
+            <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-primary bg-gradient shadow-sm mb-3"
+                 style="width: 72px; height: 72px;">
+                <i class="bi bi-fire fs-1 text-white"></i>
+            </div>
+            <h2 class="fw-bold text-primary mb-1">ValGas</h2>
+            <p class="text-muted small mb-0">Sistema de gestión de pedidos</p>
+        </div>
+
+        <!-- Card -->
+        <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="card-header bg-primary bg-gradient text-white text-center py-3 border-0">
+                <h5 class="mb-0 fw-semibold">
+                    <i class="bi bi-box-arrow-in-right me-2"></i>Iniciar sesión
+                </h5>
             </div>
             <div class="card-body p-4">
-                <form method="post">
+
+                <!-- Django Messages -->
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags|default:'danger' }} alert-dismissible fade show py-2 small" role="alert">
+                            <i class="bi bi-{% if message.tags == 'success' %}check-circle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}x-circle{% endif %} me-1"></i>
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+
+                <form method="post" id="loginForm" novalidate>
                     {% csrf_token %}
+                    {% if request.GET.next %}
+                        <input type="hidden" name="next" value="{{ request.GET.next }}">
+                    {% endif %}
+
+                    <!-- Username -->
                     <div class="mb-3">
-                        <label for="username" class="form-label">Usuario</label>
-                        <input type="text" class="form-control" id="username" name="username"
-                            placeholder="Nombre de usuario" required autofocus autocapitalize="none"
-                            autocorrect="off" spellcheck="false">
+                        <label for="username" class="form-label small fw-semibold text-secondary">
+                            <i class="bi bi-person me-1"></i>Usuario
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0">
+                                <i class="bi bi-person-fill text-primary"></i>
+                            </span>
+                            <input type="text" class="form-control border-start-0 ps-0" id="username"
+                                   name="username" placeholder="Nombre de usuario"
+                                   required autofocus autocapitalize="none"
+                                   autocorrect="off" spellcheck="false">
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Contraseña</label>
-                        <input type="password" class="form-control" id="password" name="password"
-                            placeholder="Contraseña" required>
+
+                    <!-- Password -->
+                    <div class="mb-1">
+                        <label for="password" class="form-label small fw-semibold text-secondary">
+                            <i class="bi bi-lock me-1"></i>Contraseña
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0">
+                                <i class="bi bi-lock-fill text-primary"></i>
+                            </span>
+                            <input type="password" class="form-control border-start-0 border-end-0 ps-0"
+                                   id="password" name="password" placeholder="Contraseña" required>
+                            <span class="input-group-text bg-light border-start-0" role="button"
+                                  id="togglePassword" tabindex="0"
+                                  title="Mostrar / ocultar contraseña">
+                                <i class="bi bi-eye-slash text-secondary" id="toggleIcon"></i>
+                            </span>
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100 py-2">
-                        Ingresar
+
+                    <!-- Caps Lock Warning -->
+                    <div id="capsWarning" class="form-text text-warning small mb-3 d-none">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Bloq Mayús está activado
+                    </div>
+
+                    <!-- Submit -->
+                    <button type="submit" class="btn btn-primary bg-gradient w-100 py-2 fw-semibold mt-2"
+                            id="submitBtn">
+                        <span id="submitText">
+                            <i class="bi bi-box-arrow-in-right me-1"></i>Ingresar
+                        </span>
+                        <span id="submitSpinner" class="d-none">
+                            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            Ingresando...
+                        </span>
                     </button>
                 </form>
             </div>
         </div>
     </div>
 </div>
+
 <script>
+// ── Toggle visibilidad de contraseña ──
+const togglePassword = document.getElementById('togglePassword');
+const passwordInput = document.getElementById('password');
+const toggleIcon = document.getElementById('toggleIcon');
+
+togglePassword.addEventListener('click', toggleVisibility);
+togglePassword.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleVisibility();
+    }
+});
+
+function toggleVisibility() {
+    const isPassword = passwordInput.type === 'password';
+    passwordInput.type = isPassword ? 'text' : 'password';
+    toggleIcon.className = isPassword ? 'bi bi-eye text-primary' : 'bi bi-eye-slash text-secondary';
+}
+
+// ── Caps Lock warning ──
+const capsWarning = document.getElementById('capsWarning');
+
+passwordInput.addEventListener('keydown', function(e) {
+    capsWarning.classList.toggle('d-none', !e.getModifierState('CapsLock'));
+});
+passwordInput.addEventListener('keyup', function(e) {
+    capsWarning.classList.toggle('d-none', !e.getModifierState('CapsLock'));
+});
+// Re-check on focus (user may have toggled Caps Lock in another field)
+passwordInput.addEventListener('focus', function() {
+    // Can't reliably detect Caps Lock without a key event; hide until next keystroke
+});
+
+// ── Spinner al enviar (previene doble click) ──
+const form = document.getElementById('loginForm');
+const submitBtn = document.getElementById('submitBtn');
+const submitText = document.getElementById('submitText');
+const submitSpinner = document.getElementById('submitSpinner');
+
+form.addEventListener('submit', function(e) {
+    // Si ya se está enviando, prevenir
+    if (submitBtn.disabled) {
+        e.preventDefault();
+        return;
+    }
+    submitBtn.disabled = true;
+    submitText.classList.add('d-none');
+    submitSpinner.classList.remove('d-none');
+});
+
+// ── Recuperar foco si se perdió (mobile) ──
 window.addEventListener('pageshow', function (event) {
     if (event.persisted) {
         window.location.reload();
