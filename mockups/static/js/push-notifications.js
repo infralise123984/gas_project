@@ -198,6 +198,17 @@
             // Verificar si ya existe una suscripción
             let subscription = await registration.pushManager.getSubscription();
 
+            // ── Detectar si la suscripción existente se creó con una clave vieja ──
+            const currentHash = getVapidKeyHash();
+            const storedHash = localStorage.getItem(VAPID_KEY_STORAGE);
+            const keyChanged = !!subscription && currentHash && storedHash !== currentHash;
+            if (keyChanged) {
+                console.log('[Push] Suscripción existente es de clave antigua, renovando...');
+                await subscription.unsubscribe();
+                subscription = null;
+                localStorage.setItem(VAPID_KEY_STORAGE, currentHash);
+            }
+
             const serverStatus = await getServerSubscriptionStatus();
             const needsRenewal = !!subscription && serverStatus.available && !serverStatus.hasSubscriptions;
 
@@ -318,6 +329,64 @@
     }
 
     // ─────────────────────────────────────────────────
+    // DETECCIÓN DE ROTACIÓN DE CLAVES VAPID
+    // ─────────────────────────────────────────────────
+    const VAPID_KEY_STORAGE = 'vapid_public_key_hash';
+
+    function getVapidKeyHash() {
+        if (!VAPID_PUBLIC_KEY) return null;
+        // Hash simple pero suficiente para detectar cambios de clave
+        let hash = 0;
+        for (let i = 0; i < VAPID_PUBLIC_KEY.length; i++) {
+            const chr = VAPID_PUBLIC_KEY.charCodeAt(i);
+            hash = ((hash << 5) - hash) + chr;
+            hash |= 0; // Convertir a 32-bit int
+        }
+        return hash.toString(36);
+    }
+
+    async function handleVapidKeyRotation(registration) {
+        const currentHash = getVapidKeyHash();
+        if (!currentHash) return false;
+
+        const storedHash = localStorage.getItem(VAPID_KEY_STORAGE);
+        if (storedHash === currentHash) {
+            return false; // No hubo rotación
+        }
+
+        console.log('[Push] Detectada rotación de clave VAPID. Renovando suscripción...');
+
+        // Desuscribir la suscripción vieja (creada con la clave anterior)
+        const oldSubscription = await registration.pushManager.getSubscription();
+        if (oldSubscription) {
+            try {
+                await oldSubscription.unsubscribe();
+                console.log('[Push] Suscripción vieja eliminada del navegador');
+            } catch (e) {
+                console.warn('[Push] No se pudo desuscribir la suscripción vieja:', e.message);
+            }
+        }
+
+        // También notificar al servidor que elimine la suscripción vieja
+        try {
+            await fetch(PUSH_UNSUBSCRIBE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({ endpoint: oldSubscription?.endpoint || '' })
+            });
+        } catch (e) {
+            // No es crítico si falla
+        }
+
+        // Guardar el nuevo hash
+        localStorage.setItem(VAPID_KEY_STORAGE, currentHash);
+        return true; // Hubo rotación, necesita re-suscripción
+    }
+
+    // ─────────────────────────────────────────────────
     // INICIALIZACIÓN AUTOMÁTICA
     // ─────────────────────────────────────────────────
     async function initPushNotifications() {
@@ -330,6 +399,18 @@
         const registration = await navigator.serviceWorker.ready;
         console.log('[Push] Service Worker activo:', registration.active?.state);
         await sendPushConfigToServiceWorker();
+
+        // ── Detectar rotación de clave VAPID ──────────────────
+        // Si la clave pública cambió (ej: después de un deploy de seguridad),
+        // forzar re-suscripción con la nueva clave.
+        const keyRotated = await handleVapidKeyRotation(registration);
+        if (keyRotated) {
+            console.log('[Push] Clave VAPID rotada — forzando re-suscripción');
+            if (window.AUTO_SUBSCRIBE_PUSH && Notification.permission === 'granted') {
+                await subscribeToPush();
+            }
+            return; // Ya manejamos la rotación, no seguir con el flujo normal
+        }
 
         const status = await checkSubscriptionStatus();
         console.log('[Push] Estado actual:', status);
