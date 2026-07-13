@@ -460,6 +460,15 @@
 
 </div>
 
+{{ chart_dias_labels|json_script:"chart-dias-labels" }}
+{{ chart_dias_bodega|json_script:"chart-dias-bodega" }}
+{{ chart_dias_camion|json_script:"chart-dias-camion" }}
+{{ chart_pagos_labels|json_script:"chart-pagos-labels" }}
+{{ chart_pagos_data|json_script:"chart-pagos-data" }}
+{{ chart_balon_labels|json_script:"chart-balon-labels" }}
+{{ chart_balon_unidades|json_script:"chart-balon-unidades" }}
+{{ chart_balon_kilos|json_script:"chart-balon-kilos" }}
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 Chart.defaults.font.family = 'system-ui, -apple-system, sans-serif';
@@ -471,18 +480,18 @@ if (ctxDias) {
     new Chart(ctxDias, {
         type: 'bar',
         data: {
-            labels: {{ chart_dias_labels|safe }},
+            labels: JSON.parse(document.getElementById('chart-dias-labels').textContent),
             datasets: [
                 {
                     label: 'Bodega',
-                    data: {{ chart_dias_bodega|safe }},
+                    data: JSON.parse(document.getElementById('chart-dias-bodega').textContent),
                     backgroundColor: 'rgba(111, 66, 193, 0.75)',
                     borderRadius: 4,
                     stack: 'stack0'
                 },
                 {
                     label: 'Camionero',
-                    data: {{ chart_dias_camion|safe }},
+                    data: JSON.parse(document.getElementById('chart-dias-camion').textContent),
                     backgroundColor: 'rgba(253, 126, 20, 0.75)',
                     borderRadius: 4,
                     stack: 'stack0'
@@ -517,9 +526,9 @@ if (ctxPagos) {
     new Chart(ctxPagos, {
         type: 'doughnut',
         data: {
-            labels: {{ chart_pagos_labels|safe }},
+            labels: JSON.parse(document.getElementById('chart-pagos-labels').textContent),
             datasets: [{
-                data: {{ chart_pagos_data|safe }},
+                data: JSON.parse(document.getElementById('chart-pagos-data').textContent),
                 backgroundColor: ['#0d6efd','#198754','#ffc107','#dc3545','#6f42c1','#0dcaf0'],
                 borderWidth: 2,
                 borderColor: '#fff'
@@ -549,18 +558,18 @@ if (ctxBalones) {
     new Chart(ctxBalones, {
         type: 'bar',
         data: {
-            labels: {{ chart_balon_labels|safe }},
+            labels: JSON.parse(document.getElementById('chart-balon-labels').textContent),
             datasets: [
                 {
                     label: 'Unidades',
-                    data: {{ chart_balon_unidades|safe }},
+                    data: JSON.parse(document.getElementById('chart-balon-unidades').textContent),
                     backgroundColor: 'rgba(255, 193, 7, 0.8)',
                     borderRadius: 4,
                     yAxisID: 'yUnidades',
                 },
                 {
                     label: 'Kilos',
-                    data: {{ chart_balon_kilos|safe }},
+                    data: JSON.parse(document.getElementById('chart-balon-kilos').textContent),
                     backgroundColor: 'rgba(13, 202, 240, 0.7)',
                     borderRadius: 4,
                     yAxisID: 'yKilos',

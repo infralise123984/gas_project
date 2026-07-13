@@ -8,12 +8,14 @@ from django.conf import settings
 
 def vapid_public_key(request):
     """
-    Agrega la clave pública VAPID al contexto de todos los templates.
-    Necesario para que el JavaScript de push notifications funcione.
+    Agrega la clave pública VAPID al contexto SOLO para camioneros.
+    Los demás roles no necesitan exponer esta clave en cada página.
     """
-    return {
-        'vapid_public_key': getattr(settings, 'VAPID_PUBLIC_KEY', ''),
-    }
+    if request.user.is_authenticated and request.user.rol == 'camionero':
+        return {
+            'vapid_public_key': getattr(settings, 'VAPID_PUBLIC_KEY', ''),
+        }
+    return {'vapid_public_key': ''}
 
 
 def bodega_context(request):

@@ -388,6 +388,18 @@
 
 </div>
 
+{{ chart_dias_labels|json_script:"chart-dias-labels" }}
+{{ chart_dias_ventas|json_script:"chart-dias-ventas" }}
+{{ chart_dias_ganancias|json_script:"chart-dias-ganancias" }}
+{{ chart_origen_labels|json_script:"chart-origen-labels" }}
+{{ chart_origen_data|json_script:"chart-origen-data" }}
+{{ chart_balones_labels|json_script:"chart-balones-labels" }}
+{{ chart_balones_monto|json_script:"chart-balones-monto" }}
+{{ chart_trabajadores_labels|json_script:"chart-trab-labels" }}
+{{ chart_trabajadores_registrado|json_script:"chart-trab-registrado" }}
+{{ chart_trabajadores_entregado|json_script:"chart-trab-entregado" }}
+{{ chart_trabajadores_tarreo|json_script:"chart-trab-tarreo" }}
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 Chart.defaults.font.family = 'system-ui, -apple-system, sans-serif';
@@ -398,11 +410,11 @@ if (ctxVentasDiarias) {
     new Chart(ctxVentasDiarias, {
         type: 'line',
         data: {
-            labels: {{ chart_dias_labels|safe }},
+            labels: JSON.parse(document.getElementById('chart-dias-labels').textContent),
             datasets: [
                 {
                     label: 'Ventas',
-                    data: {{ chart_dias_ventas|safe }},
+                    data: JSON.parse(document.getElementById('chart-dias-ventas').textContent),
                     borderColor: '#0d6efd',
                     backgroundColor: 'rgba(13, 110, 253, 0.1)',
                     tension: 0.4,
@@ -410,7 +422,7 @@ if (ctxVentasDiarias) {
                 },
                 {
                     label: 'Ganancia',
-                    data: {{ chart_dias_ganancias|safe }},
+                    data: JSON.parse(document.getElementById('chart-dias-ganancias').textContent),
                     borderColor: '#198754',
                     backgroundColor: 'rgba(25, 135, 84, 0.1)',
                     tension: 0.4,
@@ -451,9 +463,9 @@ if (ctxOrigen) {
     new Chart(ctxOrigen, {
         type: 'doughnut',
         data: {
-            labels: {{ chart_origen_labels|safe }},
+            labels: JSON.parse(document.getElementById('chart-origen-labels').textContent),
             datasets: [{
-                data: {{ chart_origen_data|safe }},
+                data: JSON.parse(document.getElementById('chart-origen-data').textContent),
                 backgroundColor: [
                     '#0d6efd',
                     '#198754',
@@ -491,10 +503,10 @@ if (ctxBalones) {
     new Chart(ctxBalones, {
         type: 'bar',
         data: {
-            labels: {{ chart_balones_labels|safe }},
+            labels: JSON.parse(document.getElementById('chart-balones-labels').textContent),
             datasets: [{
                 label: 'Ventas',
-                data: {{ chart_balones_monto|safe }},
+                data: JSON.parse(document.getElementById('chart-balones-monto').textContent),
                 backgroundColor: '#0d6efd',
                 borderRadius: 6
             }]
@@ -532,25 +544,25 @@ if (ctxTrabajadores) {
     new Chart(ctxTrabajadores, {
         type: 'bar',
         data: {
-            labels: {{ chart_trabajadores_labels|safe }},
+            labels: JSON.parse(document.getElementById('chart-trab-labels').textContent),
             datasets: [
                 {
                     label: 'Registrado (teléfono / local)',
-                    data: {{ chart_trabajadores_registrado|safe }},
+                    data: JSON.parse(document.getElementById('chart-trab-registrado').textContent),
                     backgroundColor: '#0d6efd',
                     borderRadius: 4,
                     stack: 'stack0'
                 },
                 {
                     label: 'Entregado (domicilio)',
-                    data: {{ chart_trabajadores_entregado|safe }},
+                    data: JSON.parse(document.getElementById('chart-trab-entregado').textContent),
                     backgroundColor: '#198754',
                     borderRadius: 4,
                     stack: 'stack0'
                 },
                 {
                     label: 'Tarreo / Venta extra',
-                    data: {{ chart_trabajadores_tarreo|safe }},
+                    data: JSON.parse(document.getElementById('chart-trab-tarreo').textContent),
                     backgroundColor: '#ffc107',
                     borderRadius: 4,
                     stack: 'stack0'

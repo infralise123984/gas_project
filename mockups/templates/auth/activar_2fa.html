@@ -27,6 +27,7 @@
                     </p>
                     <div class="text-center my-3">
                         <div class="d-inline-block p-3 bg-white border rounded shadow-sm">
+                            {# safe: SVG generado server-side por segno, sin input de usuario #}
                             {{ qr_svg|safe }}
                         </div>
                     </div>
