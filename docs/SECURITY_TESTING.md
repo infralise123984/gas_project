@@ -9,7 +9,7 @@ Ejecutar estos comandos para verificar la seguridad:
 python manage.py check --deploy
 
 # 2. Ejecutar tests de seguridad custom
-python manage.py test security_tests -v 2
+python manage.py test scripts.security_tests -v 2
 
 # 3. Análisis estático de código (instalar primero)
 pip install bandit
@@ -140,7 +140,7 @@ Write-Host "`n[1/5] Django Security Check..." -ForegroundColor Yellow
 python manage.py check --deploy 2>&1 | Tee-Object -Variable djangoCheck
 
 Write-Host "`n[2/5] Running Security Tests..." -ForegroundColor Yellow
-python manage.py test security_tests -v 1
+python manage.py test scripts.security_tests -v 1
 
 Write-Host "`n[3/5] Bandit Static Analysis..." -ForegroundColor Yellow
 if (Get-Command bandit -ErrorAction SilentlyContinue) {

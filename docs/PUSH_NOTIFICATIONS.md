@@ -43,7 +43,7 @@ VAPID_ADMIN_EMAIL=mailto:admin@kimgas.cl
 
 **IMPORTANTE**: Para producción, genera nuevas claves VAPID con:
 ```bash
-python generate_vapid.py
+python scripts/generate_vapid.py
 ```
 
 ### Migración de base de datos
