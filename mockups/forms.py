@@ -5,7 +5,6 @@ from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory, BaseInlineFormSet
-from django.utils.safestring import mark_safe
 from .models import Pedido, DetallePedido, TipoBalon, Sector, SobreDiario, LineaSobre, LineaPago, LineaGasto, Usuario, Bodega
 
 

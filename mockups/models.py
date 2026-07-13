@@ -8,6 +8,9 @@ from django.db.models import Sum
 from django.utils import timezone
 from django.utils.text import slugify
 from django.core.exceptions import ValidationError
+
+from mockups.fields import EncryptedTextField
+
 import re
 
 
@@ -48,8 +51,9 @@ class Usuario(AbstractUser):
     )
 
     # 2FA (TOTP opcional)
-    totp_secret = models.CharField(
-        max_length=64, blank=True, null=True, verbose_name="Secreto TOTP"
+    totp_secret = EncryptedTextField(
+        blank=True, default=None,
+        verbose_name="Secreto TOTP"
     )
     totp_activo = models.BooleanField(default=False, verbose_name="2FA activo")
     totp_ultimo_verificado = models.DateTimeField(
@@ -68,6 +72,17 @@ class Usuario(AbstractUser):
     def __str__(self):
         nombre = self.get_full_name().strip() or self.username
         return f"{nombre} ({self.get_rol_display()})"
+
+    def clean(self):
+        """Valida consistencia de TOTP: no permitir 2FA activo sin secreto."""
+        if self.totp_activo and not self.totp_secret:
+            raise ValidationError({
+                'totp_activo': 'No se puede activar 2FA sin un secreto TOTP configurado.'
+            })
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = "Usuario"
