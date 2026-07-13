@@ -95,6 +95,10 @@ def login_view(request):
             )
             audit_logger.info(f"LOGIN_OK | User: {username} | IP: {ip}")
             
+            # Redirigir a ?next= si se especificó, si no al index
+            next_url = request.POST.get('next', '') or request.GET.get('next', '')
+            if next_url:
+                return redirect(next_url)
             return redirect("index")
         else:
             messages.error(request, "Usuario o contraseña incorrectos")
