@@ -382,11 +382,10 @@ def gestionar_balones_eliminar(request, balon_id):
 
 @login_required
 def auditoria_lista(request):
-    """Listado simple de todos los registros de auditoría. Solo admin."""
+    """Listado simple de todos los registros de auditoría. Solo superuser."""
     if not request.user.is_superuser:
-        resp = require_roles(request, ["admin"], "index", "No tienes permiso para ver la auditoría del sistema.")
-        if resp:
-            return resp
+        messages.error(request, "Solo el administrador del sistema puede ver la auditoría.")
+        return redirect('index')
 
     registros = AuditoriaAccion.objects.select_related('usuario').all().order_by('-fecha')
     paginator = Paginator(registros, 50)

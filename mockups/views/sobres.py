@@ -178,10 +178,12 @@ def editar_sobre_diario(request):
         if forzar_nuevo:
             sobre = None
         else:
+            bodega_actual = get_bodega_actual(request)
             sobres_candidatos = SobreDiario.objects.filter(
                 fecha_correspondiente=fecha_objetivo,
                 tipo=tipo_sobre,
-                trabajador=trabajador
+                trabajador=trabajador,
+                bodega=bodega_actual,
             )
 
             # Preferir sobres creados en la jornada desde donde el usuario esta trabajando.
@@ -432,7 +434,11 @@ def crear_sobre_nuevo(request):
 
     # Formulario
     hoy = today_chile()
-    camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+    bodega_actual = get_bodega_actual(request)
+    camioneros_qs = Usuario.objects.filter(rol='camionero', is_active=True)
+    if bodega_actual:
+        camioneros_qs = camioneros_qs.filter(bodega=bodega_actual)
+    camioneros = camioneros_qs.order_by('first_name', 'last_name')
 
     return render(request, 'sobres/crear_sobre.html', {
         'hoy': hoy,

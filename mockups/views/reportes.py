@@ -19,7 +19,7 @@ from mockups.models import (
 from mockups.utils.fechas import (
     today_chile,
 )
-from mockups.utils.permisos import require_roles, filtrar_por_bodega, filtrar_por_bodega
+from mockups.utils.permisos import require_roles, filtrar_por_bodega
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -304,9 +304,11 @@ def reporte_ventas(request):
     # 11. LISTA DE TRABAJADORES PARA FILTRO
     # ═══════════════════════════════════════════════════════════
     
-    trabajadores = Usuario.objects.filter(
-        is_active=True,
-        rol__in=['telefonista', 'bodeguero', 'jefe', 'admin']
+    trabajadores = filtrar_por_bodega(
+        Usuario.objects.filter(
+            is_active=True,
+            rol__in=['telefonista', 'bodeguero', 'jefe', 'admin']
+        ), request
     ).order_by('first_name', 'last_name')
     
     # ═══════════════════════════════════════════════════════════
@@ -375,7 +377,9 @@ def reporte_ventas(request):
         'metodo_choices': [("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("transferencia", "Transferencia")],
         'trabajadores': trabajadores,
         'sectores_choices': Pedido.SECTORES,
-        'camioneros': Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name'),
+        'camioneros': filtrar_por_bodega(
+            Usuario.objects.filter(rol='camionero', is_active=True), request
+        ).order_by('first_name', 'last_name'),
     }
     
     return render(request, "reportes/reporte_ventas.html", context)
@@ -677,7 +681,9 @@ def reporte_sobres(request):
     # ═══════════════════════════════════════════════════════════
     # 7. CONTEXT
     # ═══════════════════════════════════════════════════════════
-    camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+    camioneros = filtrar_por_bodega(
+        Usuario.objects.filter(rol='camionero', is_active=True), request
+    ).order_by('first_name', 'last_name')
 
     context = {
         # Navegación
