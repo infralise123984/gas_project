@@ -26,7 +26,10 @@ LOGIN_REDIRECT_URL = '/'
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
+_secret = os.getenv('SECRET_KEY')
+if not _secret:
+    raise ValueError("¡SECRET_KEY no está definida! Agréguela en .env o en Render")
+SECRET_KEY = _secret
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
@@ -274,8 +277,17 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ──────────────────────────────────────────────────────────────
 # CONFIGURACIÓN DE WEB PUSH NOTIFICATIONS (VAPID)
 # ──────────────────────────────────────────────────────────────
-# Claves generadas con: python generate_vapid.py
-# IMPORTANTE: Copiar estas claves a tu archivo .env para producción
-VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', 'BB0yr5YaM0f0zscZ96WzfrUzyRstuxb339lkwKMXFDSZiJSaMvKn_c53YJSUKF7DjLouGgpLxARF-gLky3zbFp8')
-VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', 'yezbxI6LntId1PZcWqOXxLbM2sX039plDZQaUwyGM5M')
+# Claves generadas con: python scripts/generate_vapid.py
+# IMPORTANTE: Las claves VAPID DEBEN definirse en .env o en Render.
+#             NO hay valores por defecto — si faltan, el sistema falla al iniciar.
+_vapid_public = os.getenv('VAPID_PUBLIC_KEY')
+_vapid_private = os.getenv('VAPID_PRIVATE_KEY')
+if not _vapid_public or not _vapid_private:
+    raise ValueError(
+        "¡VAPID_PUBLIC_KEY y/o VAPID_PRIVATE_KEY no están definidas!\n"
+        "Genérelas con:  python scripts/generate_vapid.py\n"
+        "Y agréguelas en .env o en Render."
+    )
+VAPID_PUBLIC_KEY = _vapid_public
+VAPID_PRIVATE_KEY = _vapid_private
 VAPID_ADMIN_EMAIL = os.getenv('VAPID_ADMIN_EMAIL', 'mailto:admin@kimgas.cl')

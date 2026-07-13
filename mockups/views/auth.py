@@ -42,6 +42,7 @@ audit_logger = logging.getLogger('audit')
 # ══════════════════════════════════════════════════════════════
 
 # Página de inicio del sistema
+@login_required
 def index(request):
     """Dashboard principal. Muestra opciones según rol del usuario."""
     context = {
