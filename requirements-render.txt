@@ -1,7 +1,7 @@
 # requirements-render.txt - dependencias pensadas para deploy en Render
-Django==5.1.3
+Django>=5.1.8,<5.2
 psycopg2-binary==2.9.10
-dj-database-url==1.0.0
+dj-database-url==2.3.0
 gunicorn==23.0.0
 whitenoise==6.7.0
 python-dotenv==1.0.1
@@ -10,3 +10,5 @@ pywebpush==2.2.0
 django-axes==7.0.1
 pyotp==2.9.0
 segno==1.6.6
+argon2-cffi==23.1.0
+django-ratelimit==4.1.0
