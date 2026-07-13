@@ -214,7 +214,6 @@ class Sector(models.Model):
     bodega = models.ForeignKey(
         'Bodega',
         on_delete=models.CASCADE,
-        null=True, blank=True,
         related_name='sectores',
         verbose_name="Bodega"
     )
@@ -364,7 +363,6 @@ class Pedido(models.Model):
     bodega = models.ForeignKey(
         'Bodega',
         on_delete=models.PROTECT,
-        null=True, blank=True,
         related_name='pedidos',
         verbose_name="Bodega"
     )
@@ -489,7 +487,6 @@ class SobreDiario(models.Model):
     bodega = models.ForeignKey(
         'Bodega',
         on_delete=models.PROTECT,
-        null=True, blank=True,
         related_name='sobres',
         verbose_name="Bodega"
     )

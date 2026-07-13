@@ -190,6 +190,12 @@ def editar_pedido(request, pedido_id):
     """
     pedido = get_object_or_404(Pedido, id=pedido_id)
 
+    # Validación de bodega: el pedido debe pertenecer a la bodega del usuario
+    bodega_usuario = get_bodega_actual(request)
+    if bodega_usuario and pedido.bodega != bodega_usuario:
+        messages.error(request, "Este pedido no pertenece a tu bodega.")
+        return redirect('index')
+
     user_rol = request.user.rol
 
     # 1. Validación por rol y propiedad del pedido
@@ -423,6 +429,12 @@ def telefonista_cancelar_pedido(request, pedido_id):
         return redirect("pedidos_mios")
 
     pedido = get_object_or_404(Pedido, id=pedido_id)
+
+    # Validación de bodega: el pedido debe pertenecer a la bodega del usuario
+    bodega_usuario = get_bodega_actual(request)
+    if bodega_usuario and pedido.bodega != bodega_usuario:
+        messages.error(request, "Este pedido no pertenece a tu bodega.")
+        return redirect("pedidos_mios")
 
     # Solo puede cancelar sus propios pedidos
     if pedido.registrador != request.user:
