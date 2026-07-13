@@ -14,6 +14,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 
+from django_ratelimit.decorators import ratelimit
+
 from mockups.forms import (
     DetalleFormSet,
     DetalleFormSetEdit,
@@ -45,6 +47,7 @@ audit_logger = logging.getLogger('audit')
 # Telefonista/Bodeguero: crear nuevo pedido
 @login_required
 @never_cache
+@ratelimit(key='user', rate='30/h', method='POST', block=True)
 def transaccional_pedido(request):
     """Registrar nueva venta o pedido según rol del usuario.
 
@@ -369,6 +372,7 @@ def mis_pedidos_hoy(request):
 
 
 @login_required
+@ratelimit(key='user', rate='120/m', method='GET', block=True)
 def mis_pedidos_hoy_api(request):
     """Endpoint AJAX: devuelve HTML actualizado de los pedidos del telefonista/bodeguero de hoy."""
     resp = require_roles_api(request, ['telefonista', 'bodeguero'])

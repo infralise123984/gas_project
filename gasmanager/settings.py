@@ -76,6 +76,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'axes.middleware.AxesMiddleware',
+    'mockups.middleware.SecurityHeadersMiddleware',
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -181,9 +182,12 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     
     # HTTP Strict Transport Security (HSTS)
+    # NOTA: HSTS_PRELOAD se deja en False hasta que el dominio esté
+    # registrado en https://hstspreload.org.  Activarlo sin registro
+    # puede causar que el sitio quede permanentemente inaccesible.
     SECURE_HSTS_SECONDS = 31536000  # 1 año
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+    SECURE_HSTS_PRELOAD = False
     
     # Cookies seguras
     SESSION_COOKIE_SECURE = True
@@ -191,11 +195,22 @@ if not DEBUG:
     
     # Headers de seguridad adicionales
     SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
     X_FRAME_OPTIONS = 'DENY'
     
     # Expiración de sesión (48 horas de inactividad)
     SESSION_COOKIE_AGE = 172800  # 48 horas
     SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Mantiene sesión aunque cierre el navegador
+
+# ──────────────────────────────────────────────────────────────
+# PASSWORD HASHING — Argon2 como primario, PBKDF2 como fallback
+# ──────────────────────────────────────────────────────────────
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+]
 
 # ──────────────────────────────────────────────────────────────
 # LOGGING Y AUDITORÍA
@@ -225,15 +240,19 @@ LOGGING = {
         },
         'security_file': {
             'level': 'WARNING',
-            'class': 'logging.FileHandler',
+            'class': 'logging.handlers.RotatingFileHandler',
             'filename': os.path.join(BASE_DIR, 'logs', 'security.log'),
             'formatter': 'verbose',
+            'maxBytes': 10 * 1024 * 1024,  # 10 MB
+            'backupCount': 5,
         },
         'audit_file': {
             'level': 'INFO',
-            'class': 'logging.FileHandler',
+            'class': 'logging.handlers.RotatingFileHandler',
             'filename': os.path.join(BASE_DIR, 'logs', 'audit.log'),
             'formatter': 'verbose',
+            'maxBytes': 10 * 1024 * 1024,  # 10 MB
+            'backupCount': 5,
         },
     },
     'loggers': {
@@ -268,6 +287,22 @@ AXES_COOLOFF_TIME = 1           # Desbloquear tras 1 hora
 AXES_LOCKOUT_TEMPLATE = None    # Usa el mecanismo de redirect por defecto
 AXES_RESET_ON_SUCCESS = True    # Resetear contador al login exitoso
 AXES_USERNAME_FORM_FIELD = 'username'
+
+# ──────────────────────────────────────────────────────────────
+# CACHÉ — Requerido por django-ratelimit
+# ──────────────────────────────────────────────────────────────
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'ratelimit',
+    }
+}
+
+# ──────────────────────────────────────────────────────────────
+# DJANGO-RATELIMIT — Rate limiting en endpoints sensibles
+# ──────────────────────────────────────────────────────────────
+RATELIMIT_ENABLE = not DEBUG   # Solo activo en producción
+RATELIMIT_VIEW = 'mockups.views.auth.rate_limited_view'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

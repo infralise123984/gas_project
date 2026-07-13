@@ -14,6 +14,8 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
+from django_ratelimit.decorators import ratelimit
+
 from mockups.models import (
     AuditoriaAccion,
     DetallePedido,
@@ -71,6 +73,7 @@ def mis_entregas_camionero(request):
 
 
 @login_required
+@ratelimit(key='user', rate='120/m', method='GET', block=True)
 def mis_entregas_camionero_api(request):
     """Endpoint AJAX: devuelve HTML actualizado de entregas completadas hoy por el camionero."""
     resp = require_roles_api(request, ['camionero'])
@@ -260,6 +263,7 @@ def camionero_entregas(request):
 
 # Camionero: API para actualización dinámica
 @login_required
+@ratelimit(key='user', rate='120/m', method='GET', block=True)
 def camionero_entregas_api(request):
     """Endpoint AJAX: devuelve HTML actualizado de entregas en ruta."""
     resp = require_roles_api(request, ["camionero", "admin"])

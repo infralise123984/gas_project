@@ -14,6 +14,8 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 
+from django_ratelimit.decorators import ratelimit
+
 from mockups.forms import (
     Activar2FAConfirmForm,
     CambiarPasswordForm,
@@ -514,4 +516,17 @@ def cambiar_bodega(request):
             messages.info(request, "Mostrando datos de todas las bodegas.")
 
     return redirect(next_url)
+
+
+# ──────────────────────────────────────────────────────────────
+# VISTA DE RATE-LIMIT (429 Too Many Requests)
+# ──────────────────────────────────────────────────────────────
+
+def rate_limited_view(request, exception=None):
+    """Renderiza una página 429 amigable cuando se excede el rate limit."""
+    from django.http import HttpResponseTooManyRequests
+    from django.shortcuts import render
+    return HttpResponseTooManyRequests(
+        render(request, "429.html", status=429).content
+    )
 

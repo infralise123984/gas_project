@@ -1,5 +1,5 @@
 # requirements-local.txt - dependencias para desarrollo local
-Django==5.1.3
+Django>=5.1.8,<5.2
 mysqlclient==2.2.6          # Driver MySQL para desarrollo local
 python-dotenv==1.0.1        # Carga el .env con SECRET_KEY, DB_PASSWORD, etc.
 openpyxl==3.1.5             # Exportación a Excel
@@ -9,3 +9,5 @@ dj-database-url==2.3.0      # Parseo de DATABASE_URL para entorno local
 django-axes==7.0.1          # Protección contra fuerza bruta en el login (requerido en settings.py)
 pyotp==2.9.0                # Códigos TOTP para 2FA
 segno==1.6.6                # Generación de QR para activar 2FA
+argon2-cffi==23.1.0          # Argon2 password hashing (más seguro)
+django-ratelimit==4.1.0      # Rate limiting en endpoints sensibles
