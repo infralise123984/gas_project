@@ -113,7 +113,7 @@ SECRET_KEY=tu_clave_secreta
 DEBUG=True
 DATABASE_URL=mysql://user:pass@localhost:3306/gasfacil
 
-# Push Notifications (generar con: python generate_vapid.py)
+# Push Notifications (generar con: python scripts/generate_vapid.py)
 VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_ADMIN_EMAIL=mailto:admin@tudominio.com
