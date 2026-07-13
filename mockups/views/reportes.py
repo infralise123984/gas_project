@@ -275,30 +275,30 @@ def reporte_ventas(request):
     # 10. PREPARAR DATOS PARA GRÁFICOS
     # ═══════════════════════════════════════════════════════════
     
-    chart_balones_labels = dumps([item['balon__nombre'] for item in por_balon[:8]])
-    chart_balones_unidades = dumps([int(item['unidades_vendidas']) for item in por_balon[:8]])
-    chart_balones_kilos = dumps([float(item['kilos_vendidos']) for item in por_balon[:8]])
-    chart_balones_monto = dumps([float(item['monto_vendido']) for item in por_balon[:8]])
+    chart_balones_labels = [item['balon__nombre'] for item in por_balon[:8]]
+    chart_balones_unidades = [int(item['unidades_vendidas']) for item in por_balon[:8]]
+    chart_balones_kilos = [float(item['kilos_vendidos']) for item in por_balon[:8]]
+    chart_balones_monto = [float(item['monto_vendido']) for item in por_balon[:8]]
     
-    chart_origen_labels = dumps([dict(Pedido.ORIGENES).get(item['origen'], item['origen']) for item in por_origen])
-    chart_origen_data = dumps([float(item['total_vendido']) for item in por_origen])
+    chart_origen_labels = [dict(Pedido.ORIGENES).get(item['origen'], item['origen']) for item in por_origen]
+    chart_origen_data = [float(item['total_vendido']) for item in por_origen]
     
     metodos_dict = dict([("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("transferencia", "Transferencia")])
-    chart_metodo_labels = dumps([metodos_dict.get(item['metodo_pago'], item['metodo_pago']) for item in por_metodo])
-    chart_metodo_data = dumps([float(item['total_vendido']) for item in por_metodo])
+    chart_metodo_labels = [metodos_dict.get(item['metodo_pago'], item['metodo_pago']) for item in por_metodo]
+    chart_metodo_data = [float(item['total_vendido']) for item in por_metodo]
     
-    chart_dias_labels = dumps([item['fecha'].strftime('%d/%m') for item in ventas_por_dia_lista])
-    chart_dias_ventas = dumps([item['monto'] for item in ventas_por_dia_lista])
-    chart_dias_ganancias = dumps([item['ganancia'] for item in ventas_por_dia_lista])
+    chart_dias_labels = [item['fecha'].strftime('%d/%m') for item in ventas_por_dia_lista]
+    chart_dias_ventas = [item['monto'] for item in ventas_por_dia_lista]
+    chart_dias_ganancias = [item['ganancia'] for item in ventas_por_dia_lista]
     
-    chart_sectores_labels = dumps([item['sector'] for item in top_sectores])
-    chart_sectores_data = dumps([float(item['total_vendido']) for item in top_sectores])
+    chart_sectores_labels = [item['sector'] for item in top_sectores]
+    chart_sectores_data = [float(item['total_vendido']) for item in top_sectores]
 
     # Gráfico de barras: rendimiento de trabajadores por kilos
-    chart_trabajadores_labels = dumps([w['nombre_trabajador'] for w in rendimiento_trabajadores_lista[:10]])
-    chart_trabajadores_registrado = dumps([float(w['kilos_registrados']) for w in rendimiento_trabajadores_lista[:10]])
-    chart_trabajadores_entregado = dumps([float(w['kilos_entregados']) for w in rendimiento_trabajadores_lista[:10]])
-    chart_trabajadores_tarreo = dumps([float(w['kilos_tarreo']) for w in rendimiento_trabajadores_lista[:10]])
+    chart_trabajadores_labels = [w['nombre_trabajador'] for w in rendimiento_trabajadores_lista[:10]]
+    chart_trabajadores_registrado = [float(w['kilos_registrados']) for w in rendimiento_trabajadores_lista[:10]]
+    chart_trabajadores_entregado = [float(w['kilos_entregados']) for w in rendimiento_trabajadores_lista[:10]]
+    chart_trabajadores_tarreo = [float(w['kilos_tarreo']) for w in rendimiento_trabajadores_lista[:10]]
     
     # ═══════════════════════════════════════════════════════════
     # 11. LISTA DE TRABAJADORES PARA FILTRO
@@ -663,16 +663,16 @@ def reporte_sobres(request):
     # ═══════════════════════════════════════════════════════════
     # 6. DATOS PARA GRÁFICOS
     # ═══════════════════════════════════════════════════════════
-    chart_dias_labels    = dumps([d['fecha'].strftime('%d/%m')  for d in dias_lista])
-    chart_dias_bodega    = dumps([d['bodega']                   for d in dias_lista])
-    chart_dias_camion    = dumps([d['camion']                   for d in dias_lista])
+    chart_dias_labels    = [d['fecha'].strftime('%d/%m')  for d in dias_lista]
+    chart_dias_bodega    = [d['bodega']                   for d in dias_lista]
+    chart_dias_camion    = [d['camion']                   for d in dias_lista]
 
-    chart_balon_labels   = dumps([b['nombre']   for b in balones_global_lista])
-    chart_balon_unidades = dumps([b['unidades'] for b in balones_global_lista])
-    chart_balon_kilos    = dumps([b['kilos']    for b in balones_global_lista])
+    chart_balon_labels   = [b['nombre']   for b in balones_global_lista]
+    chart_balon_unidades = [b['unidades'] for b in balones_global_lista]
+    chart_balon_kilos    = [b['kilos']    for b in balones_global_lista]
 
-    chart_pagos_labels   = dumps(list(pagos_global.keys()))
-    chart_pagos_data     = dumps(list(pagos_global.values()))
+    chart_pagos_labels   = list(pagos_global.keys())
+    chart_pagos_data     = list(pagos_global.values())
 
     # ═══════════════════════════════════════════════════════════
     # 7. CONTEXT
