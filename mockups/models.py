@@ -52,7 +52,7 @@ class Usuario(AbstractUser):
 
     # 2FA (TOTP opcional)
     totp_secret = EncryptedTextField(
-        blank=True, default=None,
+        blank=True, null=True,
         verbose_name="Secreto TOTP"
     )
     totp_activo = models.BooleanField(default=False, verbose_name="2FA activo")
