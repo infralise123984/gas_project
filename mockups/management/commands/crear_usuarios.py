@@ -39,6 +39,6 @@ class Command(BaseCommand):
             
             user.save()
             
-            self.stdout.write(self.style.SUCCESS(f"Usuario creado: {username} ({rol}) - Contraseña: {password}"))
+            self.stdout.write(self.style.SUCCESS(f"Usuario creado: {username} ({rol})"))
 
         self.stdout.write(self.style.SUCCESS("Todos los usuarios de prueba creados exitosamente."))
