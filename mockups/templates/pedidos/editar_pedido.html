@@ -1,182 +1,364 @@
-{% extends 'base.html' %}
-{% block title %}Editar Pedido #{{ pedido.id }} - GasFácil{% endblock %}
-
-{% block content %}
-<div class="container-fluid px-3 py-4" style="max-width: 580px; margin: 0 auto;">
-
-    <div class="text-center mb-4">
-        <h2 class="text-primary fw-bold mb-2 fs-3">
-            <i class="bi bi-pencil-square me-2"></i>Editar Pedido #{{ pedido.id }}
-        </h2>
-        <span class="badge bg-{% if pedido.estado == 'pendiente' %}warning text-dark{% elif pedido.estado == 'en_ruta' %}info{% else %}secondary{% endif %} me-2 fs-6">
-            {{ pedido.get_estado_display }}
-        </span>
-        <small class="text-muted">{{ pedido.get_origen_display }}</small>
-    </div>
-
-    <form method="post" id="pedidoForm">
-        {% csrf_token %}
-
-        {% if formset.non_form_errors %}
-        <div class="alert alert-danger mb-4">
-            <strong><i class="bi bi-exclamation-triangle me-1"></i> Errores:</strong>
-            <ul class="mb-0 mt-1">
-                {% for error in formset.non_form_errors %}<li>{{ error }}</li>{% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-
-        <!-- Cabecera -->
-        <div class="card shadow-sm border-0 mb-4">
-            <div class="card-body p-3 p-md-4">
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label fw-bold fs-5">Método de pago <span class="text-danger">*</span></label>
-                        <div class="d-grid gap-2">{{ form_cabecera.metodo_pago }}</div>
-                        {% if form_cabecera.metodo_pago.errors %}<div class="text-danger small mt-1">{{ form_cabecera.metodo_pago.errors }}</div>{% endif %}
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label fw-bold fs-5">Sector</label>
-                        {{ form_cabecera.sector }}
-                        {% if form_cabecera.sector.errors %}<div class="text-danger small mt-1">{{ form_cabecera.sector.errors }}</div>{% endif %}
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label fw-bold fs-5">Dirección / Referencia</label>
-                        {{ form_cabecera.direccion_entrega }}
-                        {% if form_cabecera.direccion_entrega.errors %}<div class="text-danger small mt-1">{{ form_cabecera.direccion_entrega.errors }}</div>{% endif %}
-                        <small class="form-text text-muted d-block mt-1"><i class="bi bi-info-circle me-1"></i>Ej: Los Álamos 123, casa esquina roja</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Productos -->
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="fw-bold mb-0 fs-5">Productos</h5>
-            <small class="text-muted">Modifica o agrega balones</small>
-        </div>
-
-        {{ formset.management_form }}
-
-        <div id="formset-container">
-            {% for form in formset %}
-            <div class="detalle-row card mb-3 shadow-sm border-0" data-form-index="{{ forloop.counter0 }}">
-                <div class="card-body p-3">
-                    <div class="row g-3 align-items-end">
-                        <div class="col-12">
-                            <label class="form-label fw-bold">Tipo de balón <span class="text-danger">*</span></label>
-                            {{ form.balon }}
-                            {% if form.balon.errors %}<div class="text-danger small mt-1">{{ form.balon.errors|join:" " }}</div>{% endif %}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label fw-bold">Cantidad <span class="text-danger">*</span></label>
-                            <div class="cantidad-control">
-                                <button type="button" class="btn btn-outline-danger cantidad-btn cantidad-btn-decrement" data-action="decrement"><i class="bi bi-dash-lg"></i></button>
-                                {{ form.cantidad }}
-                                <button type="button" class="btn btn-outline-success cantidad-btn cantidad-btn-increment" data-action="increment"><i class="bi bi-plus-lg"></i></button>
-                            </div>
-                            {% if form.cantidad.errors %}<div class="text-danger small mt-1">{{ form.cantidad.errors|join:" " }}</div>{% endif %}
-                        </div>
-                        {% if forloop.counter0 > 0 %}
-                        <div class="col-12">
-                            <button type="button" class="btn btn-outline-danger w-100 remove-row"><i class="bi bi-trash me-2"></i>Quitar producto</button>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {{ form.id }}
-                    <div style="display: none;">{{ form.DELETE }}{{ form.precio_venta_unitario }}</div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-
-        <div class="d-grid mb-4">
-            <button type="button" id="add-row" class="btn btn-outline-primary btn-lg py-3"><i class="bi bi-plus-circle me-2"></i>Agregar otro producto</button>
-        </div>
-
-        <div id="empty-form" style="display:none;">
-            <div class="detalle-row card mb-3 shadow-sm border-0">
-                <div class="card-body p-3">
-                    <div class="row g-3 align-items-end">
-                        <div class="col-12"><label class="form-label fw-bold">Tipo de balón <span class="text-danger">*</span></label>{{ formset.empty_form.balon }}</div>
-                        <div class="col-12">
-                            <label class="form-label fw-bold">Cantidad <span class="text-danger">*</span></label>
-                            <div class="cantidad-control">
-                                <button type="button" class="btn btn-outline-danger cantidad-btn cantidad-btn-decrement" data-action="decrement"><i class="bi bi-dash-lg"></i></button>
-                                {{ formset.empty_form.cantidad }}
-                                <button type="button" class="btn btn-outline-success cantidad-btn cantidad-btn-increment" data-action="increment"><i class="bi bi-plus-lg"></i></button>
-                            </div>
-                        </div>
-                        <div class="col-12"><button type="button" class="btn btn-outline-danger w-100 remove-row"><i class="bi bi-trash me-2"></i>Quitar producto</button></div>
-                    </div>
-                    <div style="display: none;">{{ formset.empty_form.DELETE }}{{ formset.empty_form.precio_venta_unitario }}</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-success btn-lg py-3 fs-5 shadow"><i class="bi bi-save me-2"></i> Guardar Cambios</button>
-            <a href="{% url url_volver %}" class="btn btn-outline-secondary btn-lg py-3 fs-5"><i class="bi bi-x-circle me-2"></i> Cancelar</a>
-        </div>
-    </form>
-</div>
-
-<style>
-.cantidad-control { display:flex; align-items:stretch; gap:0; border-radius:.5rem; overflow:hidden; border:1px solid #dee2e6; }
-.cantidad-control .cantidad-btn { border:none; border-radius:0; padding:.5rem 1rem; font-size:1.1rem; min-width:44px; display:flex; align-items:center; justify-content:center; }
-.cantidad-control input { border:none; border-radius:0; text-align:center; font-size:1.2rem; font-weight:bold; width:80px; flex:0 0 auto; }
-.cantidad-control input:focus { box-shadow:none; outline:none; }
-.cantidad-control .cantidad-btn-decrement { border-right:1px solid #dee2e6; }
-.cantidad-control .cantidad-btn-increment { border-left:1px solid #dee2e6; }
-.detalle-row { transition: all 0.2s ease; }
-.detalle-row:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important; }
-</style>
-
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const container = document.getElementById('formset-container');
-    const addButton = document.getElementById('add-row');
-    const emptyFormDiv = document.getElementById('empty-form');
-    const totalFormsInput = document.getElementById('id_detalles-TOTAL_FORMS');
-    if (!container || !addButton || !emptyFormDiv || !totalFormsInput) return;
-
-    const emptyFormTemplate = emptyFormDiv.querySelector('.detalle-row');
-    let formIndex = parseInt(totalFormsInput.value) || 1;
-
-    function setupCantidadButtons(row) {
-        const input = row.querySelector('input[type="number"]');
-        const decBtn = row.querySelector('.cantidad-btn-decrement');
-        const incBtn = row.querySelector('.cantidad-btn-increment');
-        if (!input || !decBtn || !incBtn) return;
-        decBtn.addEventListener('click', () => { let v = parseInt(input.value)||0; if(v>0){input.value=v-1; input.dispatchEvent(new Event('change'));} });
-        incBtn.addEventListener('click', () => { input.value = (parseInt(input.value)||0)+1; input.dispatchEvent(new Event('change')); });
-    }
-
-    container.querySelectorAll('.detalle-row').forEach(row => setupCantidadButtons(row));
-
-    container.querySelectorAll('.remove-row').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const row = this.closest('.detalle-row');
-            const cb = row.querySelector('input[name$="-DELETE"]');
-            if (cb) { cb.checked = true; row.style.display = 'none'; }
-        });
-    });
-
-    addButton.addEventListener('click', function() {
-        const newRow = emptyFormTemplate.cloneNode(true);
-        newRow.innerHTML = newRow.innerHTML.replace(/__prefix__/g, formIndex);
-        newRow.dataset.formIndex = formIndex;
-        newRow.querySelectorAll('input[type="number"]').forEach(i => i.value = '1');
-        const sel = newRow.querySelector('select'); if (sel) sel.selectedIndex = 0;
-        container.appendChild(newRow);
-        setupCantidadButtons(newRow);
-        newRow.querySelector('.remove-row').addEventListener('click', function() {
-            const row = this.closest('.detalle-row');
-            const cb = row.querySelector('input[name$="-DELETE"]');
-            if (cb) { cb.checked = true; row.style.display = 'none'; }
-        });
-        totalFormsInput.value = ++formIndex;
-    });
-});
-</script>
-{% endblock %}
+{% extends 'base.html' %}
+
+{% block title %}Editar Pedido #{{ pedido.id }} - GasFácil{% endblock %}
+
+
+
+{% block content %}
+
+<div class="container-fluid px-3 py-4" style="max-width: 580px; margin: 0 auto;">
+
+
+
+    <div class="text-center mb-4">
+
+        <h2 class="text-primary fw-bold mb-2 fs-3">
+
+            <i class="bi bi-pencil-square me-2"></i>Editar Pedido #{{ pedido.id }}
+
+        </h2>
+
+        <span class="badge bg-{% if pedido.estado == 'pendiente' %}warning text-dark{% elif pedido.estado == 'en_ruta' %}info{% else %}secondary{% endif %} me-2 fs-6">
+
+            {{ pedido.get_estado_display }}
+
+        </span>
+
+        <small class="text-muted">{{ pedido.get_origen_display }}</small>
+
+    </div>
+
+
+
+    <form method="post" id="pedidoForm">
+
+        {% csrf_token %}
+
+
+
+        {% if formset.non_form_errors %}
+
+        <div class="alert alert-danger mb-4">
+
+            <strong><i class="bi bi-exclamation-triangle me-1"></i> Errores:</strong>
+
+            <ul class="mb-0 mt-1">
+
+                {% for error in formset.non_form_errors %}<li>{{ error }}</li>{% endfor %}
+
+            </ul>
+
+        </div>
+
+        {% endif %}
+
+
+
+        <!-- Cabecera -->
+
+        <div class="card shadow-sm border-0 mb-4">
+
+            <div class="card-body p-3 p-md-4">
+
+                <div class="row g-3">
+
+                    <div class="col-12">
+
+                        <label class="form-label fw-bold fs-5">Método de pago <span class="text-danger">*</span></label>
+
+                        <div class="d-grid gap-2">{{ form_cabecera.metodo_pago }}</div>
+
+                        {% if form_cabecera.metodo_pago.errors %}<div class="text-danger small mt-1">{{ form_cabecera.metodo_pago.errors }}</div>{% endif %}
+
+                    </div>
+
+                    <div class="col-12">
+
+                        <label class="form-label fw-bold fs-5">Sector</label>
+
+                        {{ form_cabecera.sector }}
+
+                        {% if form_cabecera.sector.errors %}<div class="text-danger small mt-1">{{ form_cabecera.sector.errors }}</div>{% endif %}
+
+                    </div>
+
+                    <div class="col-12">
+
+                        <label class="form-label fw-bold fs-5">Dirección / Referencia</label>
+
+                        {{ form_cabecera.direccion_entrega }}
+
+                        {% if form_cabecera.direccion_entrega.errors %}<div class="text-danger small mt-1">{{ form_cabecera.direccion_entrega.errors }}</div>{% endif %}
+
+                        <small class="form-text text-muted d-block mt-1"><i class="bi bi-info-circle me-1"></i>Ej: Los Álamos 123, casa esquina roja</small>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+
+        <!-- Productos -->
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+
+            <h5 class="fw-bold mb-0 fs-5">Productos</h5>
+
+            <small class="text-muted">Modifica o agrega balones</small>
+
+        </div>
+
+
+
+        {{ formset.management_form }}
+
+
+
+        <div id="formset-container">
+
+            {% for form in formset %}
+
+            <div class="detalle-row card mb-3 shadow-sm border-0" data-form-index="{{ forloop.counter0 }}">
+
+                <div class="card-body p-3">
+
+                    <div class="row g-3 align-items-end">
+
+                        <div class="col-12">
+
+                            <label class="form-label fw-bold">Tipo de balón <span class="text-danger">*</span></label>
+
+                            {{ form.balon }}
+
+                            {% if form.balon.errors %}<div class="text-danger small mt-1">{{ form.balon.errors|join:" " }}</div>{% endif %}
+
+                        </div>
+
+                        <div class="col-12">
+
+                            <label class="form-label fw-bold">Cantidad <span class="text-danger">*</span></label>
+
+                            <div class="cantidad-control">
+
+                                <button type="button" class="btn btn-outline-danger cantidad-btn cantidad-btn-decrement" data-action="decrement"><i class="bi bi-dash-lg"></i></button>
+
+                                {{ form.cantidad }}
+
+                                <button type="button" class="btn btn-outline-success cantidad-btn cantidad-btn-increment" data-action="increment"><i class="bi bi-plus-lg"></i></button>
+
+                            </div>
+
+                            {% if form.cantidad.errors %}<div class="text-danger small mt-1">{{ form.cantidad.errors|join:" " }}</div>{% endif %}
+
+                        </div>
+
+                        {% if forloop.counter0 > 0 %}
+
+                        <div class="col-12">
+
+                            <button type="button" class="btn btn-outline-danger w-100 remove-row"><i class="bi bi-trash me-2"></i>Quitar producto</button>
+
+                        </div>
+
+                        {% endif %}
+
+                    </div>
+
+                    {{ form.id }}
+
+                    <div style="display: none;">{{ form.DELETE }}{{ form.precio_venta_unitario }}</div>
+
+                </div>
+
+            </div>
+
+            {% endfor %}
+
+        </div>
+
+
+
+        <div class="d-grid mb-4">
+
+            <button type="button" id="add-row" class="btn btn-outline-primary btn-lg py-3"><i class="bi bi-plus-circle me-2"></i>Agregar otro producto</button>
+
+        </div>
+
+
+
+        <div id="empty-form" style="display:none;">
+
+            <div class="detalle-row card mb-3 shadow-sm border-0">
+
+                <div class="card-body p-3">
+
+                    <div class="row g-3 align-items-end">
+
+                        <div class="col-12"><label class="form-label fw-bold">Tipo de balón <span class="text-danger">*</span></label>{{ formset.empty_form.balon }}</div>
+
+                        <div class="col-12">
+
+                            <label class="form-label fw-bold">Cantidad <span class="text-danger">*</span></label>
+
+                            <div class="cantidad-control">
+
+                                <button type="button" class="btn btn-outline-danger cantidad-btn cantidad-btn-decrement" data-action="decrement"><i class="bi bi-dash-lg"></i></button>
+
+                                {{ formset.empty_form.cantidad }}
+
+                                <button type="button" class="btn btn-outline-success cantidad-btn cantidad-btn-increment" data-action="increment"><i class="bi bi-plus-lg"></i></button>
+
+                            </div>
+
+                        </div>
+
+                        <div class="col-12"><button type="button" class="btn btn-outline-danger w-100 remove-row"><i class="bi bi-trash me-2"></i>Quitar producto</button></div>
+
+                    </div>
+
+                    <div style="display: none;">{{ formset.empty_form.DELETE }}{{ formset.empty_form.precio_venta_unitario }}</div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+
+        <div class="d-grid gap-2">
+
+            <button type="submit" class="btn btn-success btn-lg py-3 fs-5 shadow"><i class="bi bi-save me-2"></i> Guardar Cambios</button>
+
+            <a href="{% url url_volver %}" class="btn btn-outline-secondary btn-lg py-3 fs-5"><i class="bi bi-x-circle me-2"></i> Cancelar</a>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+
+<style>
+
+.cantidad-control { display:flex; align-items:stretch; gap:0; border-radius:.5rem; overflow:hidden; border:1px solid #dee2e6; }
+
+.cantidad-control .cantidad-btn { border:none; border-radius:0; padding:.5rem 1rem; font-size:1.1rem; min-width:44px; display:flex; align-items:center; justify-content:center; }
+
+.cantidad-control input { border:none; border-radius:0; text-align:center; font-size:1.2rem; font-weight:bold; width:80px; flex:0 0 auto; }
+
+.cantidad-control input:focus { box-shadow:none; outline:none; }
+
+.cantidad-control .cantidad-btn-decrement { border-right:1px solid #dee2e6; }
+
+.cantidad-control .cantidad-btn-increment { border-left:1px solid #dee2e6; }
+
+.detalle-row { transition: all 0.2s ease; }
+
+.detalle-row:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important; }
+
+</style>
+
+
+
+<script>
+
+document.addEventListener('DOMContentLoaded', function () {
+
+    const container = document.getElementById('formset-container');
+
+    const addButton = document.getElementById('add-row');
+
+    const emptyFormDiv = document.getElementById('empty-form');
+
+    const totalFormsInput = document.getElementById('id_detalles-TOTAL_FORMS');
+
+    if (!container || !addButton || !emptyFormDiv || !totalFormsInput) return;
+
+
+
+    const emptyFormTemplate = emptyFormDiv.querySelector('.detalle-row');
+
+    let formIndex = parseInt(totalFormsInput.value) || 1;
+
+
+
+    function setupCantidadButtons(row) {
+
+        const input = row.querySelector('input[type="number"]');
+
+        const decBtn = row.querySelector('.cantidad-btn-decrement');
+
+        const incBtn = row.querySelector('.cantidad-btn-increment');
+
+        if (!input || !decBtn || !incBtn) return;
+
+        decBtn.addEventListener('click', () => { let v = parseInt(input.value)||0; if(v>0){input.value=v-1; input.dispatchEvent(new Event('change'));} });
+
+        incBtn.addEventListener('click', () => { input.value = (parseInt(input.value)||0)+1; input.dispatchEvent(new Event('change')); });
+
+    }
+
+
+
+    container.querySelectorAll('.detalle-row').forEach(row => setupCantidadButtons(row));
+
+
+
+    container.querySelectorAll('.remove-row').forEach(btn => {
+
+        btn.addEventListener('click', function() {
+
+            const row = this.closest('.detalle-row');
+
+            const cb = row.querySelector('input[name$="-DELETE"]');
+
+            if (cb) { cb.checked = true; row.style.display = 'none'; }
+
+        });
+
+    });
+
+
+
+    addButton.addEventListener('click', function() {
+
+        const newRow = emptyFormTemplate.cloneNode(true);
+
+        newRow.innerHTML = newRow.innerHTML.replace(/__prefix__/g, formIndex);
+
+        newRow.dataset.formIndex = formIndex;
+
+        newRow.querySelectorAll('input[type="number"]').forEach(i => i.value = '1');
+
+        const sel = newRow.querySelector('select'); if (sel) sel.selectedIndex = 0;
+
+        container.appendChild(newRow);
+
+        setupCantidadButtons(newRow);
+
+        newRow.querySelector('.remove-row').addEventListener('click', function() {
+
+            const row = this.closest('.detalle-row');
+
+            const cb = row.querySelector('input[name$="-DELETE"]');
+
+            if (cb) { cb.checked = true; row.style.display = 'none'; }
+
+        });
+
+        totalFormsInput.value = ++formIndex;
+
+    });
+
+});
+
+</script>
+
+{% endblock %}
+
