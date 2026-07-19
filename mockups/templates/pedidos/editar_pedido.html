@@ -144,11 +144,15 @@
 
                             <div class="cantidad-control">
 
-                                <button type="button" class="btn btn-outline-danger cantidad-btn cantidad-btn-decrement" data-action="decrement"><i class="bi bi-dash-lg"></i></button>
+                                <button type="button" class="btn btn-outline-danger cantidad-btn cantidad-btn-decrement" data-action="decrement" aria-label="Restar una unidad">
+                                    <i class="bi bi-dash-lg"></i>
+                                </button>
 
                                 {{ form.cantidad }}
 
-                                <button type="button" class="btn btn-outline-success cantidad-btn cantidad-btn-increment" data-action="increment"><i class="bi bi-plus-lg"></i></button>
+                                <button type="button" class="btn btn-outline-success cantidad-btn cantidad-btn-increment" data-action="increment" aria-label="Sumar una unidad">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
 
                             </div>
 
@@ -206,11 +210,15 @@
 
                             <div class="cantidad-control">
 
-                                <button type="button" class="btn btn-outline-danger cantidad-btn cantidad-btn-decrement" data-action="decrement"><i class="bi bi-dash-lg"></i></button>
+                                <button type="button" class="btn btn-outline-danger cantidad-btn cantidad-btn-decrement" data-action="decrement" aria-label="Restar una unidad">
+                                    <i class="bi bi-dash-lg"></i>
+                                </button>
 
                                 {{ formset.empty_form.cantidad }}
 
-                                <button type="button" class="btn btn-outline-success cantidad-btn cantidad-btn-increment" data-action="increment"><i class="bi bi-plus-lg"></i></button>
+                                <button type="button" class="btn btn-outline-success cantidad-btn cantidad-btn-increment" data-action="increment" aria-label="Sumar una unidad">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
 
                             </div>
 
@@ -246,17 +254,57 @@
 
 <style>
 
-.cantidad-control { display:flex; align-items:stretch; gap:0; border-radius:.5rem; overflow:hidden; border:1px solid #dee2e6; }
+.cantidad-control {
+    display: flex;
+    align-items: stretch;
+    gap: 0.5rem;
+    width: 100%;
+}
 
-.cantidad-control .cantidad-btn { border:none; border-radius:0; padding:.5rem 1rem; font-size:1.1rem; min-width:44px; display:flex; align-items:center; justify-content:center; }
+.cantidad-control .form-control {
+    text-align: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto !important;
+    max-width: none !important;
+    min-width: 88px;
+}
 
-.cantidad-control input { border:none; border-radius:0; text-align:center; font-size:1.2rem; font-weight:bold; width:80px; flex:0 0 auto; }
+.cantidad-btn {
+    width: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
 
-.cantidad-control input:focus { box-shadow:none; outline:none; }
+.cantidad-btn-increment:hover,
+.cantidad-btn-increment:focus {
+    background-color: #198754;
+    border-color: #198754;
+    color: white;
+}
 
-.cantidad-control .cantidad-btn-decrement { border-right:1px solid #dee2e6; }
+.cantidad-btn-decrement:hover,
+.cantidad-btn-decrement:focus {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+}
 
-.cantidad-control .cantidad-btn-increment { border-left:1px solid #dee2e6; }
+@media (max-width: 575.98px) {
+    .cantidad-control {
+        gap: 0.35rem;
+    }
+    .cantidad-btn {
+        width: 42px;
+        min-width: 42px;
+    }
+    .cantidad-control .form-control {
+        min-width: 96px;
+    }
+}
 
 .detalle-row { transition: all 0.2s ease; }
 
