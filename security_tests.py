@@ -341,13 +341,28 @@ class IDORTests(TestCase):
     
     def test_cannot_access_other_user_data(self):
         """
-        Usuario no debe acceder a recursos de otros usuarios
-        sin autorización adecuada
+        Un telefonista no debe acceder al detalle de un pedido
+        registrado por otro telefonista (protección IDOR).
         """
-        # Este test debe adaptarse según tu lógica de negocio
-        # Por ejemplo, verificar que un telefonista no puede ver
-        # pedidos de otro telefonista (si aplica)
-        pass
+        from mockups.models import Pedido
+
+        # Pedido registrado por user1
+        pedido_ajeno = Pedido.objects.create(
+            registrador=self.user1,
+            estado='pendiente',
+            origen='telefono',
+            metodo_pago='efectivo',
+            direccion_entrega='Dirección privada de prueba',
+        )
+
+        # user2 (otro telefonista) intenta ver el pedido de user1
+        self.client.force_login(self.user2)
+        response = self.client.get(reverse('pedidos_detalle', args=[pedido_ajeno.id]))
+
+        # Debe ser redirigido (sin acceso), no mostrar el detalle.
+        # redirect("index") resuelve a la raíz '/'.
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/')
 
 
 if __name__ == '__main__':
