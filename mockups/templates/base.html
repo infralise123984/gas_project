@@ -241,11 +241,17 @@
                     {% endif %}
                     {% if user.rol == "jefe" or user.rol == "admin" %}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'reportes_ventas' or request.resolver_match.url_name == 'reportes_sobres' %}active{% endif %}"
+                        <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'reportes_ventas' or request.resolver_match.url_name == 'reportes_sobres' or request.resolver_match.url_name == 'reportes_resumen' %}active{% endif %}"
                            href="#" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-graph-up"></i> Reportes
                         </a>
                         <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.url_name == 'reportes_resumen' %}active{% endif %}"
+                                   href="{% url 'reportes_resumen' %}">
+                                    <i class="bi bi-speedometer2 me-2 text-success"></i>Resumen
+                                </a>
+                            </li>
                             <li>
                                 <a class="dropdown-item {% if request.resolver_match.url_name == 'reportes_ventas' %}active{% endif %}"
                                    href="{% url 'reportes_ventas' %}">
@@ -393,6 +399,12 @@
 
     {% if user.rol == "jefe" or user.rol == "admin" %}
     <div class="d-flex flex-column gap-2 align-items-end" id="hud-reportes" style="display:none !important;">
+        <a href="{% url 'reportes_resumen' %}"
+           class="btn btn-light border shadow-sm d-flex align-items-center gap-2 px-3 py-2 text-nowrap"
+           style="border-radius: 2rem;">
+            <i class="bi bi-speedometer2 text-success"></i>
+            <span class="fw-semibold small">Resumen</span>
+        </a>
         <a href="{% url 'reportes_ventas' %}"
            class="btn btn-light border shadow-sm d-flex align-items-center gap-2 px-3 py-2 text-nowrap"
            style="border-radius: 2rem;">
@@ -511,7 +523,6 @@ document.addEventListener('click', function(e) {
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
             navigator.serviceWorker.register('/sw.js', { scope: '/' })
-                .then(reg => console.log('SW registrado OK → scope:', reg.scope))
                 .catch(err => console.error('Error registrando SW:', err));
         });
     }

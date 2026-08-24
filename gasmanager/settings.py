@@ -26,7 +26,10 @@ LOGIN_REDIRECT_URL = '/'
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
+_secret = os.getenv('SECRET_KEY')
+if not _secret:
+    raise ValueError("¡SECRET_KEY no está definida! Agréguela en .env o en Render")
+SECRET_KEY = _secret
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
@@ -73,6 +76,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'axes.middleware.AxesMiddleware',
+    'mockups.middleware.SecurityHeadersMiddleware',
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -221,15 +225,19 @@ LOGGING = {
         },
         'security_file': {
             'level': 'WARNING',
-            'class': 'logging.FileHandler',
+            'class': 'logging.handlers.RotatingFileHandler',
             'filename': os.path.join(BASE_DIR, 'logs', 'security.log'),
             'formatter': 'verbose',
+            'maxBytes': 10 * 1024 * 1024,  # 10 MB
+            'backupCount': 5,
         },
         'audit_file': {
             'level': 'INFO',
-            'class': 'logging.FileHandler',
+            'class': 'logging.handlers.RotatingFileHandler',
             'filename': os.path.join(BASE_DIR, 'logs', 'audit.log'),
             'formatter': 'verbose',
+            'maxBytes': 10 * 1024 * 1024,  # 10 MB
+            'backupCount': 5,
         },
     },
     'loggers': {

@@ -12,11 +12,16 @@ from django.shortcuts import render
 
 from mockups.models import (
     DetallePedido,
+    LineaGasto,
+    LineaSobre,
     Pedido,
     SobreDiario,
     Usuario,
 )
 from mockups.utils.fechas import (
+    MESES_ES_CAMIONERO,
+    navegacion_mes,
+    parse_mes_param,
     today_chile,
 )
 from mockups.utils.permisos import require_roles
@@ -728,4 +733,235 @@ def reporte_sobres(request):
     }
 
     return render(request, "sobres/reporte_sobres.html", context)
+
+
+# Admin/Jefe: resumen ejecutivo condensado
+@login_required
+def reporte_resumen(request):
+    """Resumen ejecutivo: kilos por trabajador (sobres), top sectores, gastos y kilos."""
+    resp = require_roles(request, ["jefe", "admin"], "index",
+                         "Solo jefes y administradores pueden acceder al resumen.")
+    if resp:
+        return resp
+
+    tz_chile = ZoneInfo('America/Santiago')
+    hoy = today_chile()
+
+    # ═══════════════════════════════════════════════════════════
+    # 1. PERÍODO — mes navegable + acumulado anual
+    # ═══════════════════════════════════════════════════════════
+    anio, mes = parse_mes_param(request)
+    fecha_inicio = date(anio, mes, 1)
+    fecha_fin = date(anio, mes, monthrange(anio, mes)[1])
+    mes_display = fecha_inicio.strftime('%B %Y').capitalize()
+
+    (anio_ant, mes_ant), (anio_sig, mes_sig) = navegacion_mes(anio, mes)
+    mes_anterior = f"{anio_ant:04d}-{mes_ant:02d}"
+    mes_siguiente = f"{anio_sig:04d}-{mes_sig:02d}"
+    mes_actual = f"{anio:04d}-{mes:02d}"
+    es_mes_actual = (anio == hoy.year and mes == hoy.month)
+
+    # Rango datetime del mes en zona Chile (para pedidos)
+    dt_inicio = datetime(anio, mes, 1, 0, 0, 0, tzinfo=tz_chile)
+    dt_fin = datetime(anio, mes, fecha_fin.day, 23, 59, 59, 999999, tzinfo=tz_chile)
+
+    # ═══════════════════════════════════════════════════════════
+    # 2. KILOS POR TRABAJADOR (solo sobres cerrados)
+    # ═══════════════════════════════════════════════════════════
+    rango_mes = (fecha_inicio, fecha_fin)
+
+    kilos_camioneros_qs = (
+        LineaSobre.objects
+        .filter(
+            sobre__cerrado=True,
+            sobre__tipo='camion',
+            sobre__fecha_correspondiente__range=rango_mes,
+        )
+        .values(
+            'sobre__trabajador_id',
+            'sobre__trabajador__first_name',
+            'sobre__trabajador__last_name',
+            'sobre__trabajador__username',
+        )
+        .annotate(
+            unidades=Sum('cantidad_declarada'),
+            kilos=Sum(F('cantidad_declarada') * F('balon__peso_neto_gas')),
+        )
+        .order_by('-kilos')
+    )
+
+    kilos_trabajadores = []
+    for fila in kilos_camioneros_qs:
+        if fila['sobre__trabajador_id'] is None:
+            continue
+        nombre = f"{fila['sobre__trabajador__first_name'] or ''} {fila['sobre__trabajador__last_name'] or ''}".strip()
+        nombre = nombre or fila['sobre__trabajador__username']
+        kilos_trabajadores.append({
+            'nombre': nombre,
+            'unidades': fila['unidades'] or 0,
+            'kilos': fila['kilos'] or 0,
+        })
+
+    bodega_agg = (
+        LineaSobre.objects
+        .filter(
+            sobre__cerrado=True,
+            sobre__tipo='bodega',
+            sobre__fecha_correspondiente__range=rango_mes,
+        )
+        .aggregate(
+            unidades=Sum('cantidad_declarada'),
+            kilos=Sum(F('cantidad_declarada') * F('balon__peso_neto_gas')),
+        )
+    )
+    bodega_resumen = {
+        'nombre': 'Bodega/Local',
+        'unidades': bodega_agg['unidades'] or 0,
+        'kilos': bodega_agg['kilos'] or 0,
+    }
+
+    # ═══════════════════════════════════════════════════════════
+    # 3. TOP SECTORES — por monto y por kilos
+    # ═══════════════════════════════════════════════════════════
+    top_sectores_monto = (
+        Pedido.objects
+        .filter(estado='entregado', fecha__gte=dt_inicio, fecha__lte=dt_fin)
+        .exclude(Q(sector='') | Q(sector__isnull=True))
+        .values('sector')
+        .annotate(total=Sum('monto_total'))
+        .order_by('-total')[:10]
+    )
+
+    top_sectores_kilos = (
+        DetallePedido.objects
+        .filter(
+            pedido__estado='entregado',
+            pedido__fecha__gte=dt_inicio,
+            pedido__fecha__lte=dt_fin,
+        )
+        .exclude(Q(pedido__sector='') | Q(pedido__sector__isnull=True))
+        .values('pedido__sector')
+        .annotate(kilos=Sum(F('cantidad') * F('balon__peso_neto_gas')))
+        .order_by('-kilos')[:10]
+    )
+
+    # ═══════════════════════════════════════════════════════════
+    # 4. GASTOS — mensuales y anuales (todos los sobres del periodo)
+    # ═══════════════════════════════════════════════════════════
+    gastos_mes = (
+        LineaGasto.objects
+        .filter(sobre__fecha_correspondiente__range=rango_mes)
+        .aggregate(total=Sum('monto'))['total'] or 0
+    )
+    gastos_anio = (
+        LineaGasto.objects
+        .filter(sobre__fecha_correspondiente__year=anio)
+        .aggregate(total=Sum('monto'))['total'] or 0
+    )
+
+    # ═══════════════════════════════════════════════════════════
+    # 4b. GASTOS POR MES (año navegable) — bodega vs camión
+    # ═══════════════════════════════════════════════════════════
+    anio_sel_str = request.GET.get("anio", "").strip()
+    try:
+        anio_sel = int(anio_sel_str) if anio_sel_str else hoy.year
+    except ValueError:
+        anio_sel = hoy.year
+
+    gastos_por_mes_qs = (
+        LineaGasto.objects
+        .filter(sobre__fecha_correspondiente__year=anio_sel)
+        .values('sobre__fecha_correspondiente__month', 'sobre__tipo')
+        .annotate(total=Sum('monto'))
+    )
+
+    gastos_mapa = {}
+    for fila in gastos_por_mes_qs:
+        mes_num = fila['sobre__fecha_correspondiente__month']
+        tipo = fila['sobre__tipo']
+        gastos_mapa.setdefault(mes_num, {'bodega': 0, 'camion': 0})
+        gastos_mapa[mes_num][tipo] = float(fila['total'] or 0)
+
+    gastos_por_mes = []
+    total_anio_bodega = 0
+    total_anio_camion = 0
+    for m in range(1, 13):
+        datos = gastos_mapa.get(m, {'bodega': 0, 'camion': 0})
+        bodega_m = datos['bodega']
+        camion_m = datos['camion']
+        total_anio_bodega += bodega_m
+        total_anio_camion += camion_m
+        gastos_por_mes.append({
+            'mes_num': m,
+            'mes_nombre': MESES_ES_CAMIONERO[m],
+            'bodega': bodega_m,
+            'camion': camion_m,
+            'total': bodega_m + camion_m,
+        })
+
+    # ═══════════════════════════════════════════════════════════
+    # 5. KILOS TOTALES — mes y año (solo sobres cerrados)
+    # ═══════════════════════════════════════════════════════════
+    kilos_mes = (
+        LineaSobre.objects
+        .filter(sobre__cerrado=True, sobre__fecha_correspondiente__range=rango_mes)
+        .aggregate(total=Sum(F('cantidad_declarada') * F('balon__peso_neto_gas')))['total'] or 0
+    )
+    kilos_anio = (
+        LineaSobre.objects
+        .filter(sobre__cerrado=True, sobre__fecha_correspondiente__year=anio)
+        .aggregate(total=Sum(F('cantidad_declarada') * F('balon__peso_neto_gas')))['total'] or 0
+    )
+
+    # ═══════════════════════════════════════════════════════════
+    # 6. RESUMEN POR BALÓN (mes, sobres cerrados)
+    # ═══════════════════════════════════════════════════════════
+    por_balon = (
+        LineaSobre.objects
+        .filter(sobre__cerrado=True, sobre__fecha_correspondiente__range=rango_mes)
+        .values('balon__nombre', 'balon__peso_neto_gas')
+        .annotate(
+            unidades=Sum('cantidad_declarada'),
+            kilos=Sum(F('cantidad_declarada') * F('balon__peso_neto_gas')),
+        )
+        .order_by('balon__peso_neto_gas')
+    )
+
+    context = {
+        # Navegación
+        'mes_display': mes_display,
+        'mes_actual': mes_actual,
+        'mes_anterior': mes_anterior,
+        'mes_siguiente': mes_siguiente,
+        'es_mes_actual': es_mes_actual,
+
+        # Métricas
+        'kilos_mes': kilos_mes,
+        'kilos_anio': kilos_anio,
+        'gastos_mes': gastos_mes,
+        'gastos_anio': gastos_anio,
+
+        # Gastos por mes (año navegable)
+        'gastos_por_mes': gastos_por_mes,
+        'anio_sel': anio_sel,
+        'anio_actual': hoy.year,
+        'anio_sel_anterior': anio_sel - 1,
+        'anio_sel_siguiente': anio_sel + 1,
+        'total_anio_bodega': total_anio_bodega,
+        'total_anio_camion': total_anio_camion,
+        'total_anio_gastos': total_anio_bodega + total_anio_camion,
+
+        # Kilos por trabajador
+        'kilos_trabajadores': kilos_trabajadores,
+        'bodega_resumen': bodega_resumen,
+
+        # Top sectores
+        'top_sectores_monto': top_sectores_monto,
+        'top_sectores_kilos': top_sectores_kilos,
+
+        # Resumen por balón
+        'por_balon': por_balon,
+    }
+
+    return render(request, "reportes/resumen.html", context)
 
