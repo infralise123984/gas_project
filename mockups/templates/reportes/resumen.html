@@ -1,0 +1,364 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Resumen — {{ mes_display }} - Kim Gas{% endblock %}
+
+{% block extra_head %}
+<style>
+    .metric-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .metric-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15) !important;
+    }
+    .table-hover tbody tr:hover {
+        background-color: rgba(13, 110, 253, 0.05);
+    }
+    .nav-mes .btn { min-width: 38px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4">
+
+    <!-- ENCABEZADO -->
+    <div class="row mb-4">
+        <div class="col-12 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+                <h1 class="display-6 fw-bold text-primary mb-2">
+                    <i class="bi bi-speedometer2 me-2"></i>Resumen Ejecutivo
+                </h1>
+                <p class="text-muted mb-0">
+                    Vista condensada del mes de <strong>{{ mes_display }}</strong> con acumulado anual
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- NAVEGACIÓN DE MES -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body py-3">
+            <div class="d-flex align-items-center gap-2 nav-mes">
+                <a href="?mes={{ mes_anterior }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+                <h5 class="mb-0 fw-bold text-primary px-2">{{ mes_display }}</h5>
+                <a href="?mes={{ mes_siguiente }}" class="btn btn-outline-secondary btn-sm {% if es_mes_actual %}disabled{% endif %}">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+                {% if not es_mes_actual %}
+                <a href="?" class="btn btn-outline-primary btn-sm ms-1">Mes actual</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- MÉTRICAS PRINCIPALES -->
+    <div class="row g-3 mb-4">
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card metric-card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-1 small">Kilos vendidos (mes)</p>
+                            <h3 class="fw-bold text-primary mb-0">{{ kilos_mes|floatformat:0|intcomma }} kg</h3>
+                            <small class="text-muted">Sobres cerrados</small>
+                        </div>
+                        <div class="bg-primary bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-box-seam text-primary fs-3"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card metric-card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-1 small">Kilos vendidos (año {{ mes_actual|slice:":4" }})</p>
+                            <h3 class="fw-bold text-info mb-0">{{ kilos_anio|floatformat:0|intcomma }} kg</h3>
+                            <small class="text-muted">Acumulado anual</small>
+                        </div>
+                        <div class="bg-info bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-calendar3 text-info fs-3"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card metric-card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-1 small">Gastos (mes)</p>
+                            <h3 class="fw-bold text-danger mb-0">${{ gastos_mes|floatformat:0|intcomma }}</h3>
+                            <small class="text-muted">Todos los sobres del periodo</small>
+                        </div>
+                        <div class="bg-danger bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-receipt text-danger fs-3"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card metric-card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted mb-1 small">Gastos (año {{ mes_actual|slice:":4" }})</p>
+                            <h3 class="fw-bold text-warning mb-0">${{ gastos_anio|floatformat:0|intcomma }}</h3>
+                            <small class="text-muted">Acumulado anual</small>
+                        </div>
+                        <div class="bg-warning bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-receipt-cutoff text-warning fs-3"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- GASTOS POR MES -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white border-0 pt-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div>
+                    <h5 class="fw-bold mb-0"><i class="bi bi-receipt me-2 text-danger"></i>Gastos por mes</h5>
+                    <small class="text-muted">Desglose por bodega y camión</small>
+                </div>
+                <div class="d-flex align-items-center gap-2 nav-mes">
+                    <a href="?mes={{ mes_actual }}&anio={{ anio_sel_anterior }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                    <h5 class="mb-0 fw-bold text-primary px-2">{{ anio_sel }}</h5>
+                    <a href="?mes={{ mes_actual }}&anio={{ anio_sel_siguiente }}"
+                       class="btn btn-outline-secondary btn-sm {% if anio_sel >= anio_actual %}disabled{% endif %}">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mes</th>
+                            <th class="text-end">Bodega</th>
+                            <th class="text-end">Camión</th>
+                            <th class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in gastos_por_mes %}
+                        <tr>
+                            <td class="fw-semibold">{{ m.mes_nombre }}</td>
+                            <td class="text-end">{% if m.bodega > 0 %}${{ m.bodega|floatformat:0|intcomma }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                            <td class="text-end">{% if m.camion > 0 %}${{ m.camion|floatformat:0|intcomma }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                            <td class="text-end fw-semibold">{% if m.total > 0 %}${{ m.total|floatformat:0|intcomma }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-4">
+                                No hay gastos registrados en {{ anio_sel }}.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <th>Total {{ anio_sel }}</th>
+                            <th class="text-end text-danger">${{ total_anio_bodega|floatformat:0|intcomma }}</th>
+                            <th class="text-end text-danger">${{ total_anio_camion|floatformat:0|intcomma }}</th>
+                            <th class="text-end text-danger">${{ total_anio_gastos|floatformat:0|intcomma }}</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- KILOS POR TRABAJADOR + RESUMEN POR BALÓN -->
+    <div class="row g-3 mb-4">
+
+        <!-- Kilos por trabajador -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white border-0 pt-3">
+                    <h5 class="fw-bold mb-0"><i class="bi bi-people me-2 text-primary"></i>Kilos por trabajador (mes)</h5>
+                    <small class="text-muted">Según sobres cerrados</small>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Trabajador</th>
+                                    <th class="text-end">Unidades</th>
+                                    <th class="text-end">Kilos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if bodega_resumen.kilos or bodega_resumen.unidades %}
+                                <tr>
+                                    <td class="fw-semibold">
+                                        <span class="badge bg-purple me-1" style="background-color:#6f42c1;">Bodega</span>
+                                        {{ bodega_resumen.nombre }}
+                                    </td>
+                                    <td class="text-end">{{ bodega_resumen.unidades|intcomma }}</td>
+                                    <td class="text-end fw-semibold">{{ bodega_resumen.kilos|floatformat:0|intcomma }} kg</td>
+                                </tr>
+                                {% endif %}
+                                {% for t in kilos_trabajadores %}
+                                <tr>
+                                    <td class="fw-semibold">
+                                        <span class="badge me-1" style="background-color:#fd7e14;">Camión</span>
+                                        {{ t.nombre }}
+                                    </td>
+                                    <td class="text-end">{{ t.unidades|intcomma }}</td>
+                                    <td class="text-end fw-semibold">{{ t.kilos|floatformat:0|intcomma }} kg</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-4">
+                                        No hay sobres cerrados en este mes.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resumen por balón -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white border-0 pt-3">
+                    <h5 class="fw-bold mb-0"><i class="bi bi-boxes me-2 text-primary"></i>Resumen de kilos por balón (mes)</h5>
+                    <small class="text-muted">Según sobres cerrados</small>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Balón</th>
+                                    <th class="text-end">Unidades</th>
+                                    <th class="text-end">Kilos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for b in por_balon %}
+                                <tr>
+                                    <td>{{ b.balon__nombre }}</td>
+                                    <td class="text-end">{{ b.unidades|intcomma }}</td>
+                                    <td class="text-end fw-semibold">{{ b.kilos|floatformat:0|intcomma }} kg</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-4">
+                                        No hay datos de sobres cerrados en este mes.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- TOP SECTORES -->
+    <div class="row g-3">
+
+        <!-- Top sectores por monto -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white border-0 pt-3">
+                    <h5 class="fw-bold mb-0"><i class="bi bi-cash-stack me-2 text-success"></i>Top sectores por venta ($)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:50px;">#</th>
+                                    <th>Sector</th>
+                                    <th class="text-end">Venta</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for s in top_sectores_monto %}
+                                <tr>
+                                    <td class="text-muted">{{ forloop.counter }}</td>
+                                    <td>{{ s.sector }}</td>
+                                    <td class="text-end fw-semibold">${{ s.total|floatformat:0|intcomma }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-4">
+                                        No hay ventas entregadas en este mes.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top sectores por kilos -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white border-0 pt-3">
+                    <h5 class="fw-bold mb-0"><i class="bi bi-box-seam me-2 text-info"></i>Top sectores por kilos</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:50px;">#</th>
+                                    <th>Sector</th>
+                                    <th class="text-end">Kilos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for s in top_sectores_kilos %}
+                                <tr>
+                                    <td class="text-muted">{{ forloop.counter }}</td>
+                                    <td>{{ s.pedido__sector }}</td>
+                                    <td class="text-end fw-semibold">{{ s.kilos|floatformat:0|intcomma }} kg</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-4">
+                                        No hay ventas entregadas en este mes.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

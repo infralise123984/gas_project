@@ -1,4 +1,5 @@
 # mockups/management/commands/create_test_users.py
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from mockups.models import Usuario  # Asegúrate de que el import sea correcto según tu app
 
@@ -6,6 +7,13 @@ class Command(BaseCommand):
     help = 'Crea usuarios de prueba para cada rol con contraseña "Contraseña@123" (solo para testing local)'
 
     def handle(self, *args, **kwargs):
+        # Seguridad: no ejecutar este comando en producción.
+        if not settings.DEBUG:
+            self.stdout.write(self.style.ERROR(
+                'Este comando está deshabilitado en producción (DEBUG=False).'
+            ))
+            return
+
         roles = [
             ("telefonista", "Telefonista", "Test"),
             ("bodeguero", "Bodeguero", "Test"),
