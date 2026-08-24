@@ -563,8 +563,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         formIndex++;
         totalFormsInput.value = formIndex;
-        
-        console.log(`Fila agregada. Total forms: ${formIndex}`);
     });
 
     // Eliminar fila
@@ -599,8 +597,6 @@ document.addEventListener('DOMContentLoaded', function() {
         filaEliminarPendiente = null;
         bootstrap.Modal.getInstance(document.getElementById('modalEliminarProducto')).hide();
     });
-
-    console.log(`Formset inicializado con ${formIndex} formularios`);
 });
 </script>
 

@@ -210,12 +210,6 @@ function actualizarTotal() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // DEBUG: Ver todos los precios al cargar
-    console.log('=== PRECIOS AL CARGAR ===');
-    document.querySelectorAll('.balon-card').forEach(card => {
-        console.log('Balón ID:', card.dataset.id, 'Precio:', card.dataset.precio);
-    });
-    
     // Selección de método de pago con colores distintivos
     document.querySelectorAll('.pago-btn').forEach(btn => {
         btn.addEventListener('click', () => {

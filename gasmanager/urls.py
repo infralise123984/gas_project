@@ -66,6 +66,7 @@ urlpatterns = [
     # ────────────────────────────────────────────────
     path('reportes/ventas/', views.reporte_ventas, name='reportes_ventas'),
     path('reportes/sobres/', views.reporte_sobres, name='reportes_sobres'),
+    path('reportes/resumen/', views.reporte_resumen, name='reportes_resumen'),
 
     # ────────────────────────────────────────────────
     # GESTIÓN DE PRECIOS Y BALONES
