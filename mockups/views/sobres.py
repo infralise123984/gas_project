@@ -1107,7 +1107,8 @@ def consulta_sobres_jefe(request):
     elif tipo == 'camion':
         sobres_qs = sobres_qs.filter(tipo='camion')
 
-    sobres_qs = sobres_qs.order_by('-fecha_correspondiente', '-id')
+    # Orden por creación (id desc): la columna # queda siempre correlativa.
+    sobres_qs = sobres_qs.order_by('-id')
 
     # ── Métricas del resultado ─────────────────────────────────
     total_sobres = sobres_qs.count()
