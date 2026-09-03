@@ -449,6 +449,13 @@ def reporte_sobres(request):
     lista_camion = list(sobres_qs.filter(tipo='camion').order_by('fecha_correspondiente'))
     lista_todos  = lista_bodega + lista_camion
 
+    # Mapa {trabajador_id: Usuario} — los sobres ya traen 'trabajador'
+    # cargado por select_related; reutilizarlo evita N+1 en los loops.
+    trabajadores_map = {}
+    for s in lista_camion:
+        if s.trabajador_id and s.trabajador_id not in trabajadores_map:
+            trabajadores_map[s.trabajador_id] = s.trabajador
+
     # ═══════════════════════════════════════════════════════════
     # 3. FUNCIÓN AUXILIAR — métricas de un grupo de sobres
     # ═══════════════════════════════════════════════════════════
@@ -525,8 +532,9 @@ def reporte_sobres(request):
             tipo_mostrar = 'bodega'
             usuario_obj = None
         else:
-            usuario_obj = Usuario.objects.get(id=clave)
-            nombre = usuario_obj.get_full_name() or usuario_obj.username
+            # Usar trabajador ya cargado (evita consulta N+1)
+            usuario_obj = trabajadores_map.get(clave)
+            nombre = (usuario_obj.get_full_name() or usuario_obj.username) if usuario_obj else f'Trabajador #{clave}'
             tipo_mostrar = 'camion'
         
         resumen_trabajadores.append({
@@ -608,10 +616,11 @@ def reporte_sobres(request):
         if clave == 'bodega':
             nombre = 'Bodega/Local'
         else:
-            try:
-                usuario_obj = Usuario.objects.get(id=clave)
+            # Usar trabajador ya cargado (evita consulta N+1)
+            usuario_obj = trabajadores_map.get(clave)
+            if usuario_obj:
                 nombre = usuario_obj.get_full_name() or usuario_obj.username
-            except:
+            else:
                 nombre = f'Trabajador #{clave}'
         
         monto_total = sum(g['monto'] for g in gastos_list)
