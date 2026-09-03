@@ -238,12 +238,21 @@ def reporte_ventas(request):
             
             rendimiento_trabajadores[entregador.id]['kilos_entregados'] += kilos_pedido
     
-    # Consolidar y contar pedidos
+    # Consolidar y contar pedidos (agregación en BD, evita N+1)
+    conteo_registrador = dict(
+        pedidos.values('registrador_id')
+        .annotate(c=Count('id'))
+        .values_list('registrador_id', 'c')
+    )
+    conteo_entregador = dict(
+        pedidos.values('entregador_id')
+        .annotate(c=Count('id'))
+        .values_list('entregador_id', 'c')
+    )
+
     for uid, w in rendimiento_trabajadores.items():
-        # Contar cuántos pedidos participó
-        pedidos_registrador = pedidos.filter(registrador_id=uid).count() if uid else 0
-        pedidos_entregador = pedidos.filter(entregador_id=uid).count() if uid else 0
-        w['total_pedidos'] = pedidos_registrador + pedidos_entregador
+        # Contar cuántos pedidos participó (desde los dicts agregados)
+        w['total_pedidos'] = conteo_registrador.get(uid, 0) + conteo_entregador.get(uid, 0)
         w['total_kilos'] = w['kilos_registrados'] + w['kilos_entregados'] + w['kilos_tarreo']
     
     rendimiento_trabajadores_lista = sorted(

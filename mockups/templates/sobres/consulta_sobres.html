@@ -1,0 +1,220 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Consulta de Sobres - Kim Gas{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4">
+
+    <!-- ENCABEZADO -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <h1 class="display-6 fw-bold text-primary mb-2">
+                <i class="bi bi-journal-text me-2"></i>Consulta de Sobres
+            </h1>
+            <p class="text-muted mb-0">
+                Busca sobres y detecta rápido los que no cuadran (dinero o líneas ajustadas).
+            </p>
+        </div>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body py-3">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-6 col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Mes</label>
+                    <input type="month" name="mes" class="form-control form-control-sm" value="{{ mes_str }}">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Día</label>
+                    <input type="date" name="fecha" class="form-control form-control-sm" value="{{ fecha_str }}">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Camionero</label>
+                    <select name="trabajador" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for cam in camioneros %}
+                        <option value="{{ cam.id }}" {% if trabajador_str == cam.id|stringformat:"s" %}selected{% endif %}>
+                            {{ cam.get_full_name|default:cam.username }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Estado</label>
+                    <select name="estado" class="form-select form-select-sm">
+                        <option value="todos" {% if estado == 'todos' %}selected{% endif %}>Todos</option>
+                        <option value="abiertos" {% if estado == 'abiertos' %}selected{% endif %}>Abiertos</option>
+                        <option value="cerrados" {% if estado == 'cerrados' %}selected{% endif %}>Cerrados</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Tipo</label>
+                    <select name="tipo" class="form-select form-select-sm">
+                        <option value="todos" {% if tipo == 'todos' %}selected{% endif %}>Todos</option>
+                        <option value="bodega" {% if tipo == 'bodega' %}selected{% endif %}>Bodega</option>
+                        <option value="camion" {% if tipo == 'camion' %}selected{% endif %}>Camión</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                        <i class="bi bi-search me-1"></i>Buscar
+                    </button>
+                    <a href="{% url 'sobres_consulta' %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MÉTRICAS -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Sobres</div>
+                    <div class="fs-3 fw-bold text-primary">{{ total_sobres }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Declarado</div>
+                    <div class="fs-3 fw-bold text-dark">${{ total_declarado|intcomma }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100" style="border-left: 4px solid #dc3545;">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Diferencia de dinero</div>
+                    <div class="fs-3 fw-bold text-danger">{{ total_dinero_alertas }}</div>
+                    <small class="text-muted">Sobres que no cuadran ($)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100" style="border-left: 4px solid #fd7e14;">
+                <div class="card-body">
+                    <div class="text-muted small text-uppercase fw-semibold mb-1">Líneas ajustadas</div>
+                    <div class="fs-3 fw-bold text-warning">{{ total_lineas_alertas }}</div>
+                    <small class="text-muted">Cantidades declaradas ≠ app</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LEYENDA -->
+    <div class="d-flex flex-wrap gap-3 mb-3 small text-muted">
+        <span><i class="bi bi-square-fill text-danger me-1"></i>Diferencia de dinero (declarado ≠ app)</span>
+        <span><i class="bi bi-square-fill text-warning me-1"></i>Líneas con cantidades ajustadas</span>
+        <span><i class="bi bi-square-fill text-success me-1"></i>Cuadra</span>
+    </div>
+
+    <!-- TABLA -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Fecha</th>
+                            <th>Tipo</th>
+                            <th>Trabajador</th>
+                            <th class="text-end">App</th>
+                            <th class="text-end">Declarado</th>
+                            <th class="text-end">Diferencia</th>
+                            <th>Estado</th>
+                            <th class="text-end">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fila in filas %}
+                        <tr class="{% if fila.flag_dinero %}table-danger{% elif fila.flag_lineas %}table-warning{% endif %}">
+                            <td class="fw-semibold">{{ fila.sobre.id }}</td>
+                            <td>{{ fila.sobre.fecha_correspondiente|date:"d/m/Y" }}</td>
+                            <td>
+                                {% if fila.sobre.tipo == 'bodega' %}
+                                <span class="badge" style="background-color:#6f42c1;">Bodega</span>
+                                {% else %}
+                                <span class="badge" style="background-color:#fd7e14;">Camión</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if fila.sobre.tipo == 'bodega' %}
+                                Bodega/Local
+                                {% else %}
+                                {{ fila.sobre.trabajador.get_full_name|default:fila.sobre.trabajador.username|default:"—" }}
+                                {% endif %}
+                            </td>
+                            <td class="text-end">${{ fila.sobre.monto_calculado_app|floatformat:0|intcomma }}</td>
+                            <td class="text-end">${{ fila.sobre.monto_declarado|floatformat:0|intcomma }}</td>
+                            <td class="text-end fw-semibold {% if fila.flag_dinero %}text-danger{% endif %}">
+                                ${{ fila.sobre.diferencia|floatformat:0|intcomma }}
+                            </td>
+                            <td>
+                                {% if fila.sobre.cerrado %}
+                                <span class="badge bg-success">Cerrado</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark">Abierto</span>
+                                {% endif %}
+                                {% if fila.flag_dinero %}
+                                <span class="badge bg-danger ms-1">Dinero</span>
+                                {% endif %}
+                                {% if fila.flag_lineas %}
+                                <span class="badge bg-warning text-dark ms-1">Líneas</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <a href="{% url 'sobres_editar' %}?sobre_id={{ fila.sobre.id }}" class="btn btn-sm btn-outline-primary">Ver</a>
+                                <a href="{% url 'sobres_imprimir' fila.sobre.id %}" class="btn btn-sm btn-outline-secondary" target="_blank">
+                                    <i class="bi bi-printer"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">
+                                No hay sobres que coincidan con los filtros.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% if page_obj.paginator.num_pages > 1 %}
+        <div class="card-footer bg-white border-0 py-3">
+            <nav>
+                <ul class="pagination pagination-sm justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1&mes={{ mes_str }}&fecha={{ fecha_str }}&trabajador={{ trabajador_str }}&estado={{ estado }}&tipo={{ tipo }}">&laquo;</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}&mes={{ mes_str }}&fecha={{ fecha_str }}&trabajador={{ trabajador_str }}&estado={{ estado }}&tipo={{ tipo }}">&lsaquo;</a>
+                    </li>
+                    {% endif %}
+                    <li class="page-item disabled">
+                        <span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                    </li>
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}&mes={{ mes_str }}&fecha={{ fecha_str }}&trabajador={{ trabajador_str }}&estado={{ estado }}&tipo={{ tipo }}">&rsaquo;</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&mes={{ mes_str }}&fecha={{ fecha_str }}&trabajador={{ trabajador_str }}&estado={{ estado }}&tipo={{ tipo }}">&raquo;</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

@@ -82,6 +82,20 @@
                 <!-- Jefe / Admin: Reportes, Precios, Historial Pedidos -->
                 {% if user.rol == "jefe" or user.rol == "admin" %}
                 <div class="col-12 col-md-8">
+                    <a href="{% url 'reportes_resumen' %}"
+                       class="btn btn-success btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
+                        <i class="bi bi-speedometer2 fs-1"></i>
+                        <span class="fs-4 fw-semibold">Resumen Ejecutivo</span>
+                    </a>
+                </div>
+                <div class="col-12 col-md-8">
+                    <a href="{% url 'sobres_consulta' %}"
+                       class="btn btn-primary btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
+                        <i class="bi bi-journal-text fs-1"></i>
+                        <span class="fs-4 fw-semibold">Ver Sobres</span>
+                    </a>
+                </div>
+                <div class="col-12 col-md-8">
                     <a href="{% url 'reportes_ventas' %}" 
                        class="btn btn-info btn-lg w-100 py-4 shadow rounded-4 d-flex flex-column align-items-center gap-3">
                         <i class="bi bi-graph-up fs-1"></i>
