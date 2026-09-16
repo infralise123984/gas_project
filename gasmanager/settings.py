@@ -281,7 +281,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ──────────────────────────────────────────────────────────────
 # CONFIGURACIÓN DE WEB PUSH NOTIFICATIONS (VAPID)
 # ──────────────────────────────────────────────────────────────
-# Claves generadas con: python generate_vapid.py
+# Claves generadas con: python scripts/generate_vapid.py
 # IMPORTANTE: Copiar estas claves a tu archivo .env para producción
 VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', 'BB0yr5YaM0f0zscZ96WzfrUzyRstuxb339lkwKMXFDSZiJSaMvKn_c53YJSUKF7DjLouGgpLxARF-gLky3zbFp8')
 VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', 'yezbxI6LntId1PZcWqOXxLbM2sX039plDZQaUwyGM5M')
