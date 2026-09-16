@@ -27,5 +27,6 @@ Los comandos ya existentes con esa forma están en `mockups/management/commands/
 
 - Scripts que llaman `django.setup()` por su cuenta (`generate_vapid.py`, `security_tests.py`, `limpiar_sobres.py`) se ejecutan directo con `python`.
 - Scripts que asumen el contexto de Django ya cargado (`debug_pedidos.py`, `test_crear_sobre.py`) se ejecutan con `python manage.py shell < archivo.py`. Si los ejecutas con `python archivo.py` va a fallar por `settings` no configurados.
-- `generate_vapid.py` escribe `private_key.pem` y `public_key.pem` en el **directorio actual**, no en `scripts/`. Ejecútalo desde la raíz (así el `.gitignore` los cubre con `*.pem`) y bórralos después: las claves que importan son las que se pegan en `.env` y en las variables de entorno de Render.
+- `generate_vapid.py` escribe `private_key.pem` y `public_key.pem` en el **directorio actual** (no en `scripts/`), imprime las claves en base64url y **borra los `.pem` automáticamente** al terminar. Si algo se interrumpe, quedan en la raíz, donde `*.pem` del `.gitignore` los cubre.
+- Las claves VAPID que imprime este script van al `.env` local y a las variables de entorno de Render. **Nunca** a la documentación ni al repositorio: quien tenga el par puede enviar notificaciones en nombre de la aplicación. Rotarlas invalida todas las suscripciones existentes.
 - Ejecutar `limpiar_sobres.py` sin querer puede dejar la contabilidad del día en cero. Si se decide conservarlo, la recomendación es dejarlo con un `--confirmo` explícito.
