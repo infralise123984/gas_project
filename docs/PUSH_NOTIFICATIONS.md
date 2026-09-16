@@ -35,7 +35,7 @@ Las notificaciones funcionan incluso con la app cerrada gracias a Web Push API y
 Agregar estas variables a tu archivo `.env`:
 
 ```bash
-# Claves VAPID para Web Push (generadas con generate_vapid.py)
+# Claves VAPID para Web Push (generadas con scripts/generate_vapid.py)
 VAPID_PUBLIC_KEY=BB0yr5YaM0f0zscZ96WzfrUzyRstuxb339lkwKMXFDSZiJSaMvKn_c53YJSUKF7DjLouGgpLxARF-gLky3zbFp8
 VAPID_PRIVATE_KEY=yezbxI6LntId1PZcWqOXxLbM2sX039plDZQaUwyGM5M
 VAPID_ADMIN_EMAIL=mailto:admin@kimgas.cl
@@ -43,7 +43,7 @@ VAPID_ADMIN_EMAIL=mailto:admin@kimgas.cl
 
 **IMPORTANTE**: Para producción, genera nuevas claves VAPID con:
 ```bash
-python generate_vapid.py
+python scripts/generate_vapid.py
 ```
 
 ### Migración de base de datos

@@ -1,6 +1,6 @@
 """
 Script de debugging para verificar por qué no aparecen los pedidos en el sobre de bodega
-Ejecutar con: python manage.py shell < debug_pedidos.py
+Ejecutar con: python manage.py shell < scripts/debug_pedidos.py
 """
 
 from django.utils import timezone
