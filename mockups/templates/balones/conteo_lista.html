@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block title %}Conteo de Balones - ValGas{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-3 py-4" style="max-width: 720px; margin: 0 auto;">
+
+    <h2 class="text-center fw-bold text-primary mb-4 fs-3">
+        <i class="bi bi-clipboard-check me-2"></i>Conteo de Balones
+    </h2>
+
+    <!-- Acción principal: el conteo de hoy -->
+    <div class="card shadow-lg border-0 rounded-4 mb-4">
+        <div class="card-body p-4 text-center">
+            <p class="text-muted mb-1">Conteo de hoy</p>
+            <h3 class="fw-bold mb-3">{{ hoy|date:"d/m/Y" }}</h3>
+
+            {% if existe_hoy %}
+            <a href="{% url 'conteo_balones_hoy' %}" class="btn btn-primary btn-lg w-100 py-3 fs-5 shadow rounded-3">
+                <i class="bi bi-pencil-square me-2"></i>Continuar conteo de hoy
+            </a>
+            {% else %}
+            <a href="{% url 'conteo_balones_hoy' %}" class="btn btn-success btn-lg w-100 py-3 fs-5 shadow rounded-3">
+                <i class="bi bi-plus-circle-fill me-2"></i>Comenzar conteo de hoy
+            </a>
+            <p class="text-muted small mt-3 mb-0">
+                Se creará con el saldo final del conteo anterior.
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Historial -->
+    <h5 class="fw-bold mb-3">
+        <i class="bi bi-clock-history me-2"></i>Conteos anteriores
+    </h5>
+
+    {% if conteos %}
+    <div class="list-group shadow-sm">
+        {% for conteo in conteos %}
+        <a href="{% url 'conteo_balones_detalle' conteo.id %}"
+           class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+            <div>
+                <div class="fw-bold fs-5">{{ conteo.fecha|date:"d/m/Y" }}</div>
+                <small class="text-muted">
+                    {{ conteo.num_lineas }} tipo{{ conteo.num_lineas|pluralize:"s" }} de balón
+                    {% if conteo.creado_por %} · {{ conteo.creado_por.get_full_name|default:conteo.creado_por.username }}{% endif %}
+                </small>
+            </div>
+            {% if conteo.fecha == hoy %}
+            <span class="badge bg-success fs-6">Hoy</span>
+            {% else %}
+            <span class="badge bg-secondary fs-6">Cerrado</span>
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-light text-center py-5 shadow-sm rounded-4">
+        <i class="bi bi-clipboard fs-1 text-muted d-block mb-3"></i>
+        <h5 class="mb-2">Sin conteos registrados</h5>
+        <p class="text-muted mb-0">Parte con el conteo de hoy para iniciar el inventario.</p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

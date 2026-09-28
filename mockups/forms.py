@@ -8,7 +8,19 @@ from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory, BaseInlineFormSet
 from django.utils.safestring import mark_safe
-from .models import Pedido, DetallePedido, TipoBalon, Sector, SobreDiario, LineaSobre, LineaPago, LineaGasto, Usuario
+from .models import (
+    ConteoDiarioBalon,
+    DetallePedido,
+    LineaConteoBalon,
+    LineaGasto,
+    LineaPago,
+    LineaSobre,
+    Pedido,
+    Sector,
+    SobreDiario,
+    TipoBalon,
+    Usuario,
+)
 from .utils.permisos import ROL_PROPIETARIO_DESCUENTO, ROLES_CON_DESCUENTO
 
 
@@ -448,6 +460,61 @@ LineaSobreFormSet = inlineformset_factory(
     extra=0,                # No se agregan líneas nuevas manualmente (ya están creadas por balones)
     can_delete=False,       # No se eliminan balones del sobre
     fields=('cantidad_declarada', 'nota'),
+)
+
+
+# ──────────────────────────────────────────────────────────────
+# FORMULARIO Y FORMSET PARA EL CONTEO DIARIO DE BALONES
+# ──────────────────────────────────────────────────────────────
+
+CAMPOS_MOVIMIENTO_CONTEO = ('llenos_entran', 'llenos_salen', 'vacios_entran', 'vacios_salen')
+
+
+class LineaConteoBalonForm(forms.ModelForm):
+    """Movimientos del día para un tipo de balón.
+
+    Los saldos (inicial y final) no son editables aquí: el inicial lo arrastra
+    el servicio desde el conteo anterior y el final se calcula.
+    """
+
+    class Meta:
+        model = LineaConteoBalon
+        fields = CAMPOS_MOVIMIENTO_CONTEO
+        widgets = {
+            campo: forms.NumberInput(attrs={
+                'class': 'form-control form-control-lg text-center fw-bold',
+                'min': 0,
+                'inputmode': 'numeric',
+                'autocomplete': 'off',
+            })
+            for campo in CAMPOS_MOVIMIENTO_CONTEO
+        }
+
+
+class BaseLineaConteoBalonFormSet(BaseInlineFormSet):
+    def get_queryset(self):
+        """Mismo orden que los sobres: clásicos, catalíticos y aluminio; peso desc."""
+        from django.db.models import Case, When, Value, IntegerField
+        qs = super().get_queryset()
+        return qs.annotate(
+            tipo_orden=Case(
+                When(balon__tipo_gas='normal', then=Value(0)),
+                When(balon__tipo_gas='catalitico', then=Value(1)),
+                When(balon__tipo_gas='aluminio', then=Value(2)),
+                default=Value(3),
+                output_field=IntegerField(),
+            )
+        ).order_by('tipo_orden', '-balon__peso_neto_gas')
+
+
+LineaConteoBalonFormSet = inlineformset_factory(
+    ConteoDiarioBalon,
+    LineaConteoBalon,
+    form=LineaConteoBalonForm,
+    formset=BaseLineaConteoBalonFormSet,
+    extra=0,            # Las líneas ya existen: una por tipo de balón activo
+    can_delete=False,   # Un tipo de balón no se saca del conteo del día
+    fields=CAMPOS_MOVIMIENTO_CONTEO,
 )
 
 

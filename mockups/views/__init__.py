@@ -6,6 +6,7 @@ Respaldo del monolito: mockups/views_monolith_backup.py
 
 from mockups.views.auth import *  # noqa: F403
 from mockups.views.catalogos import *  # noqa: F403
+from mockups.views.conteo import *  # noqa: F403
 from mockups.views.entregas import *  # noqa: F403
 from mockups.views.pedidos import *  # noqa: F403
 from mockups.views.push import *  # noqa: F403
