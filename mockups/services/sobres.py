@@ -7,7 +7,7 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
-from mockups.models import LineaSobre, Pedido
+from mockups.models import LineaSobre, Pedido, SobreDiario
 from mockups.services.catalogos import get_balones_activos_ordenados
 
 
@@ -119,3 +119,43 @@ def sincronizar_sobre_desde_pedidos(sobre, crear_lineas_faltantes=True):
             cambios = True
 
     return cambios
+
+
+def _sobres_del_pedido_en_fecha(pedido, fecha_correspondiente):
+    """Sobres de esa fecha que podrían contener este pedido.
+
+    Un pedido de origen 'local' alimenta el sobre de bodega; cualquier otro pedido
+    entregado alimenta el sobre de camión del camionero que lo entregó.
+    """
+    if not fecha_correspondiente:
+        return SobreDiario.objects.none()
+
+    candidatos = SobreDiario.objects.filter(fecha_correspondiente=fecha_correspondiente)
+    if pedido.origen == 'local':
+        return candidatos.filter(tipo='bodega')
+    return candidatos.filter(tipo='camion', trabajador_id=pedido.entregador_id)
+
+
+def resincronizar_sobres_afectados_por_pedido(pedido, fecha_correspondiente):
+    """Refresca los sobres ABIERTOS de una fecha que podrían incluir este pedido.
+
+    Se usa al cambiar la fecha de un pedido: el pedido deja de pertenecer al sobre
+    de su fecha anterior y pasa al de la fecha nueva, de modo que las ventas del
+    camionero se corrigen sin intervención manual.
+
+    Los sobres cerrados se respetan y no se reabren (política vigente del sistema).
+
+    Returns:
+        list[SobreDiario]: sobres abiertos que efectivamente cambiaron.
+    """
+    sobres_abiertos = _sobres_del_pedido_en_fecha(pedido, fecha_correspondiente).filter(cerrado=False)
+    return [sobre for sobre in sobres_abiertos if sincronizar_sobre_desde_pedidos(sobre)]
+
+
+def hay_sobre_cerrado_para_pedido(pedido, fecha_correspondiente):
+    """True si la fecha tiene un sobre CERRADO que correspondería a este pedido.
+
+    Sirve para advertir al administrador de que el cambio de fecha no se reflejará
+    en ese sobre, porque los sobres cerrados no se reabren.
+    """
+    return _sobres_del_pedido_en_fecha(pedido, fecha_correspondiente).filter(cerrado=True).exists()

@@ -8,11 +8,13 @@ from zoneinfo import ZoneInfo
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_POST
 
 from mockups.forms import (
     DetalleFormSet,
@@ -26,7 +28,12 @@ from mockups.models import (
     Pedido,
 )
 from mockups.services.exports import exportar_pedidos_excel
+from mockups.services.sobres import (
+    hay_sobre_cerrado_para_pedido,
+    resincronizar_sobres_afectados_por_pedido,
+)
 from mockups.utils.fechas import (
+    TZ_CHILE,
     now_chile,
     parse_fecha_rango,
 )
@@ -464,6 +471,119 @@ def telefonista_cancelar_pedido(request, pedido_id):
     messages.warning(request, f"Pedido #{pedido.id} cancelado correctamente.")
     return redirect("pedidos_mios")
 
+# ══════════════════════════════════════════════════════════════
+# 6b. CORRECCIÓN ADMINISTRATIVA DE FECHA
+# ══════════════════════════════════════════════════════════════
+
+# Admin: mover un pedido a otro día conservando su hora
+@login_required
+@require_POST
+def admin_cambiar_fecha_pedido(request, pedido_id):
+    """Cambia el DÍA de un pedido, conservando la hora original. Solo admin.
+
+    Caso de uso real: un pedido quedó registrado con la fecha equivocada y hay que
+    reubicarlo. `Pedido.fecha` es la fuente de verdad de las ventas: alimenta el
+    sobre del camionero, su historial diario y el reporte de ventas. Al mover el
+    pedido se reasigna solo al día correcto, y se refrescan los sobres ABIERTOS de
+    la fecha origen y destino para que el cambio se refleje de inmediato.
+
+    Aplica a cualquier pedido, en cualquier estado (incluidos entregados y
+    cancelados), porque `editar_pedido` bloquea esos estados.
+
+    No se reabren sobres cerrados: si la fecha destino ya tiene un sobre cerrado,
+    el pedido no se reflejará en él y se advierte al administrador.
+    """
+    resp = require_roles(
+        request, ["admin"], "index", "Solo un administrador puede cambiar la fecha de un pedido."
+    )
+    if resp:
+        return resp
+
+    pedido = get_object_or_404(Pedido, id=pedido_id)
+
+    fecha_str = (request.POST.get('nueva_fecha') or '').strip()
+    try:
+        nueva_fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+    except ValueError:
+        messages.error(request, "Fecha inválida. Selecciona una fecha válida en el formulario.")
+        return redirect('pedidos_detalle', pedido_id=pedido.id)
+
+    fecha_anterior = pedido.fecha
+    fecha_anterior_local = timezone.localtime(fecha_anterior, TZ_CHILE)
+
+    # Se conserva la hora local original del pedido; solo cambia el día.
+    nueva_fecha_hora = timezone.make_aware(
+        datetime.combine(nueva_fecha, fecha_anterior_local.replace(tzinfo=None).time()),
+        TZ_CHILE,
+    )
+    fecha_nueva_local = timezone.localtime(nueva_fecha_hora, TZ_CHILE)
+
+    if nueva_fecha_hora == fecha_anterior:
+        messages.info(request, f"El pedido #{pedido.id} ya estaba registrado en esa fecha.")
+        return redirect('pedidos_detalle', pedido_id=pedido.id)
+
+    with transaction.atomic():
+        pedido.fecha = nueva_fecha_hora
+        pedido.save(update_fields=['fecha'])
+
+        HistorialCambioPedido.objects.create(
+            pedido=pedido,
+            usuario=request.user,
+            descripcion=(
+                f"Fecha del pedido cambiada por {request.user.username}: "
+                f"{fecha_anterior_local:%d/%m/%Y %H:%M} → {fecha_nueva_local:%d/%m/%Y %H:%M}"
+            ),
+        )
+
+        AuditoriaAccion.registrar(
+            request=request,
+            tipo='PEDIDO_UPDATE',
+            descripcion=(
+                f'Pedido #{pedido.id}: fecha cambiada por admin {request.user.username} '
+                f'({fecha_anterior_local:%d/%m/%Y %H:%M} → {fecha_nueva_local:%d/%m/%Y %H:%M})'
+            ),
+            objeto=pedido,
+            datos_anteriores={'fecha': fecha_anterior.isoformat()},
+            datos_nuevos={'fecha': nueva_fecha_hora.isoformat()},
+        )
+
+    audit_logger.info(
+        f"PEDIDO_FECHA_CAMBIO | #{pedido.id} | Admin: {request.user.username} | "
+        f"{fecha_anterior_local:%Y-%m-%d} -> {fecha_nueva_local:%Y-%m-%d}"
+    )
+
+    # Refrescar sobres abiertos de la fecha origen (deja de incluirlo) y destino
+    # (pasa a incluirlo), para que las ventas del camionero queden correctas.
+    sincronizados = (
+        resincronizar_sobres_afectados_por_pedido(pedido, fecha_anterior_local.date())
+        + resincronizar_sobres_afectados_por_pedido(pedido, fecha_nueva_local.date())
+    )
+
+    if sincronizados:
+        ids_sobres = ', '.join('#{}'.format(sobre.id) for sobre in sincronizados)
+        messages.success(
+            request,
+            f"Pedido #{pedido.id} movido al {fecha_nueva_local:%d/%m/%Y} "
+            f"(hora conservada: {fecha_nueva_local:%H:%M}). "
+            f"Sobres actualizados: {ids_sobres}."
+        )
+    else:
+        messages.success(
+            request,
+            f"Pedido #{pedido.id} movido al {fecha_nueva_local:%d/%m/%Y} "
+            f"(hora conservada: {fecha_nueva_local:%H:%M})."
+        )
+
+    if hay_sobre_cerrado_para_pedido(pedido, fecha_nueva_local.date()):
+        messages.warning(
+            request,
+            "La fecha destino tiene un sobre CERRADO, que no se reabre. "
+            "El pedido no aparecerá en ese sobre; el cambio sí se refleja en el historial "
+            "y en los reportes del camionero."
+        )
+
+    return redirect('pedidos_detalle', pedido_id=pedido.id)
+
 # ──────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════
 # 7. REPORTES Y CONSULTAS DE PEDIDOS (Admin/Jefe)
@@ -577,6 +697,7 @@ def detalle_pedido(request, pedido_id):
     context = {
         "pedido": pedido,
         "puede_editar": request.user.rol in ["jefe", "admin"],
+        "es_admin": request.user.rol == "admin",
     }
     return render(request, "pedidos/detalle_pedido.html", context)
 
