@@ -222,6 +222,37 @@
         </div>
     </div>
 
+    {% if es_admin and pedido.estado != 'cancelado' %}
+    <!-- Anulación administrativa (solo admin) -->
+    <div class="card shadow-sm border-danger mb-5">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0"><i class="bi bi-shield-exclamation me-2"></i>Anulación administrativa</h5>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-warning mb-3">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                El pedido quedará <strong>anulado (cancelado)</strong>: sale de los reportes y de la
+                rendición del trabajador. <strong>No se borra</strong>: el motivo y quién lo anuló
+                quedan en el historial y en la auditoría.
+                Si el sobre de esa fecha ya está cerrado, sus cantidades no se corrigen.
+            </div>
+            <form method="post" action="{% url 'pedidos_anular' pedido.id %}"
+                  onsubmit="return confirm('¿Anular el pedido #{{ pedido.id }}? La acción queda registrada en la auditoría.');">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="motivo-anulacion" class="form-label fw-semibold">Motivo de la anulación</label>
+                    <textarea id="motivo-anulacion" name="motivo" class="form-control" rows="2"
+                              maxlength="300" required
+                              placeholder="Ej: entrega cargada a la cuenta equivocada (el camionero se equivocó de sector)."></textarea>
+                </div>
+                <button type="submit" class="btn btn-danger">
+                    <i class="bi bi-x-octagon me-2"></i>Anular pedido #{{ pedido.id }}
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Botón volver (centrado abajo) -->
     <div class="text-center mt-5">
         <a href="{% if request.user.rol == 'jefe' or request.user.rol == 'admin' %}{% url 'pedidos_consulta' %}{% else %}{% url 'pedidos_mios' %}{% endif %}" 
