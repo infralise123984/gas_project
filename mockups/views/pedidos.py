@@ -28,6 +28,7 @@ from mockups.models import (
     Pedido,
 )
 from mockups.services.exports import exportar_pedidos_excel
+from mockups.services.pedidos import AnulacionNoPermitida, anular_pedido
 from mockups.services.sobres import (
     hay_sobre_cerrado_para_pedido,
     resincronizar_sobres_afectados_por_pedido,
@@ -37,7 +38,12 @@ from mockups.utils.fechas import (
     now_chile,
     parse_fecha_rango,
 )
-from mockups.utils.permisos import puede_otorgar_descuento, require_roles, require_roles_api
+from mockups.utils.permisos import (
+    get_client_ip,
+    puede_otorgar_descuento,
+    require_roles,
+    require_roles_api,
+)
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -638,6 +644,69 @@ def admin_cambiar_fecha_pedido(request, pedido_id):
         )
 
     return redirect('pedidos_detalle', pedido_id=pedido.id)
+
+# ══════════════════════════════════════════════════════════════
+# 6c. CORRECCIÓN ADMINISTRATIVA: ANULAR PEDIDO
+# ══════════════════════════════════════════════════════════════
+
+# Admin: anular un pedido en cualquier estado (incluidos entregados)
+@login_required
+@require_POST
+def admin_anular_pedido(request, pedido_id):
+    """Anula un pedido en cualquier estado, incluidos los ya entregados. Solo admin.
+
+    Caso de uso real: corregir un error humano después de que el pedido quedó
+    cerrado (por ejemplo, una entrega correcta cargada a la cuenta equivocada).
+    `editar_pedido` bloquea los estados 'entregado' y 'cancelado', así que este
+    es el único camino auditado para sacar el pedido de los totales del día sin
+    borrar la fila: el motivo queda en el historial y en la auditoría.
+
+    No reabre sobres cerrados: si el sobre de esa fecha ya se cerró, se advierte
+    porque sus cantidades no se corrigen solas (política vigente).
+    """
+    resp = require_roles(
+        request, ["admin"], "index", "Solo un administrador puede anular pedidos."
+    )
+    if resp:
+        return resp
+
+    pedido = get_object_or_404(Pedido, id=pedido_id)
+    motivo = request.POST.get("motivo", "")
+
+    try:
+        resultado = anular_pedido(
+            pedido,
+            usuario=request.user,
+            motivo=motivo,
+            ip_address=get_client_ip(request),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
+    except AnulacionNoPermitida as error:
+        messages.error(request, str(error))
+        return redirect("pedidos_detalle", pedido_id=pedido.id)
+
+    audit_logger.info(
+        f"PEDIDO_ANULAR | #{pedido.id} | Admin: {request.user.username} | "
+        f"Motivo: {motivo.strip()[:120]}"
+    )
+
+    if resultado.sobres_actualizados:
+        sobres = ", ".join(f"#{sobre_id}" for sobre_id in resultado.sobres_actualizados)
+        messages.success(
+            request,
+            f"Pedido #{pedido.id} anulado. Sobres actualizados: {sobres}.",
+        )
+    else:
+        messages.success(request, f"Pedido #{pedido.id} anulado correctamente.")
+
+    if resultado.sobre_cerrado_sin_ajuste:
+        messages.warning(
+            request,
+            "El sobre de esa fecha ya estaba CERRADO y no se reabre: sus cantidades "
+            "no reflejan la anulación.",
+        )
+
+    return redirect("pedidos_detalle", pedido_id=pedido.id)
 
 # ──────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════

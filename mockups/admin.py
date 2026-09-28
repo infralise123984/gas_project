@@ -2,6 +2,13 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.db.models import Sum, F, ExpressionWrapper, DecimalField
+
+from mockups.services.pedidos import (
+    MOTIVO_ANULACION_MASIVA,
+    AnulacionNoPermitida,
+    anular_pedido,
+)
+from mockups.utils.permisos import get_client_ip
 from .models import Usuario, TipoBalon, HistorialPrecioBalon, Sector, Pedido, DetallePedido, HistorialEstadoPedido, SobreDiario, LineaSobre, AuditoriaAccion, PushSubscription
 
 
@@ -133,8 +140,32 @@ class PedidoAdmin(admin.ModelAdmin):
     marcar_entregado.short_description = "Marcar seleccionados como entregados"
 
     def marcar_cancelado(self, request, queryset):
-        queryset.update(estado='cancelado')
-    marcar_cancelado.short_description = "Marcar seleccionados como cancelados"
+        """Anula los pedidos seleccionados usando el mismo servicio que la vista.
+
+        Delega en `anular_pedido` para no saltarse historial ni auditoría (a
+        diferencia de un `queryset.update`).
+        """
+        anulados = 0
+        omitidos = 0
+        for pedido in queryset:
+            try:
+                anular_pedido(
+                    pedido,
+                    usuario=request.user,
+                    motivo=MOTIVO_ANULACION_MASIVA,
+                    ip_address=get_client_ip(request),
+                    user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                )
+            except AnulacionNoPermitida:
+                omitidos += 1
+                continue
+            anulados += 1
+
+        mensaje = f"{anulados} pedido(s) anulados con traza de auditoría."
+        if omitidos:
+            mensaje += f" {omitidos} omitido(s) por ya estar anulados."
+        self.message_user(request, mensaje)
+    marcar_cancelado.short_description = "Anular seleccionados (deja traza)"
 
 
 @admin.register(HistorialEstadoPedido)

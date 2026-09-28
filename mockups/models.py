@@ -608,6 +608,92 @@ class LineaSobre(models.Model):
         return f"{self.balon.nombre} → {self.cantidad_declarada} (calc: {self.cantidad_calculada})"
 
 
+class ConteoDiarioBalon(models.Model):
+    """Conteo físico diario de balones de la bodega.
+
+    Cabecera del conteo: un registro por día. Las cantidades movidas y los
+    saldos por tipo de balón viven en sus líneas (LineaConteoBalon).
+    """
+
+    fecha = models.DateField(unique=True, verbose_name="Fecha del conteo")
+
+    creado_por = models.ForeignKey(
+        Usuario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="conteos_balones_creados",
+        verbose_name="Conteo creado por",
+    )
+    creado_el = models.DateTimeField(auto_now_add=True)
+    actualizado_el = models.DateTimeField(auto_now=True)
+    nota = models.TextField(blank=True, verbose_name="Observaciones del día")
+
+    class Meta:
+        verbose_name = "Conteo diario de balones"
+        verbose_name_plural = "Conteos diarios de balones"
+        ordering = ["-fecha"]
+
+    def __str__(self):
+        return f"Conteo de balones {self.fecha.strftime('%d/%m/%Y')}"
+
+
+class LineaConteoBalon(models.Model):
+    """Saldos y movimientos de un tipo de balón dentro de un conteo diario.
+
+    Llenos y vacíos se llevan como inventarios independientes:
+
+        saldo final = saldo inicial + entradas - salidas
+
+    El saldo inicial se arrastra del conteo anterior; no se digita a mano
+    salvo en el primer conteo (que arranca en cero).
+    """
+
+    conteo = models.ForeignKey(
+        ConteoDiarioBalon, on_delete=models.CASCADE, related_name="lineas"
+    )
+    balon = models.ForeignKey(
+        TipoBalon, on_delete=models.PROTECT, verbose_name="Tipo de balón"
+    )
+
+    stock_inicial_llenos = models.PositiveIntegerField(
+        default=0, verbose_name="Llenos al iniciar el día"
+    )
+    stock_inicial_vacios = models.PositiveIntegerField(
+        default=0, verbose_name="Vacíos al iniciar el día"
+    )
+
+    llenos_entran = models.PositiveIntegerField(default=0, verbose_name="Llenos que entran")
+    llenos_salen = models.PositiveIntegerField(default=0, verbose_name="Llenos que salen")
+    vacios_entran = models.PositiveIntegerField(default=0, verbose_name="Vacíos que entran")
+    vacios_salen = models.PositiveIntegerField(default=0, verbose_name="Vacíos que salen")
+
+    class Meta:
+        verbose_name = "Línea de conteo de balones"
+        verbose_name_plural = "Líneas de conteo de balones"
+        unique_together = ["conteo", "balon"]
+        ordering = ["balon__peso_neto_gas"]
+
+    def __str__(self):
+        return (
+            f"{self.balon.nombre} → llenos {self.stock_final_llenos} / "
+            f"vacíos {self.stock_final_vacios}"
+        )
+
+    @property
+    def stock_final_llenos(self) -> int:
+        return self.stock_inicial_llenos + self.llenos_entran - self.llenos_salen
+
+    @property
+    def stock_final_vacios(self) -> int:
+        return self.stock_inicial_vacios + self.vacios_entran - self.vacios_salen
+
+    @property
+    def tiene_descuadre(self) -> bool:
+        """True si el movimiento deja un saldo negativo (revisar el conteo)."""
+        return self.stock_final_llenos < 0 or self.stock_final_vacios < 0
+
+
 class HistorialCambioPedido(models.Model):
     pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name='historial_cambios')
     usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, verbose_name="Usuario que editó")
@@ -769,6 +855,8 @@ class AuditoriaAccion(models.Model):
         ('SOBRE_CREATE', 'Sobre creado'),
         ('SOBRE_CLOSE', 'Sobre cerrado'),
         ('SOBRE_UPDATE', 'Sobre modificado'),
+        ('CONTEO_CREATE', 'Conteo de balones creado'),
+        ('CONTEO_UPDATE', 'Conteo de balones modificado'),
         ('PERM_DENIED', 'Acceso denegado'),
         ('SUSPICIOUS', 'Actividad sospechosa'),
         ('EXPORT_DATA', 'Exportación de datos'),
