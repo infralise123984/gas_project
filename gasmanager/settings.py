@@ -52,6 +52,11 @@ CSRF_TRUSTED_ORIGINS = [
 
 USE_THOUSAND_SEPARATOR = True  # Esto es clave para activar los separadores de miles
 
+# Feature flags de secciones de la app.
+# Conteo diario de balones (bodega): se mantiene OCULTO hasta liberar la sección.
+# Para habilitarlo sin tocar código: CONTEO_BALONES_HABILITADO=True en el entorno.
+CONTEO_BALONES_HABILITADO = os.getenv("CONTEO_BALONES_HABILITADO", "False").lower() == "true"
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -97,6 +102,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'mockups.context_processors.vapid_public_key',  # Push notifications
+                'mockups.context_processors.secciones_activas',  # Feature flags de UI
             ],
         },
     },

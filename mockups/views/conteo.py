@@ -2,6 +2,7 @@
 
 import logging
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -18,12 +19,29 @@ audit_logger = logging.getLogger('audit')
 
 ROLES_CON = ['bodeguero']
 MENSAJE_SIN_PERMISO = "Solo el bodeguero puede usar el conteo de balones."
+MENSAJE_SECCION_OCULTA = "El conteo de balones está deshabilitado por ahora."
+
+
+def _seccion_oculta(request):
+    """Redirect si la sección está oculta por feature flag; None si está activa.
+
+    La sección queda oculta hasta liberarla: se evalúa DESPUÉS del control de
+    roles para no perder la auditoría de accesos indebidos.
+    """
+    if getattr(settings, "CONTEO_BALONES_HABILITADO", False):
+        return None
+    messages.warning(request, MENSAJE_SECCION_OCULTA)
+    return redirect("index")
 
 
 @login_required
 def conteo_balones_lista(request):
     """Historial de conteos y acceso al conteo de hoy."""
     resp = require_roles(request, ROLES_CON, "index", MENSAJE_SIN_PERMISO)
+    if resp:
+        return resp
+
+    resp = _seccion_oculta(request)
     if resp:
         return resp
 
@@ -48,6 +66,10 @@ def conteo_balones_hoy(request):
     if resp:
         return resp
 
+    resp = _seccion_oculta(request)
+    if resp:
+        return resp
+
     conteo, creado = obtener_o_crear_conteo(today_chile(), request.user)
 
     if creado:
@@ -66,6 +88,10 @@ def conteo_balones_hoy(request):
 def conteo_balones_detalle(request, conteo_id):
     """Ver el conteo y, si es del día de hoy, editarlo."""
     resp = require_roles(request, ROLES_CON, "index", MENSAJE_SIN_PERMISO)
+    if resp:
+        return resp
+
+    resp = _seccion_oculta(request)
     if resp:
         return resp
 
