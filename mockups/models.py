@@ -8,6 +8,7 @@ from django.db.models import Sum
 from django.utils import timezone
 from django.utils.text import slugify
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 import re
 
 
@@ -303,13 +304,53 @@ class Pedido(models.Model):
 
     monto_total     = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Monto total venta")
     ganancia_total  = models.DecimalField(max_digits=12, decimal_places=0, default=0, verbose_name="Ganancia total")
+    descuento_total = models.DecimalField(
+        max_digits=12, decimal_places=0, default=0,
+        verbose_name="Descuento total",
+        help_text="Suma de descuentos de las líneas. Se registra como pérdida aparte: no reduce ganancia_total."
+    )
+
+    # Trazabilidad de devoluciones: el camionero devuelve al pool un pedido tomado por accidente.
+    devuelto_el = models.DateTimeField(
+        null=True, blank=True, verbose_name="Última devolución por camionero"
+    )
+    devuelto_por = models.ForeignKey(
+        Usuario, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="pedidos_devueltos", verbose_name="Devuelto por"
+    )
 
     def calcular_totales(self):
-        """Actualiza monto_total y ganancia_total sumando los detalles"""
-        detalles = self.detalles.all()
-        self.monto_total = sum(d.subtotal for d in detalles)
-        self.ganancia_total = sum(d.ganancia for d in detalles)
-        self.save(update_fields=["monto_total", "ganancia_total"])
+        """Recalcula los montos del pedido desde sus detalles.
+
+        - monto_total: bruto menos descuentos → es lo que el cliente paga y lo que rinde el camionero.
+        - ganancia_total: margen teórico sin descontar la rebaja (el descuento va aparte como pérdida).
+        - descuento_total: suma de descuentos de las líneas, para reportes.
+        """
+        detalles = list(self.detalles.all())
+        self.monto_total = sum((d.subtotal_neto or 0) for d in detalles)
+        self.ganancia_total = sum((d.ganancia or 0) for d in detalles)
+        self.descuento_total = sum(d.descuento_total for d in detalles)
+        self.save(update_fields=["monto_total", "ganancia_total", "descuento_total"])
+
+    @property
+    def tiene_descuento(self):
+        """True si el pedido tiene al menos un peso de descuento aplicado."""
+        return (self.descuento_total or 0) > 0
+
+    @property
+    def subtotal_bruto(self):
+        """Suma de las líneas antes de descuentos, para mostrar el desglose.
+
+        Derivado de monto_total + descuento_total: evita recorrer las líneas y
+        por lo tanto no genera consultas adicionales.
+        """
+        return (self.monto_total or 0) + (self.descuento_total or 0)
+
+    @property
+    def ganancia_neta(self):
+        """Ganancia teórica menos los descuentos otorgados. Para reportes de rentabilidad."""
+        return (self.ganancia_total or 0) - (self.descuento_total or 0)
+
 
     @property
     def resumen_productos(self):
@@ -362,17 +403,40 @@ class DetallePedido(models.Model):
     precio_venta_unitario  = models.DecimalField(max_digits=10, decimal_places=0, verbose_name="Precio venta unitario")
     precio_compra_unitario = models.DecimalField(max_digits=10, decimal_places=0, verbose_name="Precio compra unitario")
 
+    descuento_unitario = models.DecimalField(
+        max_digits=10, decimal_places=0, default=0, blank=True,
+        validators=[MinValueValidator(0)],
+        verbose_name="Descuento por unidad",
+        help_text="Descuento en pesos por CADA balón. Se multiplica por la cantidad de la línea."
+    )
+
+    @property
+    def descuento_total(self):
+        """Descuento de la línea completa (descuento por unidad × cantidad)."""
+        return (self.descuento_unitario or 0) * self.cantidad
+
     @property
     def subtotal(self):
+        """Monto bruto de la línea, antes de descuento."""
         if self.precio_venta_unitario is None:
             return None
         return self.precio_venta_unitario * self.cantidad
 
     @property
+    def subtotal_neto(self):
+        """Monto que paga el cliente por la línea (bruto − descuento)."""
+        bruto = self.subtotal
+        if bruto is None:
+            return None
+        return bruto - self.descuento_total
+
+    @property
     def ganancia(self):
+        """Margen teórico. NO descuenta la rebaja: el descuento se registra aparte como pérdida."""
         if self.precio_venta_unitario is None or self.precio_compra_unitario is None:
             return None
         return (self.precio_venta_unitario - self.precio_compra_unitario) * self.cantidad
+
 
     def __str__(self):
         return f"{self.cantidad} × {self.balon.nombre}"
@@ -695,6 +759,9 @@ class AuditoriaAccion(models.Model):
         ('PEDIDO_UPDATE', 'Pedido modificado'),
         ('PEDIDO_DELETE', 'Pedido eliminado'),
         ('PEDIDO_ESTADO', 'Estado de pedido cambiado'),
+        ('PEDIDO_CANCEL', 'Pedido cancelado'),
+        ('PEDIDO_DEVOLVER', 'Pedido devuelto al pool'),
+        ('PEDIDO_DESCUENTO', 'Descuento aplicado a pedido'),
         ('PRECIO_UPDATE', 'Precio actualizado'),
         ('BALON_CREATE', 'Balón creado'),
         ('BALON_UPDATE', 'Balón modificado'),

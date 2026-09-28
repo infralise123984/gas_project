@@ -36,7 +36,7 @@ from mockups.utils.fechas import (
     rango_dia_chile,
     today_chile,
 )
-from mockups.utils.permisos import require_roles, require_roles_api
+from mockups.utils.permisos import get_client_ip, require_roles, require_roles_api
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -482,6 +482,98 @@ def camionero_cancelar_entrega(request, pedido_id):
 
         messages.warning(request, f"Pedido #{pedido.id} ha sido cancelado.")
     except Pedido.DoesNotExist:
+        messages.error(request, "El pedido no está en ruta o no te pertenece.")
+
+    return redirect("entregas_lista")
+
+
+
+# Camionero: devolver al pool un pedido tomado por accidente
+@login_required
+@require_POST
+def camionero_devolver_pedido(request, pedido_id):
+    """Devuelve un pedido en ruta al estado 'pendiente' para que otro camionero lo tome.
+
+    Se usa cuando el camionero tomó el pedido por error. A diferencia de
+    'camionero_cancelar_entrega' (que cierra el pedido como cancelado), esta acción
+    libera el pedido: limpia el entregador y lo vuelve a dejar disponible en el pool.
+    """
+    resp = require_roles(request, ["camionero"], "camionero_entregas", "Solo camioneros pueden devolver pedidos.")
+    if resp:
+        return resp
+
+    try:
+        with transaction.atomic():
+            # select_for_update evita que una devolución y una entrega simultáneas
+            # compitan por la misma fila.
+            pedido = Pedido.objects.select_for_update().get(
+                id=pedido_id,
+                estado="en_ruta",
+                entregador=request.user,
+                origen="telefono",
+            )
+
+            estado_anterior = pedido.estado
+            pedido.estado = "pendiente"
+            pedido.entregador = None
+            pedido.devuelto_el = timezone.now()
+            pedido.devuelto_por = request.user
+            pedido.save(update_fields=["estado", "entregador", "devuelto_el", "devuelto_por"])
+
+            HistorialEstadoPedido.objects.create(
+                pedido=pedido,
+                estado_anterior=estado_anterior,
+                estado_nuevo="pendiente",
+                cambiado_por=request.user,
+                fecha_cambio=timezone.now(),
+                comentario="Pedido devuelto al pool por el camionero (toma por accidente).",
+            )
+
+            HistorialCambioPedido.objects.create(
+                pedido=pedido,
+                usuario=request.user,
+                descripcion=(
+                    f"Pedido devuelto al pool por {request.user.get_full_name() or request.user.username} "
+                    "(lo había tomado por accidente). Vuelve a estar disponible para otros camioneros."
+                ),
+            )
+
+            AuditoriaAccion.registrar(
+                request=request,
+                tipo='PEDIDO_DEVOLVER',
+                descripcion=f'Pedido #{pedido.id} devuelto al pool por camionero {request.user.username}',
+                objeto=pedido,
+                datos_anteriores={'estado': estado_anterior, 'entregador': request.user.username},
+                datos_nuevos={'estado': 'pendiente', 'entregador': None},
+            )
+            audit_logger.info(
+                f"PEDIDO_DEVOLVER | #{pedido.id} | Camionero: {request.user.username} | "
+                f"IP: {get_client_ip(request)}"
+            )
+
+        # Re-notificar a los demás camioneros fuera de la transacción, para no
+        # alargar el bloqueo de la fila con I/O de red.
+        try:
+            from mockups.push_notifications import notificar_nuevo_pedido
+
+            notificados = notificar_nuevo_pedido(
+                pedido,
+                excluir_usuario_id=request.user.id,
+                title='🚚 ¡Pedido disponible!',
+            )
+            if notificados > 0:
+                audit_logger.info(
+                    f"PUSH_SENT | Pedido #{pedido.id} devuelto -> {notificados} camioneros notificados"
+                )
+        except Exception as e:
+            audit_logger.warning(f"PUSH_ERROR | Pedido #{pedido.id} devuelto | Error: {str(e)}")
+
+        messages.success(request, f"Pedido #{pedido.id} devuelto. Queda disponible para otro camionero.")
+    except Pedido.DoesNotExist:
+        security_logger.warning(
+            f"PEDIDO_DEVOLVER_FAIL | #{pedido_id} | Camionero: {request.user.username} | "
+            f"IP: {get_client_ip(request)} | (no está en ruta o no le pertenece)"
+        )
         messages.error(request, "El pedido no está en ruta o no te pertenece.")
 
     return redirect("entregas_lista")

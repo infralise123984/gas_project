@@ -1,0 +1,39 @@
+{% load humanize %}
+{# Lista de productos con desglose de descuento. Requiere la variable 'pedido'. #}
+<ul class="list-group list-group-flush mb-3">
+    {% for detalle in pedido.detalles.all %}
+    <li class="list-group-item d-flex justify-content-between align-items-center fs-5 py-3">
+        <span>{{ detalle.cantidad }} X {{ detalle.balon.nombre }}</span>
+        <span class="text-end">
+            <span class="badge bg-success fs-5 px-3 py-2">${{ detalle.subtotal_neto|floatformat:0|intcomma }}</span>
+            {% if detalle.descuento_unitario %}
+            <small class="d-block text-danger fw-semibold mt-1">
+                <i class="bi bi-tag-fill me-1"></i>−${{ detalle.descuento_unitario|floatformat:0|intcomma }} por balón
+            </small>
+            {% endif %}
+        </span>
+    </li>
+    {% empty %}
+    <li class="list-group-item text-muted py-3">Sin productos</li>
+    {% endfor %}
+</ul>
+
+{% if pedido.tiene_descuento %}
+<div class="alert alert-danger py-3 px-3 mb-3">
+    <div class="text-center fw-bold fs-6 mb-2">
+        <i class="bi bi-tag-fill me-1"></i>CON DESCUENTO −${{ pedido.descuento_total|floatformat:0|intcomma }}
+    </div>
+    <div class="d-flex justify-content-between fs-6">
+        <span class="text-muted">Subtotal</span>
+        <span class="text-muted">${{ pedido.subtotal_bruto|floatformat:0|intcomma }}</span>
+    </div>
+    <div class="d-flex justify-content-between fs-6 fw-semibold text-danger">
+        <span>Descuento</span>
+        <span>−${{ pedido.descuento_total|floatformat:0|intcomma }}</span>
+    </div>
+</div>
+{% endif %}
+
+<div class="fw-bold fs-4 text-success">
+    Total: ${{ pedido.monto_total|floatformat:0|intcomma }}
+</div>

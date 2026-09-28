@@ -18,33 +18,79 @@ Las notificaciones funcionan incluso con la app cerrada gracias a Web Push API y
 - `mockups/management/commands/enviar_recordatorios.py` - Comando para recordatorios
 
 ### Archivos modificados:
-- `mockups/models.py` - Agregado modelo `PushSubscription`
-- `mockups/views.py` - Vistas para subscribe/unsubscribe y envío en transaccional_pedido
+- `mockups/models.py` - Modelo `PushSubscription`
+- `mockups/views/push.py` - Vistas `push_subscribe`, `push_unsubscribe`, `push_status` y `push_test`
+- `mockups/views/pedidos.py` - Dispara `notificar_nuevo_pedido()` al registrar un pedido de teléfono
 - `mockups/admin.py` - Admin para gestionar suscripciones
-- `gasmanager/urls.py` - URLs para push API
-- `gasmanager/settings.py` - Configuración VAPID
-- `mockups/templates/base.html` - Carga del JS y Service Worker
-- `mockups/templates/camionero_entregas.html` - Botón para activar notificaciones
+- `gasmanager/urls.py` - URLs de la API push
+- `gasmanager/settings.py` - Lectura de las claves VAPID desde variables de entorno
+- `mockups/templates/base.html` - Carga del JS y registro del Service Worker
+- `mockups/templates/entregas/camionero_entregas.html` - Botón para activar notificaciones
 - `mockups/static/manifest.json` - Permisos de notificación
-- `requirements.txt` - Agregado pywebpush
+- `requirements.txt` (y `requirements-local.txt` / `requirements-render.txt`) - `pywebpush`
 
 ## Configuración
 
 ### Variables de entorno (.env)
 
-Agregar estas variables a tu archivo `.env`:
+Web Push necesita un par de claves **VAPID** (una pública y una privada), que se
+generan una vez por instalación. Cada entorno (local y producción) debe tener su
+**propio** par, y las claves no se comparten ni se versionan:
+
+```env
+# Ver "Cómo generar las claves VAPID" más abajo
+VAPID_PUBLIC_KEY=<clave pública en base64url>
+VAPID_PRIVATE_KEY=<clave privada en base64url>
+# Solo un contacto informativo que exige el protocolo VAPID: no necesita ser un buzón real.
+VAPID_ADMIN_EMAIL=mailto:admin@tudominio.cl
+```
+
+> Las claves se leen de variables de entorno. Si `VAPID_PUBLIC_KEY` o
+> `VAPID_PRIVATE_KEY` están vacías, la aplicación funciona con normalidad pero
+> **no se envían notificaciones**: `send_push_notification()` responde
+> `'Claves VAPID no configuradas'`.
+>
+> ⚠️ **Deuda de seguridad conocida (2026-09-16).** `gasmanager/settings.py` define
+> además un **par por defecto hardcodeado** para `VAPID_PUBLIC_KEY` y
+> `VAPID_PRIVATE_KEY`, y ese par quedó registrado en el historial de git. Hasta que
+> se elimine ese valor por defecto **y** se rote el par, hay que asumir que la clave
+> privada es pública: no usarla en entornos nuevos y tratar cualquier notificación
+> inesperada en los teléfonos de los camioneros como un posible envío suplantado.
+
+### Cómo generar las claves VAPID
 
 ```bash
-# Claves VAPID para Web Push (generadas con generate_vapid.py)
-VAPID_PUBLIC_KEY=BB0yr5YaM0f0zscZ96WzfrUzyRstuxb339lkwKMXFDSZiJSaMvKn_c53YJSUKF7DjLouGgpLxARF-gLky3zbFp8
-VAPID_PRIVATE_KEY=yezbxI6LntId1PZcWqOXxLbM2sX039plDZQaUwyGM5M
+# Desde la raíz del proyecto, con el entorno virtual activado
+python scripts/generate_vapid.py
+```
+
+El script crea un par nuevo, lo imprime en formato base64url listo para pegar en
+el `.env` y elimina los archivos `.pem` temporales. Salida esperada (los datos de
+abajo son un **ejemplo de formato**, no claves utilizables):
+
+```
+============================================================
+CLAVES VAPID GENERADAS - AGREGAR A .env
+============================================================
+
+VAPID_PUBLIC_KEY=<cadena base64url de 87 caracteres>
+VAPID_PRIVATE_KEY=<cadena base64url de 43 caracteres>
 VAPID_ADMIN_EMAIL=mailto:admin@kimgas.cl
+============================================================
 ```
 
-**IMPORTANTE**: Para producción, genera nuevas claves VAPID con:
-```bash
-python generate_vapid.py
-```
+Pegar el par completo en el `.env` local y en las variables de entorno de Render
+(producción). `py-vapid` ya viene instalado como dependencia de `pywebpush`: no
+hay que instalar nada extra.
+
+**Reglas de manejo:**
+
+| Regla | Motivo |
+|---|---|
+| Nunca escribirlas en documentación, issues, capturas, chats ni commits | Quien tenga el par puede enviar notificaciones en nombre de la aplicación |
+| Un par distinto por entorno | Si se filtra el de desarrollo, producción no queda comprometida |
+| La clave pública se expone al navegador; la privada **jamás** | El frontend necesita la pública para poder suscribirse |
+| Al rotarlas, **todas las suscripciones existentes quedan inválidas** | Cada camionero debe volver a activar las notificaciones desde la app |
 
 ### Migración de base de datos
 
@@ -151,3 +197,4 @@ Para iOS, el usuario debe:
 - Las claves VAPID deben mantenerse privadas
 - Las suscripciones expiradas se desactivan automáticamente
 - Todas las acciones se registran en auditoría
+- ⚠️ **Pendiente:** el par VAPID por defecto hardcodeado en `gasmanager/settings.py` está expuesto en el historial de git (ver la nota en "Variables de entorno"). Requiere eliminar el default y rotar el par; ambas acciones quedaron **decididas como no urgentes** el 2026-09-16.

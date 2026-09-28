@@ -170,6 +170,7 @@
                                 <div class="d-none">
                                     {{ form.precio_venta_unitario }}
                                 </div>
+                                {% include 'pedidos/_campo_descuento.html' with campo=form.descuento_unitario %}
                                 <div class="col-12">
                                     {% if forloop.counter0 == 0 %}
                                     <button type="button" class="btn btn-outline-secondary w-100 py-2 telefonista-action-btn" disabled>
@@ -246,6 +247,7 @@
                                 <div class="d-none">
                                     {{ formset.empty_form.precio_venta_unitario }}
                                 </div>
+                                {% include 'pedidos/_campo_descuento.html' with campo=formset.empty_form.descuento_unitario %}
                                 <div class="col-12">
                                     <button type="button" class="btn btn-outline-danger w-100 py-2 telefonista-action-btn remove-row">
                                         <i class="bi bi-trash3 me-2"></i>Quitar

@@ -267,6 +267,12 @@
                         </ul>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'sobres_consulta' %}active{% endif %}"
+                            href="{% url 'sobres_consulta' %}">
+                            <i class="bi bi-journal-text"></i> Sobres
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'precios_lista' %}active{% endif %}"
                             href="{% url 'precios_lista' %}">
                             <i class="bi bi-currency-dollar"></i> Precios

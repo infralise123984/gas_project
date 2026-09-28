@@ -7,6 +7,7 @@ from datetime import date, datetime
 import openpyxl
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import F, Sum, Case, When, Value, IntegerField
 from django.http import HttpResponse, JsonResponse
@@ -1038,4 +1039,127 @@ def imprimir_sobre_diario(request, sobre_id):
 
     wb.save(response)
     return response
+
+
+# Jefe/Admin: consulta simple de sobres con tabla y resaltado de inconsistencias
+@login_required
+def consulta_sobres_jefe(request):
+    """Tabla condensada de sobres para jefe/admin con filtros y alertas visuales.
+
+    Filtros vía GET: fecha (día), mes (YYYY-MM), trabajador (camionero),
+    estado (todos/abiertos/cerrados), tipo (todos/bodega/camion).
+
+    Resalta visualmente sobres con:
+    - Diferencia de dinero != 0 (monto declarado no cuadra con app) → rojo.
+    - Líneas con cantidad declarada != calculada → naranja.
+    """
+    resp = require_roles(request, ["jefe", "admin"], "index", "Solo jefes y administradores pueden consultar sobres.")
+    if resp:
+        return resp
+
+    hoy = today_chile()
+
+    # ── Filtros ────────────────────────────────────────────────
+    fecha_str = (request.GET.get('fecha') or '').strip()
+    mes_str = (request.GET.get('mes') or '').strip()
+    trabajador_str = (request.GET.get('trabajador') or '').strip()
+    estado = request.GET.get('estado', 'todos')
+    tipo = request.GET.get('tipo', 'todos')
+    if estado not in ['todos', 'abiertos', 'cerrados']:
+        estado = 'todos'
+    if tipo not in ['todos', 'bodega', 'camion']:
+        tipo = 'todos'
+
+    sobres_qs = SobreDiario.objects.select_related('trabajador', 'creado_por').prefetch_related('lineas')
+
+    # Filtro por periodo: prioridad mes > fecha
+    if mes_str:
+        try:
+            anio_mes, mes_mes = map(int, mes_str.split('-'))
+            inicio_mes = date(anio_mes, mes_mes, 1)
+            fin_mes = date(anio_mes, mes_mes, monthrange(anio_mes, mes_mes)[1])
+            sobres_qs = sobres_qs.filter(
+                fecha_correspondiente__gte=inicio_mes,
+                fecha_correspondiente__lte=fin_mes,
+            )
+        except (TypeError, ValueError):
+            messages.warning(request, 'El mes indicado no es valido. Se muestran todos los sobres.')
+    elif fecha_str:
+        try:
+            fecha_sel = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+            sobres_qs = sobres_qs.filter(fecha_correspondiente=fecha_sel)
+        except ValueError:
+            messages.warning(request, 'La fecha indicada no es valida. Se muestran todos los sobres.')
+
+    if trabajador_str:
+        try:
+            sobres_qs = sobres_qs.filter(trabajador_id=int(trabajador_str))
+        except ValueError:
+            pass
+
+    if estado == 'cerrados':
+        sobres_qs = sobres_qs.filter(cerrado=True)
+    elif estado == 'abiertos':
+        sobres_qs = sobres_qs.filter(cerrado=False)
+
+    if tipo == 'bodega':
+        sobres_qs = sobres_qs.filter(tipo='bodega')
+    elif tipo == 'camion':
+        sobres_qs = sobres_qs.filter(tipo='camion')
+
+    # Orden por creación (id desc): la columna # queda siempre correlativa.
+    sobres_qs = sobres_qs.order_by('-id')
+
+    # ── Métricas del resultado ─────────────────────────────────
+    total_sobres = sobres_qs.count()
+    total_cerrados = sobres_qs.filter(cerrado=True).count()
+    total_abiertos = total_sobres - total_cerrados
+
+    # ── Paginación y flags por página ──────────────────────────
+    paginator = Paginator(sobres_qs, 25)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    filas = []
+    total_dinero_alertas = 0
+    total_lineas_alertas = 0
+    total_declarado = 0
+    for sobre in page_obj.object_list:
+        flag_dinero = (sobre.diferencia or 0) != 0
+        flag_lineas = any(
+            (linea.cantidad_declarada or 0) != (linea.cantidad_calculada or 0)
+            for linea in sobre.lineas.all()
+        )
+        if flag_dinero:
+            total_dinero_alertas += 1
+        if flag_lineas:
+            total_lineas_alertas += 1
+        total_declarado += int(sobre.monto_declarado or 0)
+        filas.append({
+            'sobre': sobre,
+            'flag_dinero': flag_dinero,
+            'flag_lineas': flag_lineas,
+        })
+
+    camioneros = Usuario.objects.filter(rol='camionero', is_active=True).order_by('first_name', 'last_name')
+
+    context = {
+        'filas': filas,
+        'page_obj': page_obj,
+        'total_sobres': total_sobres,
+        'total_cerrados': total_cerrados,
+        'total_abiertos': total_abiertos,
+        'total_declarado': total_declarado,
+        'total_dinero_alertas': total_dinero_alertas,
+        'total_lineas_alertas': total_lineas_alertas,
+        'camioneros': camioneros,
+        'fecha_str': fecha_str,
+        'mes_str': mes_str,
+        'trabajador_str': trabajador_str,
+        'estado': estado,
+        'tipo': tipo,
+        'hoy': hoy,
+    }
+
+    return render(request, 'sobres/consulta_sobres.html', context)
 

@@ -1,6 +1,6 @@
 """
 Script para probar la creación del sobre de bodega
-Ejecutar: python manage.py shell < test_crear_sobre.py
+Ejecutar: python manage.py shell < scripts/test_crear_sobre.py
 """
 
 from mockups.models import SobreDiario, LineaSobre, TipoBalon, Pedido, Usuario
