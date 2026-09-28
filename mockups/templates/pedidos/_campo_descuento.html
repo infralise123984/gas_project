@@ -1,0 +1,24 @@
+{% if puede_descontar %}
+{# Campo de descuento por unidad. Recibe 'campo' (un BoundField del formset). #}
+<div class="col-12">
+    <label class="form-label" for="{{ campo.id_for_label }}">
+        <i class="bi bi-tag me-1"></i>Descuento por balón ($)
+    </label>
+    <div class="input-group">
+        <span class="input-group-text">$</span>
+        {{ campo }}
+    </div>
+    <div class="form-text">
+        Opcional. Se aplica a CADA balón de la línea (ej: $3.000 en 2 balones = $6.000).
+        Máximo el 50% del precio del balón.
+    </div>
+    {% if campo.field.disabled %}
+    <div class="form-text text-warning">
+        <i class="bi bi-lock-fill me-1"></i>Solo el telefonista puede modificar un descuento ya aplicado.
+    </div>
+    {% endif %}
+    {% if campo.errors %}
+    <div class="text-danger small mt-1">{{ campo.errors }}</div>
+    {% endif %}
+</div>
+{% endif %}

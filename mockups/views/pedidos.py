@@ -30,7 +30,7 @@ from mockups.utils.fechas import (
     now_chile,
     parse_fecha_rango,
 )
-from mockups.utils.permisos import require_roles, require_roles_api
+from mockups.utils.permisos import puede_otorgar_descuento, require_roles, require_roles_api
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
@@ -105,6 +105,7 @@ def transaccional_pedido(request):
                     "form_cabecera": form_cabecera,
                     "formset": formset,
                     "es_bodeguero": es_bodeguero,
+                    "puede_descontar": puede_otorgar_descuento(request.user),
                 })
 
             # Registrar historial y recalcular totales
@@ -168,6 +169,7 @@ def transaccional_pedido(request):
         "formset": formset,
         "es_bodeguero": es_bodeguero,
         "form_token": form_token,
+        "puede_descontar": puede_otorgar_descuento(request.user),
     })
 
 
@@ -234,11 +236,23 @@ def editar_pedido(request, pedido_id):
     # Procesamiento del formulario
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if request.method == 'POST':
+        def _snapshot_detalles():
+            """Estado comparable de las líneas, con el descuento unitario incluido."""
+            return [
+                {
+                    'balon_id': fila['balon_id'],
+                    'cantidad': fila['cantidad'],
+                    'descuento_unitario': int(fila['descuento_unitario'] or 0),
+                }
+                for fila in pedido.detalles.values('balon_id', 'cantidad', 'descuento_unitario')
+            ]
+
         old_data = {
             'metodo_pago': pedido.metodo_pago,
             'sector': pedido.sector,
             'direccion_entrega': pedido.direccion_entrega,
-            'detalles': list(pedido.detalles.values('balon_id', 'cantidad')),
+            'detalles': _snapshot_detalles(),
+            'descuento_total': int(pedido.descuento_total or 0),
             'estado': pedido.estado,
         }
 
@@ -268,6 +282,10 @@ def editar_pedido(request, pedido_id):
                 detalle.save()
                 detalles_guardados += 1
 
+            # Recalcular totales ANTES de detectar cambios: monto_total, ganancia_total
+            # y descuento_total reflejan ya las líneas recién guardadas.
+            pedido.calcular_totales()
+
             # Detectar qué cambió (para historial claro)
             cambios = []
             if pedido.metodo_pago != old_data['metodo_pago']:
@@ -276,10 +294,17 @@ def editar_pedido(request, pedido_id):
                 cambios.append(f"Sector: {old_data['sector'] or '—'} → {pedido.sector or '—'}")
             if pedido.direccion_entrega != old_data['direccion_entrega']:
                 cambios.append("Dirección modificada")
-            if list(pedido.detalles.values('balon_id', 'cantidad')) != old_data['detalles']:
-                cambios.append("Productos/cantidades modificados")
+            if _snapshot_detalles() != old_data['detalles']:
+                cambios.append("Productos/cantidades/descuentos modificados")
             if pedido.estado != old_data['estado']:
                 cambios.append(f"Estado: {old_data['estado']} → {pedido.estado}")
+
+            descuento_actual = int(pedido.descuento_total or 0)
+            descuento_cambio = descuento_actual != old_data['descuento_total']
+            if descuento_cambio:
+                cambios.append(
+                    f"Descuento: ${old_data['descuento_total']:,} → ${descuento_actual:,}".replace(',', '.')
+                )
 
             if cambios:
                 HistorialCambioPedido.objects.create(
@@ -299,13 +324,25 @@ def editar_pedido(request, pedido_id):
                         'metodo_pago': pedido.metodo_pago,
                         'sector': pedido.sector,
                         'direccion': pedido.direccion_entrega,
+                        'descuento_total': descuento_actual,
                         'estado': pedido.estado
                     }
                 )
                 audit_logger.info(f"PEDIDO_UPDATE | #{pedido.id} | By: {request.user.username} | {'; '.join(cambios)}")
 
-            # Recalcular totales
-            pedido.calcular_totales()
+            if descuento_cambio:
+                AuditoriaAccion.registrar(
+                    request=request,
+                    tipo='PEDIDO_DESCUENTO',
+                    descripcion=(
+                        f'Descuento del Pedido #{pedido.id} modificado por {request.user.username}: '
+                        f'${old_data["descuento_total"]:,} → ${descuento_actual:,}'
+                    ).replace(',', '.'),
+                    objeto=pedido,
+                    datos_anteriores={'descuento_total': old_data['descuento_total']},
+                    datos_nuevos={'descuento_total': descuento_actual},
+                )
+
             messages.success(request, f"Pedido #{pedido.id} actualizado correctamente.")
             return redirect(url_volver)
 
@@ -323,6 +360,8 @@ def editar_pedido(request, pedido_id):
         'form_cabecera': form_cabecera,
         'formset': formset,
         'url_volver': url_volver,
+        'puede_descontar': puede_otorgar_descuento(request.user),
+        'es_telefonista': request.user.rol == 'telefonista',
     })
 
 
@@ -332,6 +371,20 @@ def editar_pedido(request, pedido_id):
 # ══════════════════════════════════════════════════════════════
 
 # --- TELEFONISTA / BODEGUERO ---
+
+def _pedidos_devueltos_al_pool(usuario):
+    """Pedidos de este usuario que un camionero devolvió al pool y siguen sin ser tomados.
+
+    Se consulta sin filtrar por fecha: una devolución puede ocurrir después de
+    medianoche y el aviso debe seguir siendo visible para el telefonista.
+    """
+    return (
+        Pedido.objects
+        .filter(registrador=usuario, estado="pendiente", devuelto_el__isnull=False)
+        .select_related("devuelto_por")
+        .order_by("-devuelto_el")
+    )
+
 
 # Telefonista/Bodeguero: ver sus pedidos de hoy
 @login_required
@@ -362,6 +415,7 @@ def mis_pedidos_hoy(request):
         "fecha_hoy": hoy,
         "total_pedidos": total_pedidos,
         "total_monto_hoy_int": int(total_monto_hoy),
+        "pedidos_devueltos": _pedidos_devueltos_al_pool(request.user),
     }
     return render(request, "pedidos/mis_pedidos_hoy.html", context)
 
@@ -396,6 +450,7 @@ def mis_pedidos_hoy_api(request):
         'total_pedidos': total_pedidos,
         'es_telefonista': request.user.rol == 'telefonista',
         'user': request.user,
+        'pedidos_devueltos': _pedidos_devueltos_al_pool(request.user),
     }
     html = render(request, 'partials/_mis_pedidos_cards.html', context).content.decode('utf-8')
     return JsonResponse({
