@@ -59,6 +59,7 @@ urlpatterns = [
     path('entregas/<int:pedido_id>/tomar/', views.camionero_tomar_pedido, name='entregas_tomar'),
     path('entregas/<int:pedido_id>/entregado/', views.camionero_marcar_entregado, name='entregas_entregado'),
     path('entregas/<int:pedido_id>/cancelar/', views.camionero_cancelar_entrega, name='entregas_cancelar'),
+    path('entregas/<int:pedido_id>/devolver/', views.camionero_devolver_pedido, name='entregas_devolver'),
     path('entregas/tarreo/', views.tarreo_pedido, name='entregas_tarreo'),
 
     # ────────────────────────────────────────────────

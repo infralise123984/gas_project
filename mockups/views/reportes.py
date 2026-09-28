@@ -124,9 +124,14 @@ def reporte_ventas(request):
     
     total_ventas = pedidos.aggregate(total=Sum('monto_total'))['total'] or 0
     total_ganancias = pedidos.aggregate(total=Sum('ganancia_total'))['total'] or 0
+    total_descuentos = pedidos.aggregate(total=Sum('descuento_total'))['total'] or 0
     total_pedidos = pedidos.count()
     promedio_pedido = total_ventas / total_pedidos if total_pedidos > 0 else 0
     margen_promedio = (total_ganancias / total_ventas * 100) if total_ventas > 0 else 0
+
+    # La ganancia almacenada es teórica (sin descontar rebajas). El descuento se
+    # contabiliza aparte como pérdida, por eso se muestra también la ganancia neta.
+    ganancia_neta = total_ganancias - total_descuentos
     
     # Calcular total de kilos vendidos
     total_kilos = DetallePedido.objects.filter(
@@ -147,7 +152,8 @@ def reporte_ventas(request):
     ).annotate(
         unidades_vendidas=Sum('cantidad'),
         kilos_vendidos=Sum(F('cantidad') * F('balon__peso_neto_gas')),
-        monto_vendido=Sum(F('cantidad') * F('precio_venta_unitario')),
+        monto_vendido=Sum(F('cantidad') * (F('precio_venta_unitario') - F('descuento_unitario'))),
+        descuentos=Sum(F('cantidad') * F('descuento_unitario')),
         ganancia_total=Sum(F('cantidad') * (F('precio_venta_unitario') - F('precio_compra_unitario')))
     ).order_by('-monto_vendido')
     
@@ -331,6 +337,8 @@ def reporte_ventas(request):
         # Métricas principales
         'total_ventas': total_ventas,
         'total_ganancias': total_ganancias,
+        'total_descuentos': total_descuentos,
+        'ganancia_neta': ganancia_neta,
         'total_pedidos': total_pedidos,
         'total_kilos': total_kilos,
         'promedio_pedido': promedio_pedido,

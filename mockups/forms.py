@@ -1,4 +1,6 @@
 # mockups/forms.py
+from decimal import Decimal, ROUND_FLOOR
+
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -7,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory, BaseInlineFormSet
 from django.utils.safestring import mark_safe
 from .models import Pedido, DetallePedido, TipoBalon, Sector, SobreDiario, LineaSobre, LineaPago, LineaGasto, Usuario
+from .utils.permisos import ROL_PROPIETARIO_DESCUENTO, ROLES_CON_DESCUENTO
 
 
 def get_sector_choices(include_blank=True, include_inactive=False, selected_value=None):
@@ -192,10 +195,14 @@ class BalonSelectWidget(forms.Select):
         return option
 
 
+# Tope de descuento por unidad, como fracción del precio de venta del balón.
+TOPE_DESCUENTO_UNITARIO = Decimal('0.5')
+
+
 class DetallePedidoForm(forms.ModelForm):
     class Meta:
         model = DetallePedido
-        fields = ['balon', 'cantidad', 'precio_venta_unitario']
+        fields = ['balon', 'cantidad', 'precio_venta_unitario', 'descuento_unitario']
         widgets = {
             'balon': forms.Select(attrs={'class': 'form-select balon-select'}),
             'cantidad': forms.NumberInput(attrs={
@@ -209,11 +216,21 @@ class DetallePedidoForm(forms.ModelForm):
                 'readonly': True,
                 'style': 'width: 120px; background-color: #f0f0f0;',
             }),
+            'descuento_unitario': forms.NumberInput(attrs={
+                'class': 'form-control descuento-unitario-input',
+                'min': 0,
+                'step': 1,
+                'placeholder': '0',
+                'inputmode': 'numeric',
+            }),
         }
 
     def __init__(self, *args, **kwargs):
         user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
+
+        self.rol = getattr(user, 'rol', None)
+        self._configurar_campo_descuento()
 
         # Choices para balones ordenados como en los sobres: Normal→Catalítico→Aluminio, cada uno por peso desc
         from django.db.models import Case, When, Value, IntegerField
@@ -253,6 +270,53 @@ class DetallePedidoForm(forms.ModelForm):
         self.fields['balon'].required = False
         self.fields['cantidad'].required = False
         self.fields['precio_venta_unitario'].required = False
+
+    def _configurar_campo_descuento(self):
+        """Oculta el descuento a quien no puede otorgarlo y lo congela si ya fue aplicado.
+
+        - Bodeguero y camionero: no ven el campo (no otorgan ni modifican descuentos).
+        - Jefe y admin: pueden otorgar un descuento nuevo, pero solo el telefonista
+          puede modificar uno ya aplicado.
+        """
+        if 'descuento_unitario' not in self.fields:
+            return
+
+        if self.rol not in ROLES_CON_DESCUENTO:
+            del self.fields['descuento_unitario']
+            return
+
+        if self.rol != ROL_PROPIETARIO_DESCUENTO and getattr(self.instance, 'descuento_unitario', 0):
+            self.fields['descuento_unitario'].disabled = True
+
+    def _precio_venta_base(self, balon):
+        """Precio de venta que la vista persistirá para el balón, según el rol del usuario."""
+        if self.rol == 'bodeguero':
+            return balon.precio_local
+        return balon.precio_domicilio
+
+    def clean(self):
+        """Valida que el descuento por unidad no supere el tope sobre el precio del balón."""
+        cleaned_data = super().clean()
+
+        descuento = cleaned_data.get('descuento_unitario')
+        balon = cleaned_data.get('balon')
+        if not descuento or not balon:
+            return cleaned_data
+
+        precio_base = self._precio_venta_base(balon)
+        if not precio_base:
+            return cleaned_data
+
+        tope = (Decimal(precio_base) * TOPE_DESCUENTO_UNITARIO).to_integral_value(rounding=ROUND_FLOOR)
+        if Decimal(descuento) > tope:
+            self.add_error(
+                'descuento_unitario',
+                (
+                    f"El descuento por balón no puede superar el 50% de su precio "
+                    f"({balon.nombre}). Máximo por balón: ${int(tope):,}."
+                ).replace(',', '.'),
+            )
+        return cleaned_data
 
 
 class BaseDetalleFormSet(BaseInlineFormSet):

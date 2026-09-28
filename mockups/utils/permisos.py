@@ -10,6 +10,17 @@ from mockups.models import AuditoriaAccion
 
 security_logger = logging.getLogger('security')
 
+# Roles autorizados a otorgar descuentos en pedidos. El bodeguero y el camionero no participan.
+ROLES_CON_DESCUENTO = ('telefonista', 'jefe', 'admin')
+
+# El único rol que puede modificar o quitar un descuento ya aplicado.
+ROL_PROPIETARIO_DESCUENTO = 'telefonista'
+
+
+def puede_otorgar_descuento(user):
+    """True si el usuario puede otorgar o modificar descuentos en pedidos."""
+    return getattr(user, 'rol', None) in ROLES_CON_DESCUENTO
+
 
 def get_client_ip(request):
     """Obtiene IP de cliente para auditoría de forma consistente."""

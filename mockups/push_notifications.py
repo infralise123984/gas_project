@@ -172,13 +172,17 @@ def send_push_notification(subscription_info, title, body, url='/', tag='gasfaci
         return False, error_msg
 
 
-def notificar_nuevo_pedido(pedido):
+def notificar_nuevo_pedido(pedido, excluir_usuario_id=None, title=None):
     """
-    Notifica a todos los camioneros activos sobre un nuevo pedido pendiente.
-    Se usa cuando un telefonista crea un pedido de teléfono/domicilio.
-    
+    Notifica a los camioneros activos sobre un pedido pendiente disponible.
+
+    Se usa al crear un pedido de teléfono/domicilio y al devolverse un pedido al pool.
+
     Args:
         pedido: Instancia del modelo Pedido
+        excluir_usuario_id: id del usuario a excluir del envío. El camionero que devuelve
+            un pedido no debe recibir la alerta del pedido que acaba de liberar.
+        title: título personalizado de la notificación.
     """
     from .models import PushSubscription, Usuario
     
@@ -193,12 +197,15 @@ def notificar_nuevo_pedido(pedido):
         activa=True
     ).select_related('usuario')
     
+    if excluir_usuario_id:
+        suscripciones = suscripciones.exclude(usuario_id=excluir_usuario_id)
+    
     if not suscripciones.exists():
         audit_logger.info(f"PUSH_NO_SUBS | Pedido #{pedido.id} - No hay camioneros suscritos")
         return 0
     
     # Construir mensaje
-    title = '🚚 ¡Nuevo Pedido!'
+    title = title or '🚚 ¡Nuevo Pedido!'
     
     # Resumen del pedido
     detalles = pedido.detalles.all()
