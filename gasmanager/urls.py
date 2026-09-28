@@ -45,6 +45,7 @@ urlpatterns = [
     path('pedidos/mios/', views.mis_pedidos_hoy, name='pedidos_mios'),
     path('pedidos/mios/api/', views.mis_pedidos_hoy_api, name='pedidos_mios_api'),
     path('pedidos/<int:pedido_id>/cancelar/', views.telefonista_cancelar_pedido, name='pedidos_cancelar'),
+    path('pedidos/<int:pedido_id>/cambiar-fecha/', views.admin_cambiar_fecha_pedido, name='pedidos_cambiar_fecha'),
     path('pedidos/consulta/', views.consultas_pedidos, name='pedidos_consulta'),
 
     # ────────────────────────────────────────────────

@@ -161,6 +161,43 @@
         </div> -->
     </div>
 
+    <!-- Admin: corregir el día del pedido -->
+    {% if es_admin %}
+    <div class="card shadow-sm mb-5 border-warning">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0"><i class="bi bi-calendar2-week me-2"></i>Cambiar Fecha (solo admin)</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-3">
+                Corrige el día en que quedó registrado el pedido. Se conserva la hora
+                (<strong>{{ pedido.fecha|date:"H:i" }} hrs</strong>) y el pedido pasa al sobre
+                del camionero de la fecha nueva.
+            </p>
+            <form method="post" action="{% url 'pedidos_cambiar_fecha' pedido.id %}"
+                  onsubmit="return confirm('¿Cambiar la fecha del Pedido #{{ pedido.id }}?');">
+                {% csrf_token %}
+                <div class="row g-2 align-items-end">
+                    <div class="col-12 col-md-8">
+                        <label class="form-label fw-semibold" for="nueva_fecha">Nueva fecha</label>
+                        <input type="date" class="form-control form-control-lg" id="nueva_fecha"
+                               name="nueva_fecha" value="{{ pedido.fecha|date:'Y-m-d' }}" required>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <button type="submit" class="btn btn-warning btn-lg w-100">
+                            <i class="bi bi-save me-2"></i>Cambiar fecha
+                        </button>
+                    </div>
+                </div>
+                <div class="form-text mt-2">
+                    Funciona en cualquier estado del pedido (incluidos entregados y cancelados).
+                    Si el sobre de la fecha destino ya está cerrado no se reabre, y el cambio
+                    no aparecerá en ese sobre.
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Historial de estados (timeline real) -->
     <div class="card shadow-sm mb-5">
         <div class="card-header bg-secondary text-white">
