@@ -14,3 +14,14 @@ def vapid_public_key(request):
     return {
         'vapid_public_key': getattr(settings, 'VAPID_PUBLIC_KEY', ''),
     }
+
+
+def secciones_activas(request):
+    """Expone los feature flags de secciones para que los templates oculten la UI.
+
+    Conteo de balones: la sección existe pero no se muestra ni se enlaza hasta
+    liberarla (``CONTEO_BALONES_HABILITADO``).
+    """
+    return {
+        'conteo_balones_habilitado': getattr(settings, 'CONTEO_BALONES_HABILITADO', False),
+    }

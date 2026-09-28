@@ -3,7 +3,7 @@
 import re
 from datetime import timedelta
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from mockups.models import (
@@ -124,6 +124,7 @@ class ServicioConteoTest(BaseConteoTest):
         self.assertTrue(linea.tiene_descuadre)
 
 
+@override_settings(CONTEO_BALONES_HABILITADO=True)
 class VistasConteoTest(BaseConteoTest):
     def test_anonimo_va_al_login(self):
         respuesta = self.client.get(reverse('conteo_balones_lista'))
@@ -261,3 +262,45 @@ class VistasConteoTest(BaseConteoTest):
             contenido,
         )
         self.assertEqual(len(movimientos), conteo.lineas.count() * 4)
+
+    def test_nav_muestra_el_enlace_cuando_esta_habilitado(self):
+        self.client.force_login(self.bodeguero)
+
+        respuesta = self.client.get(reverse('index'))
+
+        self.assertContains(respuesta, 'Conteo Balones')
+
+
+@override_settings(CONTEO_BALONES_HABILITADO=False)
+class ConteoOcultoTest(BaseConteoTest):
+    """Con el flag apagado la sección no se enlaza y las URLs redirigen al index."""
+
+    def test_lista_redirige_al_index(self):
+        self.client.force_login(self.bodeguero)
+
+        respuesta = self.client.get(reverse('conteo_balones_lista'))
+
+        self.assertRedirects(respuesta, reverse('index'), fetch_redirect_response=False)
+
+    def test_conteo_de_hoy_redirige_al_index_sin_crear_nada(self):
+        self.client.force_login(self.bodeguero)
+
+        respuesta = self.client.get(reverse('conteo_balones_hoy'))
+
+        self.assertRedirects(respuesta, reverse('index'), fetch_redirect_response=False)
+        self.assertFalse(ConteoDiarioBalon.objects.exists())
+
+    def test_detalle_redirige_al_index(self):
+        conteo, _ = obtener_o_crear_conteo(today_chile(), self.bodeguero)
+        self.client.force_login(self.bodeguero)
+
+        respuesta = self.client.get(reverse('conteo_balones_detalle', args=[conteo.id]))
+
+        self.assertRedirects(respuesta, reverse('index'), fetch_redirect_response=False)
+
+    def test_nav_no_muestra_el_enlace(self):
+        self.client.force_login(self.bodeguero)
+
+        respuesta = self.client.get(reverse('index'))
+
+        self.assertNotContains(respuesta, 'Conteo Balones')
