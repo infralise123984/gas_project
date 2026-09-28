@@ -85,6 +85,9 @@ urlpatterns = [
     # ────────────────────────────────────────────────
     path('balones/lista/', views.gestionar_balones_lista, name='balones_lista'),
     path('balones/crear/', views.gestionar_balones_crear, name='balones_crear'),
+    path('balones/conteo/', views.conteo_balones_lista, name='conteo_balones_lista'),
+    path('balones/conteo/hoy/', views.conteo_balones_hoy, name='conteo_balones_hoy'),
+    path('balones/conteo/<int:conteo_id>/', views.conteo_balones_detalle, name='conteo_balones_detalle'),
     path('balones/<int:balon_id>/editar/', views.gestionar_balones_editar, name='balones_editar'),
     path('balones/<int:balon_id>/eliminar/', views.gestionar_balones_eliminar, name='balones_eliminar'),
 

@@ -1,0 +1,354 @@
+{% extends 'base.html' %}
+{% block title %}Conteo {{ conteo.fecha|date:"d/m/Y" }} - ValGas{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Tabla de conteo: densa en escritorio, apilada en teléfono.
+       Una sola estructura de marcado para ambos casos, sin duplicar el formset. */
+    .conteo-tabla thead th {
+        text-align: center;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+    .conteo-tabla tbody th {
+        white-space: nowrap;
+    }
+    .conteo-tabla input[type="number"] {
+        width: 5.5rem;
+        margin: 0 auto;
+        text-align: center;
+        font-weight: 700;
+    }
+    .conteo-tabla .celda-final {
+        font-size: 1.2rem;
+        font-weight: 700;
+        text-align: center;
+        white-space: nowrap;
+    }
+    .conteo-tabla tfoot td {
+        text-align: center;
+    }
+
+    @media (max-width: 991.98px) {
+        .conteo-tabla thead {
+            display: none;
+        }
+        .conteo-tabla,
+        .conteo-tabla tbody,
+        .conteo-tabla tfoot,
+        .conteo-tabla tr,
+        .conteo-tabla th,
+        .conteo-tabla td {
+            display: block;
+            width: 100%;
+        }
+        .conteo-tabla tbody tr {
+            border: 1px solid #dee2e6;
+            border-radius: 0.75rem;
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+        }
+        .conteo-tabla tbody th {
+            border: 0;
+            font-size: 1.15rem;
+            padding-bottom: 0.5rem;
+        }
+        .conteo-tabla tbody td,
+        .conteo-tabla tfoot td {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 0;
+            padding: 0.4rem 0;
+        }
+        .conteo-tabla tbody td::before,
+        .conteo-tabla tfoot td::before {
+            content: attr(data-label);
+            font-weight: 600;
+            color: #6c757d;
+        }
+        .conteo-tabla input[type="number"] {
+            width: 7rem;
+            margin: 0;
+            font-size: 1.15rem;
+        }
+        .conteo-tabla tfoot tr {
+            border: 1px solid #dee2e6;
+            border-radius: 0.75rem;
+            padding: 0.75rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-3 py-4 mx-auto" style="max-width: 1180px;">
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <h2 class="fw-bold text-primary mb-0 fs-3">
+            <i class="bi bi-clipboard-check me-2"></i>Conteo de Balones
+        </h2>
+        <span class="fs-4 text-muted">{{ conteo.fecha|date:"d/m/Y" }}</span>
+    </div>
+
+    {% if not editable %}
+    <div class="alert alert-warning shadow-sm rounded-4">
+        <i class="bi bi-lock-fill me-2"></i>
+        <strong>Conteo cerrado.</strong> Solo se puede editar el día que corresponde.
+    </div>
+    {% endif %}
+
+    {% if resumen.hay_descuadre %}
+    <div class="alert alert-danger shadow-sm rounded-4">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>Hay un descuadre:</strong> alguna línea queda con saldo negativo.
+        Revisa las salidas antes de guardar.
+    </div>
+    {% endif %}
+
+    <form method="post" id="conteo-formset" novalidate>
+        {% csrf_token %}
+        {{ formset.management_form }}
+
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle conteo-tabla mb-3">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col" rowspan="2">Balón</th>
+                        <th scope="colgroup" colspan="4" class="text-primary">
+                            <i class="bi bi-droplet-fill me-1"></i>Llenos
+                        </th>
+                        <th scope="colgroup" colspan="4" class="text-secondary">
+                            <i class="bi bi-circle me-1"></i>Vacíos
+                        </th>
+                    </tr>
+                    <tr>
+                        <th scope="col">Inicial</th>
+                        <th scope="col">Entran</th>
+                        <th scope="col">Salen</th>
+                        <th scope="col">Final</th>
+                        <th scope="col">Inicial</th>
+                        <th scope="col">Entran</th>
+                        <th scope="col">Salen</th>
+                        <th scope="col">Final</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for form in formset %}
+                    <tr class="fila-conteo"
+                        data-inicial-llenos="{{ form.instance.stock_inicial_llenos }}"
+                        data-inicial-vacios="{{ form.instance.stock_inicial_vacios }}">
+                        <th scope="row">
+                            {{ form.id }}
+                            {{ form.instance.balon.nombre }}
+                            {% if form.instance.tiene_descuadre %}
+                            <span class="badge bg-danger ms-1">Descuadre</span>
+                            {% endif %}
+                        </th>
+
+                        <!-- Llenos -->
+                        <td data-label="Llenos · inicial">{{ form.instance.stock_inicial_llenos }}</td>
+                        <td data-label="Llenos · entran">
+                            {{ form.llenos_entran }}
+                            {% if form.llenos_entran.errors %}
+                            <div class="text-danger small">{{ form.llenos_entran.errors }}</div>
+                            {% endif %}
+                        </td>
+                        <td data-label="Llenos · salen">
+                            {{ form.llenos_salen }}
+                            {% if form.llenos_salen.errors %}
+                            <div class="text-danger small">{{ form.llenos_salen.errors }}</div>
+                            {% endif %}
+                        </td>
+                        <td data-label="Llenos · final" class="celda-final">
+                            <span class="js-final-llenos {% if form.instance.stock_final_llenos < 0 %}text-danger{% else %}text-success{% endif %}">
+                                {{ form.instance.stock_final_llenos }}
+                            </span>
+                        </td>
+
+                        <!-- Vacíos -->
+                        <td data-label="Vacíos · inicial">{{ form.instance.stock_inicial_vacios }}</td>
+                        <td data-label="Vacíos · entran">
+                            {{ form.vacios_entran }}
+                            {% if form.vacios_entran.errors %}
+                            <div class="text-danger small">{{ form.vacios_entran.errors }}</div>
+                            {% endif %}
+                        </td>
+                        <td data-label="Vacíos · salen">
+                            {{ form.vacios_salen }}
+                            {% if form.vacios_salen.errors %}
+                            <div class="text-danger small">{{ form.vacios_salen.errors }}</div>
+                            {% endif %}
+                        </td>
+                        <td data-label="Vacíos · final" class="celda-final">
+                            <span class="js-final-vacios {% if form.instance.stock_final_vacios < 0 %}text-danger{% else %}text-success{% endif %}">
+                                {{ form.instance.stock_final_vacios }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                            No hay tipos de balón activos para contar.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+
+                {% if formset.forms %}
+                <tfoot class="table-light fw-bold">
+                    <tr>
+                        <th scope="row">Total</th>
+                        <td data-label="Llenos · inicial" id="tot-inicial-llenos">{{ resumen.stock_inicial_llenos }}</td>
+                        <td data-label="Llenos · entran" id="tot-llenos-entran">{{ resumen.llenos_entran }}</td>
+                        <td data-label="Llenos · salen" id="tot-llenos-salen">{{ resumen.llenos_salen }}</td>
+                        <td data-label="Llenos · final" id="tot-final-llenos" class="celda-final">
+                            <span class="{% if resumen.stock_final_llenos < 0 %}text-danger{% else %}text-success{% endif %}">
+                                {{ resumen.stock_final_llenos }}
+                            </span>
+                        </td>
+                        <td data-label="Vacíos · inicial" id="tot-inicial-vacios">{{ resumen.stock_inicial_vacios }}</td>
+                        <td data-label="Vacíos · entran" id="tot-vacios-entran">{{ resumen.vacios_entran }}</td>
+                        <td data-label="Vacíos · salen" id="tot-vacios-salen">{{ resumen.vacios_salen }}</td>
+                        <td data-label="Vacíos · final" id="tot-final-vacios" class="celda-final">
+                            <span class="{% if resumen.stock_final_vacios < 0 %}text-danger{% else %}text-success{% endif %}">
+                                {{ resumen.stock_final_vacios }}
+                            </span>
+                        </td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+
+        {% if editable %}
+        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+            <a href="{% url 'conteo_balones_lista' %}" class="btn btn-outline-secondary btn-lg px-4 rounded-3">
+                Volver
+            </a>
+            <button type="submit" class="btn btn-primary btn-lg px-5 shadow rounded-3">
+                <i class="bi bi-save me-2"></i>Guardar conteo
+            </button>
+        </div>
+        {% else %}
+        <a href="{% url 'conteo_balones_lista' %}" class="btn btn-secondary btn-lg rounded-3">
+            <i class="bi bi-arrow-left me-2"></i>Volver
+        </a>
+        {% endif %}
+    </form>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if editable %}
+<script>
+// Conteo en vivo: recalcula el saldo final de cada línea y los totales del día.
+// Sin eval: solo aritmética y textContent, compatible con la CSP actual.
+(function () {
+    'use strict';
+
+    var filas = document.querySelectorAll('.fila-conteo');
+    if (!filas.length) return;
+
+    var TOTALES = {
+        inicialLlenos: document.getElementById('tot-inicial-llenos'),
+        entranLlenos: document.getElementById('tot-llenos-entran'),
+        salenLlenos: document.getElementById('tot-llenos-salen'),
+        finalLlenos: document.getElementById('tot-final-llenos'),
+        inicialVacios: document.getElementById('tot-inicial-vacios'),
+        entranVacios: document.getElementById('tot-vacios-entran'),
+        salenVacios: document.getElementById('tot-vacios-salen'),
+        finalVacios: document.getElementById('tot-final-vacios')
+    };
+
+    function aEntero(valor) {
+        var n = parseInt(valor, 10);
+        return isNaN(n) ? 0 : n;
+    }
+
+    function pintarSaldo(elemento, valor) {
+        if (!elemento) return;
+        elemento.textContent = valor;
+        elemento.classList.toggle('text-danger', valor < 0);
+        elemento.classList.toggle('text-success', valor >= 0);
+    }
+
+    function recalcular() {
+        var acumulado = {
+            inicialLlenos: 0, entranLlenos: 0, salenLlenos: 0,
+            inicialVacios: 0, entranVacios: 0, salenVacios: 0
+        };
+
+        Array.prototype.forEach.call(filas, function (fila) {
+            var inputs = fila.querySelectorAll('input[type="number"]');
+            if (inputs.length < 4) return;
+
+            var inicialLlenos = aEntero(fila.dataset.inicialLlenos);
+            var entranLlenos = aEntero(inputs[0].value);
+            var salenLlenos = aEntero(inputs[1].value);
+            var inicialVacios = aEntero(fila.dataset.inicialVacios);
+            var entranVacios = aEntero(inputs[2].value);
+            var salenVacios = aEntero(inputs[3].value);
+
+            pintarSaldo(
+                fila.querySelector('.js-final-llenos'),
+                inicialLlenos + entranLlenos - salenLlenos
+            );
+            pintarSaldo(
+                fila.querySelector('.js-final-vacios'),
+                inicialVacios + entranVacios - salenVacios
+            );
+
+            acumulado.inicialLlenos += inicialLlenos;
+            acumulado.entranLlenos += entranLlenos;
+            acumulado.salenLlenos += salenLlenos;
+            acumulado.inicialVacios += inicialVacios;
+            acumulado.entranVacios += entranVacios;
+            acumulado.salenVacios += salenVacios;
+        });
+
+        if (TOTALES.inicialLlenos) TOTALES.inicialLlenos.textContent = acumulado.inicialLlenos;
+        if (TOTALES.entranLlenos) TOTALES.entranLlenos.textContent = acumulado.entranLlenos;
+        if (TOTALES.salenLlenos) TOTALES.salenLlenos.textContent = acumulado.salenLlenos;
+        if (TOTALES.inicialVacios) TOTALES.inicialVacios.textContent = acumulado.inicialVacios;
+        if (TOTALES.entranVacios) TOTALES.entranVacios.textContent = acumulado.entranVacios;
+        if (TOTALES.salenVacios) TOTALES.salenVacios.textContent = acumulado.salenVacios;
+
+        pintarSaldo(
+            TOTALES.finalLlenos,
+            acumulado.inicialLlenos + acumulado.entranLlenos - acumulado.salenLlenos
+        );
+        pintarSaldo(
+            TOTALES.finalVacios,
+            acumulado.inicialVacios + acumulado.entranVacios - acumulado.salenVacios
+        );
+    }
+
+    // Escritorio: Enter avanza al siguiente campo en vez de enviar el formulario.
+    var campos = document.querySelectorAll('.conteo-tabla input[type="number"]');
+
+    Array.prototype.forEach.call(campos, function (input, indice) {
+        input.addEventListener('input', recalcular);
+
+        input.addEventListener('focus', function () {
+            if (input.value !== '') input.select();
+        });
+
+        input.addEventListener('keydown', function (evento) {
+            if (evento.key !== 'Enter') return;
+            evento.preventDefault();
+            var siguiente = campos[indice + 1];
+            if (siguiente) {
+                siguiente.focus();
+                siguiente.select();
+            }
+        });
+    });
+
+    recalcular();
+})();
+</script>
+{% endif %}
+{% endblock %}

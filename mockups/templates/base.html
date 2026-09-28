@@ -218,6 +218,12 @@
                             <i class="bi bi-droplet-half"></i> Balones
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'conteo_balones_lista' or request.resolver_match.url_name == 'conteo_balones_detalle' %}active{% endif %}"
+                            href="{% url 'conteo_balones_lista' %}">
+                            <i class="bi bi-clipboard-check"></i> Conteo Balones
+                        </a>
+                    </li>
                     {% endif %}
                     {% if user.rol == "camionero" %}
                     <li class="nav-item">
