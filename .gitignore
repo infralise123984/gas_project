@@ -141,6 +141,9 @@ env.bak/
 venv.bak/
 .env.render
 
+# Claves VAPID generadas por scripts/generate_vapid.py (nunca versionar)
+*.pem
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -176,3 +179,11 @@ cython_debug/
 
 # graphify output
 graphify-out/
+
+# ──────────────────────────────────────────────────────────────
+# Específico del proyecto GasFácil
+# ──────────────────────────────────────────────────────────────
+
+# Respaldos de base de datos: contienen datos reales de clientes, pedidos y
+# auditoría. NUNCA versionar (usar almacenamiento externo si hay que compartirlos).
+backups/

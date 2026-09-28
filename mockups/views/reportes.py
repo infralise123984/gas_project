@@ -124,9 +124,14 @@ def reporte_ventas(request):
     
     total_ventas = pedidos.aggregate(total=Sum('monto_total'))['total'] or 0
     total_ganancias = pedidos.aggregate(total=Sum('ganancia_total'))['total'] or 0
+    total_descuentos = pedidos.aggregate(total=Sum('descuento_total'))['total'] or 0
     total_pedidos = pedidos.count()
     promedio_pedido = total_ventas / total_pedidos if total_pedidos > 0 else 0
     margen_promedio = (total_ganancias / total_ventas * 100) if total_ventas > 0 else 0
+
+    # La ganancia almacenada es teórica (sin descontar rebajas). El descuento se
+    # contabiliza aparte como pérdida, por eso se muestra también la ganancia neta.
+    ganancia_neta = total_ganancias - total_descuentos
     
     # Calcular total de kilos vendidos
     total_kilos = DetallePedido.objects.filter(
@@ -147,7 +152,8 @@ def reporte_ventas(request):
     ).annotate(
         unidades_vendidas=Sum('cantidad'),
         kilos_vendidos=Sum(F('cantidad') * F('balon__peso_neto_gas')),
-        monto_vendido=Sum(F('cantidad') * F('precio_venta_unitario')),
+        monto_vendido=Sum(F('cantidad') * (F('precio_venta_unitario') - F('descuento_unitario'))),
+        descuentos=Sum(F('cantidad') * F('descuento_unitario')),
         ganancia_total=Sum(F('cantidad') * (F('precio_venta_unitario') - F('precio_compra_unitario')))
     ).order_by('-monto_vendido')
     
@@ -238,12 +244,21 @@ def reporte_ventas(request):
             
             rendimiento_trabajadores[entregador.id]['kilos_entregados'] += kilos_pedido
     
-    # Consolidar y contar pedidos
+    # Consolidar y contar pedidos (agregación en BD, evita N+1)
+    conteo_registrador = dict(
+        pedidos.values('registrador_id')
+        .annotate(c=Count('id'))
+        .values_list('registrador_id', 'c')
+    )
+    conteo_entregador = dict(
+        pedidos.values('entregador_id')
+        .annotate(c=Count('id'))
+        .values_list('entregador_id', 'c')
+    )
+
     for uid, w in rendimiento_trabajadores.items():
-        # Contar cuántos pedidos participó
-        pedidos_registrador = pedidos.filter(registrador_id=uid).count() if uid else 0
-        pedidos_entregador = pedidos.filter(entregador_id=uid).count() if uid else 0
-        w['total_pedidos'] = pedidos_registrador + pedidos_entregador
+        # Contar cuántos pedidos participó (desde los dicts agregados)
+        w['total_pedidos'] = conteo_registrador.get(uid, 0) + conteo_entregador.get(uid, 0)
         w['total_kilos'] = w['kilos_registrados'] + w['kilos_entregados'] + w['kilos_tarreo']
     
     rendimiento_trabajadores_lista = sorted(
@@ -322,6 +337,8 @@ def reporte_ventas(request):
         # Métricas principales
         'total_ventas': total_ventas,
         'total_ganancias': total_ganancias,
+        'total_descuentos': total_descuentos,
+        'ganancia_neta': ganancia_neta,
         'total_pedidos': total_pedidos,
         'total_kilos': total_kilos,
         'promedio_pedido': promedio_pedido,
@@ -440,6 +457,13 @@ def reporte_sobres(request):
     lista_camion = list(sobres_qs.filter(tipo='camion').order_by('fecha_correspondiente'))
     lista_todos  = lista_bodega + lista_camion
 
+    # Mapa {trabajador_id: Usuario} — los sobres ya traen 'trabajador'
+    # cargado por select_related; reutilizarlo evita N+1 en los loops.
+    trabajadores_map = {}
+    for s in lista_camion:
+        if s.trabajador_id and s.trabajador_id not in trabajadores_map:
+            trabajadores_map[s.trabajador_id] = s.trabajador
+
     # ═══════════════════════════════════════════════════════════
     # 3. FUNCIÓN AUXILIAR — métricas de un grupo de sobres
     # ═══════════════════════════════════════════════════════════
@@ -518,8 +542,9 @@ def reporte_sobres(request):
             tipo_mostrar = 'bodega'
             usuario_obj = None
         else:
-            usuario_obj = Usuario.objects.get(id=clave)
-            nombre = usuario_obj.get_full_name() or usuario_obj.username
+            # Usar trabajador ya cargado (evita consulta N+1)
+            usuario_obj = trabajadores_map.get(clave)
+            nombre = (usuario_obj.get_full_name() or usuario_obj.username) if usuario_obj else f'Trabajador #{clave}'
             tipo_mostrar = 'camion'
         
         resumen_trabajadores.append({
@@ -601,10 +626,11 @@ def reporte_sobres(request):
         if clave == 'bodega':
             nombre = 'Bodega/Local'
         else:
-            try:
-                usuario_obj = Usuario.objects.get(id=clave)
+            # Usar trabajador ya cargado (evita consulta N+1)
+            usuario_obj = trabajadores_map.get(clave)
+            if usuario_obj:
                 nombre = usuario_obj.get_full_name() or usuario_obj.username
-            except:
+            else:
                 nombre = f'Trabajador #{clave}'
         
         monto_total = sum(g['monto'] for g in gastos_list)

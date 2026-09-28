@@ -82,6 +82,7 @@
                                 <i class="bi bi-trash"></i> Quitar
                             </button>
                         </div>
+                        {% include 'pedidos/_campo_descuento.html' with campo=form.descuento_unitario %}
                     </div>
                     <!--  CRÍTICO: Campos hidden necesarios para el formset -->
                     {{ form.id }}
@@ -129,6 +130,7 @@
                                 <i class="bi bi-trash"></i> Quitar
                             </button>
                         </div>
+                        {% include 'pedidos/_campo_descuento.html' with campo=formset.empty_form.descuento_unitario %}
                     </div>
                     <!-- Campos hidden para nuevas filas -->
                     <div style="display: none;">

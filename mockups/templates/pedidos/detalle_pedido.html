@@ -110,6 +110,7 @@
                             <th class="text-end">Precio compra</th>
                             <th class="text-end">Precio unitario</th>
                             <th class="text-end">Subtotal</th>
+                            <th class="text-end">Descuento</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -122,10 +123,20 @@
                             <td class="text-end fw-bold text-success">
                                 ${{ detalle.subtotal|floatformat:0|intcomma }}
                             </td>
+                            <td class="text-end {% if detalle.descuento_unitario %}text-danger fw-bold{% else %}text-muted{% endif %}">
+                                {% if detalle.descuento_unitario %}
+                                −${{ detalle.descuento_total|floatformat:0|intcomma }}
+                                <small class="d-block text-muted fw-normal">
+                                    ${{ detalle.descuento_unitario|floatformat:0|intcomma }} por balón
+                                </small>
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="4" class="text-center py-5 text-muted">
+                            <td colspan="6" class="text-center py-5 text-muted">
                                 <i class="bi bi-boxes fs-1 d-block mb-3"></i>
                                 No hay productos registrados
                             </td>
@@ -146,6 +157,18 @@
                     <h3 class="display-6 fw-bold text-primary mb-0">
                         ${{ pedido.monto_total|floatformat:0|intcomma }}
                     </h3>
+                    {% if pedido.tiene_descuento %}
+                    <div class="small mt-3 text-start">
+                        <div class="d-flex justify-content-between text-muted">
+                            <span>Subtotal</span>
+                            <span>${{ pedido.subtotal_bruto|floatformat:0|intcomma }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between text-danger fw-semibold">
+                            <span>Descuento</span>
+                            <span>−${{ pedido.descuento_total|floatformat:0|intcomma }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>

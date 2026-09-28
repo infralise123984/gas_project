@@ -17,21 +17,9 @@
     <div class="card-body p-4 text-center">
         <!-- Número de pedido -->
         <h4 class="fw-bold mb-4 text-dark">Pedido #{{ pedido.id }}</h4>
-        <!-- Productos -->
+        <!-- Productos y desglose de descuento -->
         <div class="mb-4">
-            <ul class="list-group list-group-flush mb-3">
-                {% for detalle in pedido.detalles.all %}
-                <li class="list-group-item d-flex justify-content-between align-items-center fs-5 py-3">
-                    <span>{{ detalle.cantidad }} X {{ detalle.balon.nombre }}</span>
-                    <span class="badge bg-success fs-5 px-3 py-2">${{ detalle.subtotal|floatformat:0|intcomma }}</span>
-                </li>
-                {% empty %}
-                <li class="list-group-item text-muted py-3">Sin productos</li>
-                {% endfor %}
-            </ul>
-            <div class="fw-bold fs-4 text-success">
-                Total: ${{ pedido.monto_total|floatformat:0|intcomma }}
-            </div>
+            {% include 'partials/_pedido_desglose_camionero.html' with pedido=pedido %}
         </div>
 
         <!-- Dirección -->
@@ -84,6 +72,26 @@
             </a>
             {% endif %}
         </div>
+
+        <!-- Devolución: acción separada de las principales para evitar toques accidentales -->
+        <div class="mt-4 pt-3 border-top">
+            <p class="text-muted small text-center mb-2">
+                ¿Tomaste este pedido por error? Devuélvelo para que otro camionero pueda tomarlo.
+            </p>
+            <form id="form-devolver-{{ pedido.id }}" method="post" action="{% url 'entregas_devolver' pedido.id %}">
+                {% csrf_token %}
+                <button type="button" class="btn btn-outline-secondary w-100 py-3 fs-6 shadow-sm rounded-3"
+                        data-bs-toggle="modal" data-bs-target="#modalAccionEntrega"
+                        data-form-id="form-devolver-{{ pedido.id }}"
+                        data-title="Devolver Pedido"
+                        data-body="¿Devolver el Pedido #{{ pedido.id }}? Volverá a la lista de pendientes y otro camionero podrá tomarlo."
+                        data-header-class="bg-secondary"
+                        data-btn-class="btn-secondary"
+                        data-btn-text="Sí, devolver pedido">
+                    <i class="bi bi-arrow-counterclockwise me-2"></i> DEVOLVER PEDIDO
+                </button>
+            </form>
+        </div>
     </div>
 </div>
 {% endfor %}
@@ -97,21 +105,9 @@
     <div class="card-body p-4 text-center">
         <!-- Número de pedido -->
         <h4 class="fw-bold mb-4 text-dark">Pedido #{{ pedido.id }}</h4>
-        <!-- Productos -->
+        <!-- Productos y desglose de descuento -->
         <div class="mb-4">
-            <ul class="list-group list-group-flush mb-3">
-                {% for detalle in pedido.detalles.all %}
-                <li class="list-group-item d-flex justify-content-between align-items-center fs-5 py-3">
-                    <span>{{ detalle.cantidad }} X {{ detalle.balon.nombre }}</span>
-                    <span class="badge bg-success fs-5 px-3 py-2">${{ detalle.subtotal|floatformat:0|intcomma }}</span>
-                </li>
-                {% empty %}
-                <li class="list-group-item text-muted py-3">Sin productos</li>
-                {% endfor %}
-            </ul>
-            <div class="fw-bold fs-4 text-success">
-                Total: ${{ pedido.monto_total|floatformat:0|intcomma }}
-            </div>
+            {% include 'partials/_pedido_desglose_camionero.html' with pedido=pedido %}
         </div>
 
         <!-- Dirección -->

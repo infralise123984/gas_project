@@ -1,6 +1,6 @@
 """
 Pruebas de Seguridad - Gas Manager
-Ejecutar: python manage.py test security_tests --keepdb
+Ejecutar: python scripts/security_tests.py
 
 Para pruebas más completas instalar:
     pip install bandit safety django-security-check

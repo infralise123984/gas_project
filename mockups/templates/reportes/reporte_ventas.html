@@ -121,6 +121,14 @@
                             <small class="text-success">
                                 <i class="bi bi-graph-up-arrow me-1"></i>{{ margen_promedio|floatformat:1 }}% margen
                             </small>
+                            {% if total_descuentos %}
+                            <small class="d-block text-danger fw-semibold mt-1">
+                                <i class="bi bi-tag-fill me-1"></i>Descuentos: −${{ total_descuentos|floatformat:0|intcomma }}
+                            </small>
+                            <small class="d-block text-muted">
+                                Ganancia neta: ${{ ganancia_neta|floatformat:0|intcomma }}
+                            </small>
+                            {% endif %}
                         </div>
                         <div class="bg-success bg-opacity-10 rounded-3 p-3">
                             <i class="bi bi-wallet2 text-success fs-3"></i>
@@ -217,6 +225,7 @@
                                     <th class="text-center">Unidades</th>
                                     <th class="text-center">Kilos</th>
                                     <th class="text-end">Monto Vendido</th>
+                                    <th class="text-end">Descuentos</th>
                                     <th class="text-end">Ganancia</th>
                                     <th class="text-center">Margen</th>
                                 </tr>
@@ -233,6 +242,9 @@
                                     </td>
                                     <td class="text-center">{{ item.kilos_vendidos|floatformat:0|intcomma }} kg</td>
                                     <td class="text-end fw-semibold">${{ item.monto_vendido|floatformat:0|intcomma }}</td>
+                                    <td class="text-end {% if item.descuentos %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+                                        {% if item.descuentos %}−${{ item.descuentos|floatformat:0|intcomma }}{% else %}—{% endif %}
+                                    </td>
                                     <td class="text-end text-success">${{ item.ganancia_total|floatformat:0|intcomma }}</td>
                                     <td class="text-center">
                                         {% widthratio item.ganancia_total item.monto_vendido 100 as margen %}
@@ -241,7 +253,7 @@
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted py-4">
+                                    <td colspan="7" class="text-center text-muted py-4">
                                         No hay datos para mostrar
                                     </td>
                                 </tr>

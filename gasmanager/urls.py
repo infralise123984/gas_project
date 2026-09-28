@@ -60,6 +60,7 @@ urlpatterns = [
     path('entregas/<int:pedido_id>/tomar/', views.camionero_tomar_pedido, name='entregas_tomar'),
     path('entregas/<int:pedido_id>/entregado/', views.camionero_marcar_entregado, name='entregas_entregado'),
     path('entregas/<int:pedido_id>/cancelar/', views.camionero_cancelar_entrega, name='entregas_cancelar'),
+    path('entregas/<int:pedido_id>/devolver/', views.camionero_devolver_pedido, name='entregas_devolver'),
     path('entregas/tarreo/', views.tarreo_pedido, name='entregas_tarreo'),
 
     # ────────────────────────────────────────────────
@@ -100,6 +101,7 @@ urlpatterns = [
     # GESTIÓN DE SOBRES Y CIERRE DE CAJA
     # ────────────────────────────────────────────────
     path('sobres/lista/', views.lista_sobres_diarios, name='sobres_lista'),
+    path('sobres/consulta/', views.consulta_sobres_jefe, name='sobres_consulta'),
     path('sobres/editar/', views.editar_sobre_diario, name='sobres_editar'),
     path('sobres/<int:sobre_id>/refrescar/', views.refrescar_sobre_diario, name='sobres_refrescar'),
     path('sobres/historial/', views.historial_sobres, name='sobres_historial'),

@@ -7,6 +7,31 @@
     </span>
 </div>
 
+{% if pedidos_devueltos %}
+<!-- Aviso: pedidos que un camionero devolvió al pool y siguen sin tomar -->
+<div class="alert alert-warning shadow-sm mb-4">
+    <h6 class="fw-bold mb-2">
+        <i class="bi bi-arrow-counterclockwise me-2"></i>
+        {{ pedidos_devueltos|length }} pedido{{ pedidos_devueltos|length|pluralize:"s" }} devuelto{{ pedidos_devueltos|length|pluralize:"s" }} por camioneros
+    </h6>
+    <p class="small mb-2">
+        Los tomaron por accidente y volvieron a la lista de pendientes.
+        Siguen esperando que alguien los tome.
+    </p>
+    <ul class="list-unstyled mb-0 small">
+        {% for devuelto in pedidos_devueltos %}
+        <li>
+            <strong>#{{ devuelto.id }}</strong> —
+            {{ devuelto.direccion_entrega|default:"sin dirección"|truncatechars:45 }}
+            {% if devuelto.devuelto_por %}
+            <em>({{ devuelto.devuelto_por.get_full_name|default:devuelto.devuelto_por.username }})</em>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
 <!-- Mensaje aclaratorio -->
 <div class="alert alert-info mb-4 text-center">
     <i class="bi bi-info-circle me-2"></i>
@@ -29,6 +54,11 @@
                 <div class="d-flex justify-content-between align-items-start mb-3">
                     <div>
                         <h5 class="fw-bold mb-1">Pedido #{{ pedido.id }}</h5>
+                        {% if pedido.devuelto_el %}
+                        <span class="badge bg-warning text-dark mb-1">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Devuelto por camionero
+                        </span>
+                        {% endif %}
                         <small class="text-muted">
                             {{ pedido.fecha|date:"d/m/Y H:i" }} • 
                             <strong>{{ pedido.get_origen_display }}</strong>
@@ -47,8 +77,13 @@
                         <li>
                             {{ detalle.cantidad }} × {{ detalle.balon.nombre }}
                             <span class="text-success fw-semibold ms-2">
-                                ${{ detalle.subtotal|floatformat:0|intcomma }}
+                                ${{ detalle.subtotal_neto|floatformat:0|intcomma }}
                             </span>
+                            {% if detalle.descuento_unitario %}
+                            <small class="text-danger fw-semibold ms-1">
+                                (−${{ detalle.descuento_unitario|floatformat:0|intcomma }} por balón)
+                            </small>
+                            {% endif %}
                         </li>
                         {% empty %}
                         <li class="text-muted">— Sin productos registrados —</li>
@@ -69,6 +104,11 @@
                         {% endif %}
                     </div>
                     <div class="text-end">
+                        {% if pedido.tiene_descuento %}
+                        <small class="d-block text-danger fw-semibold">
+                            Descuento aplicado: −${{ pedido.descuento_total|floatformat:0|intcomma }}
+                        </small>
+                        {% endif %}
                         <h5 class="fw-bold mb-0 {% if pedido.estado == 'cancelado' %}text-secondary text-decoration-line-through{% else %}text-success{% endif %}">
                             Total: ${{ pedido.monto_total|floatformat:0|intcomma }}
                         </h5>
