@@ -114,6 +114,11 @@ urlpatterns = [
     path('sobres/<int:sobre_id>/crear-nuevo/', views.crear_sobre_post_cierre, name='crear_sobre_post_cierre'),
 
     # ────────────────────────────────────────────────
+    # NOTIFICACIONES IN-APP (avisos efimeros)
+    # ────────────────────────────────────────────────
+    path('notificaciones/api/', views.notificaciones_telefonista_api, name='notificaciones_api'),
+
+    # ────────────────────────────────────────────────
     # PUSH NOTIFICATIONS (Web Push API)
     # ────────────────────────────────────────────────
     path('push/subscribe/', views.push_subscribe, name='push_subscribe'),

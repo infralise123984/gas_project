@@ -162,15 +162,231 @@
             font-size: 0.85rem;
             color: #6c757d;
         }
+
+        /* Aviso in-app con aspecto de notificacion push del telefono */
+        #push-banner-container {
+            position: fixed;
+            /* Debajo de la navbar fija (56px) para que no se corte ni tape los controles. */
+            top: calc(64px + env(safe-area-inset-top, 0px));
+            left: 0;
+            right: 0;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 0 12px;
+            pointer-events: none;
+        }
+
+        .push-banner {
+            pointer-events: auto;
+            width: 100%;
+            max-width: 420px;
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            padding: 10px 12px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+            cursor: pointer;
+            opacity: 0;
+            transform: translateY(-140%);
+            transition: transform .35s cubic-bezier(.2, .8, .2, 1), opacity .35s ease;
+        }
+
+        .push-banner--in {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Color por tipo de evento (lectura rapida de un vistazo) */
+        .push-banner--tomado {
+            border-left: 5px solid #0d6efd;
+            background: rgba(240, 246, 255, 0.99);
+        }
+
+        .push-banner--entregado {
+            border-left: 5px solid #198754;
+            background: rgba(241, 251, 245, 0.99);
+        }
+
+        .push-banner--cancelado {
+            border-left: 5px solid #dc3545;
+            background: rgba(255, 245, 245, 0.99);
+        }
+
+        .push-banner--devuelto {
+            border-left: 5px solid #ffc107;
+            background: rgba(255, 249, 236, 0.99);
+        }
+
+        .push-banner--tomado .push-banner-icon {
+            background: #0d6efd;
+        }
+
+        .push-banner--entregado .push-banner-icon {
+            background: #198754;
+        }
+
+        .push-banner--cancelado .push-banner-icon {
+            background: #dc3545;
+        }
+
+        .push-banner--devuelto .push-banner-icon {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .push-banner-icon {
+            flex: 0 0 auto;
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background: #0d6efd;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .push-banner-content {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .push-banner-app {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: .7rem;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #6c757d;
+            white-space: nowrap;
+        }
+
+        .push-banner-title {
+            font-size: .95rem;
+            font-weight: 700;
+            color: #212529;
+            line-height: 1.2;
+            margin-top: 1px;
+        }
+
+        .push-banner-body {
+            font-size: .85rem;
+            color: #495057;
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+        }
+
+        .push-banner-close {
+            flex: 0 0 auto;
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: #868e96;
+            font-size: 1.35rem;
+            line-height: 1;
+            margin: -4px -6px 0 0;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        .push-banner-close:active {
+            background: #f1f3f5;
+        }
+
+        /* En movil el panel de la campana se centra y baja debajo de la navbar,
+           para que no se corte en pantallas angostas. */
+        @media (max-width: 991.98px) {
+            #notifLista {
+                position: fixed !important;
+                top: calc(60px + env(safe-area-inset-top, 0px)) !important;
+                left: 12px !important;
+                right: 12px !important;
+                width: auto !important;
+                min-width: 0 !important;
+                max-width: none !important;
+                margin: 0 !important;
+                transform: none !important;
+            }
+        }
+
+        /* Animaciones sutiles de los menus (respeta prefers-reduced-motion). */
+        @media (prefers-reduced-motion: no-preference) {
+            /* Desplegables: aparicion suave. Solo se anima opacity porque Popper usa
+               transform para posicionar el menu (animar transform lo romperia). */
+            .dropdown-menu.show {
+                animation: menu-fade-in .16s ease-out;
+            }
+
+            @keyframes menu-fade-in {
+                from { opacity: 0; }
+                to   { opacity: 1; }
+            }
+
+            /* Colapso del menu movil un poco mas fluido. */
+            .collapsing {
+                transition: height .32s cubic-bezier(.2, .8, .2, 1) !important;
+            }
+
+            /* Enlaces de la barra: transicion suave al pasar el cursor. */
+            .navbar-nav .nav-link {
+                transition: opacity .15s ease;
+            }
+
+            .navbar-nav .nav-link:hover,
+            .navbar-nav .nav-link:focus {
+                opacity: .88;
+            }
+
+            /* Items de los menus: leve desplazamiento sutil. */
+            .dropdown-item {
+                transition: background-color .12s ease, transform .12s ease;
+            }
+
+            .dropdown-item:hover,
+            .dropdown-item:focus {
+                transform: translateX(2px);
+            }
+        }
     </style>
 
     {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-white">
 
+    <div id="push-banner-container" aria-live="polite"></div>
+
     <nav class="navbar navbar-expand-lg bg-primary navbar-dark fixed-top shadow-sm">
         <div class="container-fluid px-2 px-md-3">
             <a class="navbar-brand fw-bold" href="{% url 'index' %}">Kim Gas</a>
+
+            {% if user.is_authenticated and user.rol == "telefonista" %}
+            {# Campana SIEMPRE visible: en movil junto al hamburger, en escritorio al extremo derecho. #}
+            <div class="nav-item dropdown ms-auto me-1 order-lg-3">
+                <a class="nav-link position-relative" href="#" id="notifBell" role="button"
+                    data-bs-toggle="dropdown" aria-expanded="false" title="Avisos de tus pedidos">
+                    <i class="bi bi-bell-fill fs-5"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger"
+                        id="notifBadge" style="display:none; top:2px; right:2px;">0</span>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end shadow mt-2" id="notifLista"
+                    style="max-height: 70vh; overflow-y:auto;">
+                    <li class="dropdown-header text-uppercase small fw-bold">Avisos de tus pedidos</li>
+                    <li id="notifVacio"><div class="text-center text-muted small py-3">Sin avisos nuevos</div></li>
+                </ul>
+            </div>
+            {% endif %}
+
             <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain"
                 aria-controls="navbarMain" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
@@ -542,6 +758,207 @@ document.addEventListener('click', function(e) {
     }
     </script>
     <script src="{% static 'js/push-notifications.js' %}" defer></script>
+    {% endif %}
+    {% if user.is_authenticated and user.rol == "telefonista" %}
+    <script>
+    (function () {
+        const bell = document.getElementById('notifBell');
+        if (!bell) return;
+
+        const badge = document.getElementById('notifBadge');
+        const lista = document.getElementById('notifLista');
+        const vacio = document.getElementById('notifVacio');
+        const storageKey = 'notif_last_seen_{{ user.id }}';
+        const bannerKey = storageKey + '_banner';
+        const apiUrl = "{% url 'notificaciones_api' %}";
+        const INTERVALO_MS = 15000;
+        const VENTANA_INICIAL_MS = 15 * 60 * 1000;  // historial visible al primer load
+        // Icono + color por tipo de evento (para leerlo de un vistazo).
+        const TIPO_ESTILO = {
+            tomado:    { icono: 'bi-hand-thumbs-up-fill',    color: 'primary' },
+            entregado: { icono: 'bi-check-circle-fill',      color: 'success' },
+            cancelado: { icono: 'bi-x-circle-fill',          color: 'danger' },
+            devuelto:  { icono: 'bi-arrow-counterclockwise', color: 'warning' },
+        };
+        let ultimaVista = localStorage.getItem(storageKey);   // ISO (hora del SERVIDOR) - badge
+        let bannerVisto = localStorage.getItem(bannerKey);    // ISO - ultimo pop-up ya mostrado
+        let itemsActuales = [];
+
+        function formatoHora(iso) {
+            return new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function mostrarPushBanner(item) {
+            const cont = document.getElementById('push-banner-container');
+            if (!cont) return;
+
+            const banner = document.createElement('div');
+            banner.className = 'push-banner push-banner--' + item.tipo;
+
+            const icono = document.createElement('span');
+            icono.className = 'push-banner-icon';
+            const iconoI = document.createElement('i');
+            iconoI.className = 'bi bi-fire';
+            icono.appendChild(iconoI);
+
+            const contenido = document.createElement('div');
+            contenido.className = 'push-banner-content';
+            const app = document.createElement('div');
+            app.className = 'push-banner-app';
+            const appNombre = document.createElement('span');
+            appNombre.textContent = 'Kim Gas';
+            const appHora = document.createElement('span');
+            appHora.textContent = 'ahora';
+            app.appendChild(appNombre);
+            app.appendChild(appHora);
+            const titulo = document.createElement('div');
+            titulo.className = 'push-banner-title';
+            titulo.textContent = 'Pedido #' + item.pedido_id;
+            const cuerpo = document.createElement('div');
+            cuerpo.className = 'push-banner-body';
+            cuerpo.textContent = item.mensaje;
+            contenido.appendChild(app);
+            contenido.appendChild(titulo);
+            contenido.appendChild(cuerpo);
+
+            const cerrar = document.createElement('button');
+            cerrar.type = 'button';
+            cerrar.className = 'push-banner-close';
+            cerrar.setAttribute('aria-label', 'Cerrar aviso');
+            cerrar.textContent = '\u00d7';
+
+            banner.appendChild(icono);
+            banner.appendChild(contenido);
+            banner.appendChild(cerrar);
+            cont.appendChild(banner);
+
+            let cerrado = false;
+            function cerrarBanner() {
+                if (cerrado) return;
+                cerrado = true;
+                banner.classList.remove('push-banner--in');
+                setTimeout(function () { banner.remove(); }, 350);
+            }
+
+            cerrar.addEventListener('click', function (ev) { ev.stopPropagation(); cerrarBanner(); });
+            banner.addEventListener('click', function (ev) {
+                // La X (o cualquier boton) nunca navega: solo el cuerpo del aviso abre el pedido.
+                if (ev.target.closest('.push-banner-close')) return;
+                window.location.href = item.url;
+            });
+
+            // Deslizar hacia arriba para descartar (sensacion de notificacion del telefono).
+            let y0 = null;
+            banner.addEventListener('pointerdown', function (ev) { y0 = ev.clientY; });
+            banner.addEventListener('pointerup', function (ev) {
+                if (y0 !== null && (y0 - ev.clientY) > 40) cerrarBanner();
+                y0 = null;
+            });
+
+            requestAnimationFrame(function () { banner.classList.add('push-banner--in'); });
+            setTimeout(cerrarBanner, 6000);
+        }
+
+        function pintar(items) {
+            itemsActuales = items;
+            lista.querySelectorAll('.notif-item').forEach(function (el) { el.remove(); });
+
+            if (!items.length) {
+                if (vacio) vacio.style.display = '';
+                badge.style.display = 'none';
+                return;
+            }
+            if (vacio) vacio.style.display = 'none';
+            badge.textContent = items.length > 9 ? '9+' : String(items.length);
+            badge.style.display = '';
+
+            items.forEach(function (item) {
+                const li = document.createElement('li');
+                li.className = 'notif-item';
+                const a = document.createElement('a');
+                a.className = 'dropdown-item d-flex gap-2 py-2';
+                a.href = item.url;
+
+                const estilo = TIPO_ESTILO[item.tipo] || TIPO_ESTILO.tomado;
+                const icono = document.createElement('i');
+                icono.className = 'bi ' + estilo.icono + ' text-' + estilo.color + ' mt-1';
+
+                const cont = document.createElement('span');
+                const msg = document.createElement('span');
+                msg.className = 'd-block small';
+                msg.textContent = item.mensaje;
+                const meta = document.createElement('span');
+                meta.className = 'd-block text-muted';
+                meta.style.fontSize = '.75rem';
+                meta.textContent = 'Pedido #' + item.pedido_id + ' · ' + formatoHora(item.fecha);
+                cont.appendChild(msg);
+                cont.appendChild(meta);
+
+                a.appendChild(icono);
+                a.appendChild(cont);
+                li.appendChild(a);
+                lista.appendChild(li);
+            });
+
+            // Pop-up tipo push SOLO para avisos aun no notificados en este dispositivo
+            // (persistido en localStorage), para que al recargar no se repitan. Cap de 3.
+            const umbral = bannerVisto ? new Date(bannerVisto).getTime() : 0;
+            items
+                .filter(function (item) { return new Date(item.fecha).getTime() > umbral; })
+                .slice(0, 3)
+                .forEach(function (item) { mostrarPushBanner(item); });
+
+            if (items.length) {
+                bannerVisto = items[0].fecha;  // items viene del mas reciente al mas antiguo
+                localStorage.setItem(bannerKey, bannerVisto);
+            }
+        }
+
+        function pedir(desde) {
+            const url = desde ? (apiUrl + '?desde=' + encodeURIComponent(desde)) : apiUrl;
+            return fetch(url, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            }).then(function (r) { return r.ok ? r.json() : null; });
+        }
+
+        function consultar() {
+            pedir(ultimaVista).then(function (data) {
+                if (data) pintar(data.items || []);
+            }).catch(function () { /* silencioso: reintenta en el proximo ciclo */ });
+        }
+
+        function arrancar() {
+            if (ultimaVista) { consultar(); return; }
+            // Primer load: la marca de agua sale de la hora del SERVIDOR menos 15 min,
+            // asi no depende del reloj del navegador ni se pierden eventos recientes.
+            pedir(null).then(function (data) {
+                const base = (data && data.server_time)
+                    ? new Date(data.server_time).getTime() - VENTANA_INICIAL_MS
+                    : Date.now() - VENTANA_INICIAL_MS;
+                ultimaVista = new Date(base).toISOString();
+                localStorage.setItem(storageKey, ultimaVista);
+                consultar();
+            }).catch(function () {
+                ultimaVista = new Date(Date.now() - VENTANA_INICIAL_MS).toISOString();
+                localStorage.setItem(storageKey, ultimaVista);
+                consultar();
+            });
+        }
+
+        bell.addEventListener('shown.bs.dropdown', function () {
+            // Al abrir la campana se da por visto: avanza la marca al aviso mas nuevo.
+            if (itemsActuales.length) {
+                ultimaVista = itemsActuales[0].fecha;
+                localStorage.setItem(storageKey, ultimaVista);
+            }
+            badge.style.display = 'none';
+        });
+
+        arrancar();
+        setInterval(consultar, INTERVALO_MS);
+    })();
+    </script>
     {% endif %}
     {% block extra_js %}{% endblock %}
 </body>
