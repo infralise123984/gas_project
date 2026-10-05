@@ -530,6 +530,59 @@ DetalleFormSetEdit = inlineformset_factory(
 )
 
 
+class AdminDescuentoLineaForm(forms.ModelForm):
+    """Corrección administrativa: edita SOLO el descuento por balón de una línea.
+
+    A diferencia de `DetallePedidoForm`, no expone balón ni cantidad: la corrección
+    apunta únicamente a la rebaja olvidada. El tope (50%) se valida contra el precio
+    de venta YA registrado en la línea (`precio_venta_unitario`), no contra el precio
+    vigente del balón: la venta es un snapshot y la corrección no debe depender de
+    cambios de precio posteriores.
+    """
+
+    class Meta:
+        model = DetallePedido
+        fields = ['descuento_unitario']
+        widgets = {
+            'descuento_unitario': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': 0,
+                'step': 1,
+                'placeholder': '0',
+                'inputmode': 'numeric',
+            }),
+        }
+
+    def clean_descuento_unitario(self):
+        descuento = self.cleaned_data.get('descuento_unitario') or Decimal(0)
+        precio_base = self.instance.precio_venta_unitario
+
+        if descuento and precio_base:
+            tope = (Decimal(precio_base) * TOPE_DESCUENTO_UNITARIO).to_integral_value(
+                rounding=ROUND_FLOOR
+            )
+            if Decimal(descuento) > tope:
+                self.add_error(
+                    'descuento_unitario',
+                    (
+                        f"El descuento por balón no puede superar el 50% de su precio "
+                        f"({self.instance.balon.nombre}). Máximo por balón: ${int(tope):,}."
+                    ).replace(',', '.'),
+                )
+        return descuento
+
+
+AdminDescuentoFormSet = inlineformset_factory(
+    Pedido,
+    DetallePedido,
+    form=AdminDescuentoLineaForm,
+    extra=0,          # Las líneas existen: solo se corrige su descuento
+    can_delete=False,  # Esta corrección no agrega ni quita balones
+    min_num=0,
+    validate_min=False,
+)
+
+
 class LineaPagoForm(forms.ModelForm):
     class Meta:
         model = LineaPago
