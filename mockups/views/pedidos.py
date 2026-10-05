@@ -17,6 +17,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
 from mockups.forms import (
+    AdminDescuentoFormSet,
     DetalleFormSet,
     DetalleFormSetEdit,
     PedidoCabeceraForm,
@@ -707,6 +708,147 @@ def admin_anular_pedido(request, pedido_id):
         )
 
     return redirect("pedidos_detalle", pedido_id=pedido.id)
+
+# ══════════════════════════════════════════════════════════════
+# 6d. CORRECCIÓN ADMINISTRATIVA: DESCUENTO POR BALÓN
+# ══════════════════════════════════════════════════════════════
+
+def _snapshot_descuentos(pedido):
+    """Mapa {detalle_id: {'balon', 'descuento'}} para comparar antes/después."""
+    return {
+        detalle.id: {
+            'balon': detalle.balon.nombre,
+            'descuento': int(detalle.descuento_unitario or 0),
+        }
+        for detalle in pedido.detalles.select_related('balon')
+    }
+
+
+def _cambios_de_descuento(anteriores, nuevos):
+    """Descripciones legibles de las líneas cuyo descuento por balón cambió."""
+    cambios = []
+    for detalle_id, actual in nuevos.items():
+        descuento_anterior = anteriores.get(detalle_id, {}).get('descuento', 0)
+        if actual['descuento'] != descuento_anterior:
+            cambios.append(
+                (
+                    f"{actual['balon']}: ${descuento_anterior:,} → ${actual['descuento']:,}"
+                ).replace(',', '.')
+            )
+    return cambios
+
+
+# Admin: corregir el descuento por balón de un pedido en cualquier estado
+@login_required
+def admin_editar_descuento_pedido(request, pedido_id):
+    """Aplica o corrige el descuento por balón de un pedido. Solo admin, cualquier estado.
+
+    Caso de uso real: un telefonista olvidó aplicar un descuento y el pedido ya salió
+    del flujo de edición normal (entregado) o de su dueño. `editar_pedido` bloquea los
+    estados 'entregado'/'cancelado' y congela el descuento de un pedido ya rebajado a
+    jefe/admin; esta corrección administrativa cubre ese hueco sin ampliar el camino de
+    edición general.
+
+    Alcance acotado (SRP): solo `descuento_unitario` por línea. No cambia balones,
+    cantidades, precios ni cabecera.
+
+    - Recalcula monto_total / ganancia_total / descuento_total.
+    - Registra el cambio en HistorialCambioPedido y AuditoriaAccion.
+    - Refresca los sobres ABIERTOS del día del pedido; los cerrados no se reabren
+      (se advierte al admin).
+    """
+    resp = require_roles(
+        request, ["admin"], "index", "Solo un administrador puede modificar el descuento de un pedido."
+    )
+    if resp:
+        return resp
+
+    # Sin prefetch de detalles: `calcular_totales()` debe leer las líneas recién
+    # guardadas desde la BD, no una caché previa a la corrección.
+    pedido = get_object_or_404(
+        Pedido.objects.select_related('registrador', 'entregador'),
+        id=pedido_id,
+    )
+
+    if request.method == 'POST':
+        formset = AdminDescuentoFormSet(request.POST, instance=pedido)
+
+        if formset.is_valid():
+            anteriores = _snapshot_descuentos(pedido)
+
+            with transaction.atomic():
+                formset.save()
+                pedido.calcular_totales()
+                pedido.refresh_from_db()
+
+                nuevos = _snapshot_descuentos(pedido)
+                cambios = _cambios_de_descuento(anteriores, nuevos)
+
+                if cambios:
+                    descuento_total = int(pedido.descuento_total or 0)
+                    HistorialCambioPedido.objects.create(
+                        pedido=pedido,
+                        usuario=request.user,
+                        descripcion="Descuento corregido por admin: " + "; ".join(cambios),
+                    )
+                    AuditoriaAccion.registrar(
+                        request=request,
+                        tipo='PEDIDO_DESCUENTO',
+                        descripcion=(
+                            f'Descuento del Pedido #{pedido.id} corregido por admin '
+                            f'{request.user.username}: ' + "; ".join(cambios)
+                        ),
+                        objeto=pedido,
+                        datos_anteriores={
+                            'descuento_total': sum(d['descuento'] for d in anteriores.values()),
+                        },
+                        datos_nuevos={'descuento_total': descuento_total},
+                    )
+
+            if not cambios:
+                messages.info(request, f"El pedido #{pedido.id} no tenía cambios de descuento.")
+                return redirect('pedidos_detalle', pedido_id=pedido.id)
+
+            audit_logger.info(
+                f"PEDIDO_DESCUENTO | #{pedido.id} | Admin: {request.user.username} | "
+                + "; ".join(cambios).replace('\u2192', '->')
+            )
+
+            fecha_local = timezone.localtime(pedido.fecha, TZ_CHILE).date()
+            sincronizados = resincronizar_sobres_afectados_por_pedido(pedido, fecha_local)
+
+            if sincronizados:
+                ids_sobres = ', '.join(f'#{sobre.id}' for sobre in sincronizados)
+                messages.success(
+                    request,
+                    f"Descuento del pedido #{pedido.id} actualizado. Sobres actualizados: {ids_sobres}.",
+                )
+            else:
+                messages.success(request, f"Descuento del pedido #{pedido.id} actualizado correctamente.")
+
+            if hay_sobre_cerrado_para_pedido(pedido, fecha_local):
+                messages.warning(
+                    request,
+                    "El sobre de esa fecha ya estaba CERRADO y no se reabre: su monto no "
+                    "refleja el descuento aplicado.",
+                )
+
+            return redirect('pedidos_detalle', pedido_id=pedido.id)
+
+        messages.error(request, "Por favor corrige los errores del descuento.")
+    else:
+        formset = AdminDescuentoFormSet(instance=pedido)
+
+    lineas = [
+        {'form': form, 'detalle': form.instance}
+        for form in formset.forms
+    ]
+
+    return render(request, 'pedidos/admin_descuento_pedido.html', {
+        'pedido': pedido,
+        'formset': formset,
+        'lineas': lineas,
+    })
 
 # ──────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════
