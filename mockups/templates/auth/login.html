@@ -1,38 +1,119 @@
-<!-- templates/login.html -->
 {% extends 'base.html' %}
 
-{% block title %}Iniciar Sesión - GasFácil{% endblock %}
+{% block title %}Iniciar Sesión - Kim Gas{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Centra la tarjeta en el alto disponible sin forzar scroll (base tiene navbar fija). */
+    .login-shell {
+        min-height: calc(100vh - 160px);
+        display: flex;
+        padding: 1rem 0;
+    }
+
+    /* margin:auto centra la tarjeta y evita el recorte superior cuando el alto no alcanza. */
+    .login-card {
+        width: 100%;
+        max-width: 420px;
+        margin: auto;
+        border-radius: 1.25rem;
+    }
+
+    .login-logo {
+        width: 64px;
+        height: 64px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+    }
+
+    .login-card .input-group-text {
+        background-color: #fff;
+        color: #6c757d;
+    }
+
+    /* Un solo anillo de foco para todo el grupo (input + ícono + botón). */
+    .login-card .form-control:focus,
+    .login-card .btn:focus {
+        box-shadow: none;
+    }
+
+    .login-card .input-group:focus-within {
+        border-radius: 0.375rem;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-center justify-content-center min-vh-100">
-    <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white text-center py-3">
-                <h4 class="mb-0">Iniciar sesión</h4>
+<div class="login-shell">
+    <div class="login-card card border-0 shadow-sm">
+        <div class="card-body p-4 p-md-5">
+            <div class="text-center mb-4">
+                <span class="login-logo bg-primary bg-opacity-10 text-primary mb-3">
+                    <i class="bi bi-fire fs-2"></i>
+                </span>
+                <h1 class="h4 fw-bold mb-1">Iniciar sesión</h1>
+                <p class="text-muted small mb-0">Ingresa tus credenciales para continuar</p>
             </div>
-            <div class="card-body p-4">
-                <form method="post">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="username" class="form-label">Usuario</label>
+
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% if request.GET.next %}
+                <input type="hidden" name="next" value="{{ request.GET.next }}">
+                {% endif %}
+
+                <div class="mb-3">
+                    <label for="username" class="form-label small fw-semibold">Usuario</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-person"></i></span>
                         <input type="text" class="form-control" id="username" name="username"
                             placeholder="Nombre de usuario" required autofocus autocapitalize="none"
-                            autocorrect="off" spellcheck="false">
+                            autocomplete="username" autocorrect="off" spellcheck="false">
                     </div>
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Contraseña</label>
+                </div>
+
+                <div class="mb-4">
+                    <label for="password" class="form-label small fw-semibold">Contraseña</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-lock"></i></span>
                         <input type="password" class="form-control" id="password" name="password"
-                            placeholder="Contraseña" required>
+                            placeholder="Contraseña" required autocomplete="current-password">
+                        <button class="btn btn-outline-secondary" type="button" id="togglePassword"
+                            aria-label="Mostrar contraseña" aria-pressed="false">
+                            <i class="bi bi-eye" id="togglePasswordIcon"></i>
+                        </button>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100 py-2">
-                        Ingresar
-                    </button>
-                </form>
-            </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+                    <i class="bi bi-box-arrow-in-right me-2"></i>Ingresar
+                </button>
+            </form>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
 <script>
+(function () {
+    const password = document.getElementById('password');
+    const toggle = document.getElementById('togglePassword');
+    const icon = document.getElementById('togglePasswordIcon');
+    if (!password || !toggle || !icon) return;
+
+    toggle.addEventListener('click', function () {
+        const mostrar = password.type === 'password';
+        password.type = mostrar ? 'text' : 'password';
+        toggle.setAttribute('aria-pressed', String(mostrar));
+        toggle.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
+        icon.className = mostrar ? 'bi bi-eye-slash' : 'bi bi-eye';
+        password.focus();
+    });
+})();
+
 window.addEventListener('pageshow', function (event) {
     if (event.persisted) {
         window.location.reload();
