@@ -15,7 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
 from mockups import views
 
 urlpatterns = [
@@ -128,4 +128,10 @@ urlpatterns = [
     
     # Service Worker debe servirse desde la raíz para tener scope completo
     path('sw.js', views.service_worker, name='service_worker'),
+
+    # ────────────────────────────────────────────────
+    # API JSON para la app móvil del camionero
+    # Contrato: docs/API_MOVIL.md
+    # ────────────────────────────────────────────────
+    path('api/v1/', include('mockups.api.urls')),
 ]
