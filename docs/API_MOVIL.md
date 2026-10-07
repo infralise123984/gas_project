@@ -487,7 +487,7 @@ Detalles que la web no necesita y la API sí fija:
 | Endpoint | Referencia | Devuelve |
 |---|---|---|
 | `GET /resumen-hoy/` | `mis_entregas_camionero` | **Implementado (F6)**. `{"hoy", "entregas", "monto", "kilos", "pedidos": [Pedido]}`. Los totales salen de los **entregados**; `pedidos` es toda la actividad del día, cancelados incluidos |
-| `GET /balones/` | `get_balones_activos_ordenados()` | `[{"id", "nombre", "peso_neto_gas", "precio_domicilio"}]`. **Implementado (F4)**. Solo activos, y **sin** `precio_compra`: con el costo se reconstruye el margen |
+| `GET /balones/` | `get_balones_activos_ordenados()` | `[{"id", "nombre", "peso_neto_gas", "precio_domicilio", "tipo_gas"}]`. **Implementado (F4)**. Solo activos, y **sin** `precio_compra`: con el costo se reconstruye el margen. `tipo_gas` se agregó en F4-revisión porque el tarreo de la web pinta con él la etiqueta CATALÍTICO/ALUMINIO |
 | `GET /historial/?mes=YYYY-MM` | `camionero_historial` | **Implementado (F6)**. `{"mes", "mes_nombre", "mes_anterior", "mes_siguiente", "mes_siguiente_habilitado", "dias_con_venta", "totales": {entregas, monto, kilos}, "dias": [...]}`. Un elemento por día del mes en orden descendente, con `es_hoy`, `tiene_venta`, `kilos_domicilio` y `kilos_tarreo` |
 | `GET /historial/<fecha>/` | `camionero_historial_dia` | **Implementado (F6)**. `{"fecha", "mes", "mes_nombre", "es_hoy", "entregas", "monto", "kilos", "kilos_domicilio", "kilos_tarreo", "pedidos": [Pedido]}`. Solo **entregados**: un cancelado del día no es una venta |
 | `GET /auth/csrf/` | — | `{"csrf_token": "..."}` (además siembra la cookie `csrftoken`). **Sin sesión** |
