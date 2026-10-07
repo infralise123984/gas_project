@@ -27,6 +27,10 @@ CONTENT_TYPES_ACEPTADOS = (
     'application/x-www-form-urlencoded',
 )
 
+# Único rol que atiende este API hoy (docs/API_MOVIL.md §3.2). Vive acá —y no en
+# cada módulo— para que los endpoints que se agreguen no repitan la lista.
+ROLES_CAMIONERO = ('camionero',)
+
 
 def acceso_api(roles=None):
     """Exige sesión y, opcionalmente, rol.

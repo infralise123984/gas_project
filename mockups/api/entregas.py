@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 
 from mockups.api import respuestas
-from mockups.api.acceso import acceso_api, solo_post
+from mockups.api.acceso import ROLES_CAMIONERO, acceso_api, solo_post
 from mockups.api.limites import limitar
 from mockups.api.serializadores import serializar_pedido
 from mockups.models import (
@@ -27,8 +27,6 @@ from mockups.utils.permisos import get_client_ip
 
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
-
-ROLES_CAMIONERO = ['camionero']
 
 # Se aplica después de acceso_api: el límite siempre cuenta a un usuario real.
 LIMITE_ENTREGAS = {'peticiones': 60, 'ventana_segundos': 60}
