@@ -64,7 +64,8 @@ mockups/
     ├── entregas.py           ← listado [F1 ✔] y las 4 acciones [F2]
     ├── idempotencia.py       ← decorador + modelo de la §6.2                 [pendiente]
     ├── tarreo.py             ← venta tarreo                                  [F4 ✔]
-    └── catalogos.py          ← versión [F1 ✔] y balones [F4 ✔], resumen, historial
+    ├── historial.py          ← resumen del día, del mes y detalle de un día  [F6 ✔]
+    └── catalogos.py          ← versión [F1 ✔] y balones [F4 ✔]
 ```
 
 Se registra en `gasmanager/urls.py` con **una sola línea**, al final:
@@ -126,20 +127,19 @@ POST   /api/v1/entregas/<id>/entregar/   ← F2
 POST   /api/v1/entregas/<id>/cancelar/   ← F2
 POST   /api/v1/entregas/<id>/devolver/   ← F2
 
-GET    /api/v1/resumen-hoy/                             ← F6
+GET    /api/v1/resumen-hoy/                             ← F6 ✔
 POST   /api/v1/tarreo/                                  ← F4
 GET    /api/v1/balones/                                 ← F4
-GET    /api/v1/historial/?mes=YYYY-MM                   ← F6
-GET    /api/v1/historial/<YYYY-MM-DD>/                  ← F6
+GET    /api/v1/historial/?mes=YYYY-MM                   ← F6 ✔
+GET    /api/v1/historial/<YYYY-MM-DD>/                  ← F6 ✔
 GET    /api/v1/version/                                 ← F1
 ```
 
 Fases: **F1** = `auth/*`, `entregas/` (GET) y `version/`. **F2** = las cuatro acciones.
 **F4** = `tarreo/`, `balones/`. **F6** = `resumen-hoy/`, `historial/*`.
 
-**Estado: F1, F2 y F4 implementados y probados** (`mockups/api/`, suite en `mockups/tests_api_movil.py`).
-Lo que sigue es F6 (`resumen-hoy/`, `historial/`) y la idempotencia con `Idempotency-Key` (§8), que es
-aditiva pero necesita una migración.
+**Estado: F1, F2, F4 y F6 implementados y probados** (`mockups/api/`, suite en `mockups/tests_api_movil.py`).
+Queda la idempotencia con `Idempotency-Key` (§8): es aditiva, pero necesita una migración.
 
 ---
 
@@ -296,7 +296,8 @@ class OperacionIdempotente(models.Model):
 - Límites: `entregas` 60/min, `perfil` 30/min, `version` 10/min, y las cuatro acciones 30/min
   (clave `acciones_entregas`, F2: mueven estado y dinero, así que van más estrechas que el listado).
   En F4 se agregan `balones` 60/min (lectura, igual que el listado) y `tarreo` 30/min (crea dinero, igual
-  que las acciones).
+  que las acciones). En F6, `resumen_hoy` 60/min (lectura) e `historial` 20/min: recorre el mes día por día
+  y es la consulta más cara del API.
   El login **no** lleva límite propio: ya lo cubre `django-axes`.
 
 **Alcance honesto:** esto frena bucles de cliente y martilleo de un usuario. **No** es protección DDoS —
@@ -485,13 +486,22 @@ Detalles que la web no necesita y la API sí fija:
 
 | Endpoint | Referencia | Devuelve |
 |---|---|---|
-| `GET /resumen-hoy/` | `mis_entregas_camionero` | `{"entregas": 2, "monto": 86500, "kilos": 43, "pedidos": [Pedido]}` |
+| `GET /resumen-hoy/` | `mis_entregas_camionero` | **Implementado (F6)**. `{"hoy", "entregas", "monto", "kilos", "pedidos": [Pedido]}`. Los totales salen de los **entregados**; `pedidos` es toda la actividad del día, cancelados incluidos |
 | `GET /balones/` | `get_balones_activos_ordenados()` | `[{"id", "nombre", "peso_neto_gas", "precio_domicilio"}]`. **Implementado (F4)**. Solo activos, y **sin** `precio_compra`: con el costo se reconstruye el margen |
-| `GET /historial/?mes=YYYY-MM` | `camionero_historial` | totales del mes + filas por día (kilos, monto, entregas) |
-| `GET /historial/<fecha>/` | `camionero_historial_dia` | detalle de un día |
+| `GET /historial/?mes=YYYY-MM` | `camionero_historial` | **Implementado (F6)**. `{"mes", "mes_nombre", "mes_anterior", "mes_siguiente", "mes_siguiente_habilitado", "dias_con_venta", "totales": {entregas, monto, kilos}, "dias": [...]}`. Un elemento por día del mes en orden descendente, con `es_hoy`, `tiene_venta`, `kilos_domicilio` y `kilos_tarreo` |
+| `GET /historial/<fecha>/` | `camionero_historial_dia` | **Implementado (F6)**. `{"fecha", "mes", "mes_nombre", "es_hoy", "entregas", "monto", "kilos", "kilos_domicilio", "kilos_tarreo", "pedidos": [Pedido]}`. Solo **entregados**: un cancelado del día no es una venta |
 | `GET /auth/csrf/` | — | `{"csrf_token": "..."}` (además siembra la cookie `csrftoken`). **Sin sesión** |
 | `GET /auth/perfil/` | `perfil_view` | `{"usuario": Usuario, "csrf_token": "..."}` |
 | `GET /version/` | — | `{"version_minima": "0.1.0", "url_apk": null}` |
+
+**Validación de parámetros (F6).** Sin `?mes=` se devuelve el mes actual, como la web. Con un `?mes=`
+mal formado —o una `<fecha>` que no parsea— la respuesta es `400 validacion`: la web cae al mes actual o
+redirige en silencio, pero en la app eso le mostraría al camionero un mes o un día que no pidió, sin forma
+de notarlo.
+
+**`resumen-hoy/` todavía no lo consume la app**: `/entregas/` ya trae esos datos y el inicio de la web solo
+muestra las tarjetas sin números. Queda implementado y probado en el contrato, para el refresco liviano del
+inicio cuando haga falta.
 
 Objeto `Usuario` (identidad, sin secretos):
 `{"id", "username", "nombre", "rol", "rol_etiqueta", "totp_activo"}`. Nunca incluye `password`,
@@ -514,7 +524,7 @@ tolerar `null` hasta que se defina el hosting (release de GitHub, S3 u otro) —
 - `django.test.TestCase` + `self.client` (ver `mockups/tests_logica_negocio.py` como referencia).
 - **`Client(enforce_csrf_checks=True)`** es obligatorio para probar CSRF: el cliente de tests lo omite por
   defecto. Y `secure=True` para ejercitar la rama HTTPS de Django.
-- Estado: **67 tests en `mockups/tests_api_movil.py`, todos en verde** (F1 + F2 + F4).
+- Estado: **78 tests en `mockups/tests_api_movil.py`, todos en verde** (F1 + F2 + F4 + F6).
 - Mínimo exigido antes de dar un endpoint por terminado:
 
 | Caso | Se espera |
@@ -531,6 +541,10 @@ tolerar `null` hasta que se defina el hosting (release de GitHub, S3 u otro) —
 | `tarreo` sin `metodo_pago` | `400 validacion` |
 | `tarreo` con un `balon_id` retirado o inexistente | `400 validacion` y **no** se crea el pedido |
 | `balones` | Solo activos, y el cuerpo **no** trae `precio_compra` |
+| `resumen-hoy` con un cancelado del día | Aparece en `pedidos` y **no** suma en los totales |
+| `historial/<fecha>/` de un día con un cancelado | El cancelado **no** aparece: el día se lista como ventas |
+| `historial` con `?mes=` mal formado | `400 validacion`, no el mes actual en silencio |
+| `historial/<fecha>/` con fecha inválida (`2026-02-30`) | `400 validacion` |
 | Cada acción | Deja `HistorialEstadoPedido` y `AuditoriaAccion` |
 | Petición insegura **sin** `Origin` ni `Referer` sobre HTTPS | `403` de Django, ajeno al sobre: la app **debe** mandar `Origin` |
 | `Origin` fuera de `CSRF_TRUSTED_ORIGINS` | `403` |
