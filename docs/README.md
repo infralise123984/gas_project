@@ -9,6 +9,7 @@
 | [`REPORTE_RENDIMIENTO.md`](REPORTE_RENDIMIENTO.md) | Análisis de rendimiento con hallazgos y mejoras priorizadas (M1, M2, …) | Antes de optimizar o cuando la app se sienta lenta |
 | [`CIERRE_AUTOMATICO_SOBRES.md`](CIERRE_AUTOMATICO_SOBRES.md) | Diseño y reglas del cierre automático nocturno de sobres | Al tocar sobres, cierres o cuadratura de dinero |
 | [`PLAN_AUDITORIA_OPERATIVA.md`](PLAN_AUDITORIA_OPERATIVA.md) | **Plan de trabajo pendiente**: telemetría de cliente, evidencia de notificaciones, vista forense por pedido y alertas de cancelación | Antes de implementar auditoría operativa; contiene la sección de restricciones (qué no tocar) |
+| [`API_MOVIL.md`](API_MOVIL.md) | **Contrato de la API JSON** para la app Flutter del camionero: rutas, formato de respuestas, autenticación por sesión, idempotencia, permisos y qué se reutiliza | Antes de escribir cualquier endpoint de `/api/v1/`. Contiene las restricciones heredadas y el orden de trabajo entre los dos repos |
 | [`CLEAN-V2.txt`](CLEAN-V2.txt) | Nota histórica de limpieza de `__pycache__`. Sin contenido relevante | Candidato a eliminar |
 
 ---
