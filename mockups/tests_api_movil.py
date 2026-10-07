@@ -792,7 +792,7 @@ class BalonesApiTest(BaseApiTest):
 
         self.assertEqual(
             set(datos[0]),
-            {'id', 'nombre', 'peso_neto_gas', 'precio_domicilio'},
+            {'id', 'nombre', 'peso_neto_gas', 'precio_domicilio', 'tipo_gas'},
         )
 
     def test_sin_sesion_devuelve_401(self):

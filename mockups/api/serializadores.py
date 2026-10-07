@@ -80,4 +80,7 @@ def serializar_balon(balon):
         'nombre': balon.nombre,
         'peso_neto_gas': balon.peso_neto_gas,
         'precio_domicilio': _entero(balon.precio_domicilio),
+        # El tarreo de la web pinta una etiqueta CATALÍTICO/ALUMINIO según este
+        # campo: sin él la app no puede verse igual que la PWA.
+        'tipo_gas': balon.tipo_gas,
     }
