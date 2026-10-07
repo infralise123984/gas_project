@@ -62,9 +62,9 @@ mockups/
     ├── serializadores.py     ← modelos → JSON del §7.2                         [F1 ✔]
     ├── auth.py               ← csrf / login / logout / perfil                 [F1 ✔]
     ├── entregas.py           ← listado [F1 ✔] y las 4 acciones [F2]
-    ├── idempotencia.py       ← decorador + modelo de la §6.2                  [F2]
-    ├── tarreo.py             ← venta tarreo                                   [F4]
-    └── catalogos.py          ← versión [F1 ✔], balones, resumen, historial
+    ├── idempotencia.py       ← decorador + modelo de la §6.2                 [pendiente]
+    ├── tarreo.py             ← venta tarreo                                  [F4 ✔]
+    └── catalogos.py          ← versión [F1 ✔] y balones [F4 ✔], resumen, historial
 ```
 
 Se registra en `gasmanager/urls.py` con **una sola línea**, al final:
@@ -126,20 +126,20 @@ POST   /api/v1/entregas/<id>/entregar/   ← F2
 POST   /api/v1/entregas/<id>/cancelar/   ← F2
 POST   /api/v1/entregas/<id>/devolver/   ← F2
 
-GET    /api/v1/resumen-hoy/
-POST   /api/v1/tarreo/
-GET    /api/v1/balones/
-GET    /api/v1/historial/?mes=YYYY-MM
-GET    /api/v1/historial/<YYYY-MM-DD>/
-GET    /api/v1/version/
+GET    /api/v1/resumen-hoy/                             ← F6
+POST   /api/v1/tarreo/                                  ← F4
+GET    /api/v1/balones/                                 ← F4
+GET    /api/v1/historial/?mes=YYYY-MM                   ← F6
+GET    /api/v1/historial/<YYYY-MM-DD>/                  ← F6
+GET    /api/v1/version/                                 ← F1
 ```
 
 Fases: **F1** = `auth/*`, `entregas/` (GET) y `version/`. **F2** = las cuatro acciones.
 **F4** = `tarreo/`, `balones/`. **F6** = `resumen-hoy/`, `historial/*`.
 
-**Estado: F1 y F2 implementados y probados** (`mockups/api/`, suite en `mockups/tests_api_movil.py`).
-Lo que sigue (F4, F6) todavía no existe en código, y la idempotencia con `Idempotency-Key` (§8) tampoco:
-es aditiva, pero necesita una migración.
+**Estado: F1, F2 y F4 implementados y probados** (`mockups/api/`, suite en `mockups/tests_api_movil.py`).
+Lo que sigue es F6 (`resumen-hoy/`, `historial/`) y la idempotencia con `Idempotency-Key` (§8), que es
+aditiva pero necesita una migración.
 
 ---
 
@@ -295,6 +295,8 @@ class OperacionIdempotente(models.Model):
   sus pedidos, después el límite. Es una decisión explícita.
 - Límites: `entregas` 60/min, `perfil` 30/min, `version` 10/min, y las cuatro acciones 30/min
   (clave `acciones_entregas`, F2: mueven estado y dinero, así que van más estrechas que el listado).
+  En F4 se agregan `balones` 60/min (lectura, igual que el listado) y `tarreo` 30/min (crea dinero, igual
+  que las acciones).
   El login **no** lleva límite propio: ya lo cubre `django-axes`.
 
 **Alcance honesto:** esto frena bucles de cliente y martilleo de un usuario. **No** es protección DDoS —
@@ -430,6 +432,8 @@ Detalles que **no** se pueden omitir:
 
 ### 7.4 `POST /api/v1/tarreo/` — venta en la calle
 
+**Estado: implementado** (`mockups/api/tarreo.py`, probado en `TarreoApiTest`).
+
 Referencia: `tarreo_pedido`.
 
 ```json
@@ -459,12 +463,30 @@ Reglas, iguales que en la web:
   en el payload, se **ignora** (misma regla que `DetallePedidoForm._configurar_campo_descuento()`).
 - El `Idempotency-Key` reemplaza al `form_token` de sesión que usa la web.
 
+Detalles que la web no necesita y la API sí fija:
+
+- **La respuesta es `200` con `{"data": {"pedido": Pedido}}`**, igual que las cuatro acciones del §7.3: el
+  contrato no define `201`, y el cliente ya sabe leer ese sobre.
+- **Solo balones activos.** La web itera el catálogo vigente, así que un `balon_id` retirado o inexistente
+  → `400 validacion` y **no** se crea nada.
+- **Cantidades repetidas del mismo balón se suman.** La web tiene un campo por balón; dos líneas del mismo
+  balón solo pueden venir de la app, y sumarlas es lo que el usuario quiso decir.
+- **`metodo_pago` se valida contra el modelo** (`Pedido._meta.get_field('metodo_pago').choices`), no contra
+  una lista copiada a mano: si se agrega una forma de pago, la validación la acepta sola.
+- **Todo se crea en una transacción**, y la validación termina antes de abrirla: un payload a medias no deja
+  media venta.
+- **Los precios y descuentos que mande el cliente se ignoran, no se rechazan.** De cada línea se leen solo
+  `balon_id` y `cantidad`; el resto del diccionario no se mira. Hay un test que lo fija
+  (`precio_venta_unitario: 1` → sigue valiendo el del catálogo).
+- **No se registra `AuditoriaAccion`** porque la vista web tampoco lo hace; queda la línea `PEDIDO_TARREO_API`
+  en el logger `audit`. Si se decide auditarlo en base, va en los dos lados a la vez.
+
 ### 7.5 Consultas
 
 | Endpoint | Referencia | Devuelve |
 |---|---|---|
 | `GET /resumen-hoy/` | `mis_entregas_camionero` | `{"entregas": 2, "monto": 86500, "kilos": 43, "pedidos": [Pedido]}` |
-| `GET /balones/` | `get_balones_activos_ordenados()` | `[{"id", "nombre", "peso_neto_gas", "precio_domicilio"}]` |
+| `GET /balones/` | `get_balones_activos_ordenados()` | `[{"id", "nombre", "peso_neto_gas", "precio_domicilio"}]`. **Implementado (F4)**. Solo activos, y **sin** `precio_compra`: con el costo se reconstruye el margen |
 | `GET /historial/?mes=YYYY-MM` | `camionero_historial` | totales del mes + filas por día (kilos, monto, entregas) |
 | `GET /historial/<fecha>/` | `camionero_historial_dia` | detalle de un día |
 | `GET /auth/csrf/` | — | `{"csrf_token": "..."}` (además siembra la cookie `csrftoken`). **Sin sesión** |
@@ -492,7 +514,7 @@ tolerar `null` hasta que se defina el hosting (release de GitHub, S3 u otro) —
 - `django.test.TestCase` + `self.client` (ver `mockups/tests_logica_negocio.py` como referencia).
 - **`Client(enforce_csrf_checks=True)`** es obligatorio para probar CSRF: el cliente de tests lo omite por
   defecto. Y `secure=True` para ejercitar la rama HTTPS de Django.
-- Estado: **38 tests, todos en verde**. Suite completa del app: 167 tests OK.
+- Estado: **67 tests en `mockups/tests_api_movil.py`, todos en verde** (F1 + F2 + F4).
 - Mínimo exigido antes de dar un endpoint por terminado:
 
 | Caso | Se espera |
@@ -507,6 +529,8 @@ tolerar `null` hasta que se defina el hosting (release de GitHub, S3 u otro) —
 | Sin `Idempotency-Key` en un mutador | `400 validacion` |
 | `tarreo` con `descuento_unitario` en el payload | El descuento se ignora (`descuento_total = 0`) |
 | `tarreo` sin `metodo_pago` | `400 validacion` |
+| `tarreo` con un `balon_id` retirado o inexistente | `400 validacion` y **no** se crea el pedido |
+| `balones` | Solo activos, y el cuerpo **no** trae `precio_compra` |
 | Cada acción | Deja `HistorialEstadoPedido` y `AuditoriaAccion` |
 | Petición insegura **sin** `Origin` ni `Referer` sobre HTTPS | `403` de Django, ajeno al sobre: la app **debe** mandar `Origin` |
 | `Origin` fuera de `CSRF_TRUSTED_ORIGINS` | `403` |
@@ -552,3 +576,4 @@ rompe**. Si hiciera falta un cambio incompatible, se agrega `/api/v2/` y la app 
 | 8 | **Store compartido para el limitador.** `settings.CACHES` no está definido → LocMemCache por proceso: con más de una instancia de Render el límite se multiplica por instancia | Abierto (Dueño). No bloquea F1 (una sola instancia) |
 | 9 | **`get_client_ip()` confía en `X-Forwarded-For`** (`utils/permisos.py:25`, y `AuditoriaAccion.registrar` hace lo mismo). Si el proxy no sobreescribe esa cabecera, se puede **envenenar la IP de auditoría**. Es un riesgo preexistente del proyecto, no del API; el limitador **no** la usa como clave | Abierto (Dueño). Verificar cómo la fija Render |
 | 10 | **Oráculo de 2FA:** `202 requiere_2fa` solo se responde cuando la contraseña era correcta, así que confirma que la clave es válida. Decisión consciente (contrato del §6.1); si molesta, se debe responder siempre `202` para usuarios con 2FA activo | Decidido |
+| 11 | **Llevar `calcular_totales()` a `tarreo_pedido` de la web** (§7.4): hoy la venta en la calle se guarda con `ganancia_total` y `descuento_total` en 0, así que el margen del tarreo no cuadra en los reportes | Abierto (Dueño). El API ya lo calcula; la web no cambia por ahora |
