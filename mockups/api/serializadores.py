@@ -66,3 +66,18 @@ def serializar_linea(detalle):
         'subtotal': _entero(detalle.subtotal),
         'subtotal_neto': _entero(detalle.subtotal_neto),
     }
+
+
+def serializar_balon(balon):
+    """Objeto balón del catálogo (§7.5).
+
+    ``precio_domicilio`` es el precio que rige para la venta tarreo (§7.4), así
+    que la app lo lee de acá y nunca lo manda ni lo calcula. **No** se expone
+    ``precio_compra``: es el costo, y con él se reconstruye el margen.
+    """
+    return {
+        'id': balon.pk,
+        'nombre': balon.nombre,
+        'peso_neto_gas': balon.peso_neto_gas,
+        'precio_domicilio': _entero(balon.precio_domicilio),
+    }

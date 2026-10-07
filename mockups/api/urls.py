@@ -7,7 +7,7 @@ Se incluye desde ``gasmanager/urls.py`` con una sola línea, al final:
 
 from django.urls import path
 
-from mockups.api import auth, catalogos, entregas
+from mockups.api import auth, catalogos, entregas, tarreo
 
 app_name = 'api_v1'
 
@@ -28,6 +28,10 @@ urlpatterns = [
     path('entregas/<int:pedido_id>/entregar/', entregas.entregar_pedido, name='entregas_entregar'),
     path('entregas/<int:pedido_id>/cancelar/', entregas.cancelar_pedido, name='entregas_cancelar'),
     path('entregas/<int:pedido_id>/devolver/', entregas.devolver_pedido, name='entregas_devolver'),
+
+    # Negocio (F4: venta en la calle y catálogo de balones)
+    path('tarreo/', tarreo.registrar_venta_tarreo, name='tarreo'),
+    path('balones/', catalogos.listar_balones, name='balones'),
 
     path('version/', catalogos.version_api, name='version'),
 ]

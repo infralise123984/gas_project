@@ -39,6 +39,8 @@ RUTA_LOGIN = '/api/v1/auth/login/'
 RUTA_LOGOUT = '/api/v1/auth/logout/'
 RUTA_PERFIL = '/api/v1/auth/perfil/'
 RUTA_ENTREGAS = '/api/v1/entregas/'
+RUTA_TARREO = '/api/v1/tarreo/'
+RUTA_BALONES = '/api/v1/balones/'
 RUTA_VERSION = '/api/v1/version/'
 
 
@@ -746,12 +748,247 @@ class VersionTest(BaseApiTest):
         )
 
 
-# Pendiente de cubrir (no implementado en F1):
-#   * acciones (tomar/entregar/cancelar/devolver) → F2, incluido el 403 entre
-#     camioneros sobre un pedido ajeno y la carrera de dos camioneros tomando
-#     el mismo pedido;
-#   * idempotencia con `Idempotency-Key` → F2 (necesita migración);
-#   * concurrencia real del limitador (hilos) y caída del store compartido:
-#     solo se probó el camino secuencial y el fallo abierto;
-#   * validación de `?mes=`/`?fecha=` → F6;
-#   * tarreo sin descuentos y con `metodo_pago` → F4.
+class BalonesApiTest(BaseApiTest):
+    """Catálogo de balones del §7.5."""
+
+    def setUp(self):
+        super().setUp()
+        # El balón del `setUp` base hace de "normal": se le fija el tipo para
+        # que el orden esperado no dependa del valor por defecto del modelo.
+        # Y no se crea otro con el mismo nombre: `TipoBalon.nombre` es único.
+        self.balon.tipo_gas = 'normal'
+        self.balon.save(update_fields=['tipo_gas'])
+        self.normal = self.balon
+        self.catalitico = TipoBalon.objects.create(
+            nombre='Gas 15 kg catalítico', peso_neto_gas=15, tipo_gas='catalitico',
+            precio_compra=21000, precio_local=27000, precio_domicilio=29900,
+        )
+        self.retirado = TipoBalon.objects.create(
+            nombre='Gas 5 kg retirado', peso_neto_gas=5, tipo_gas='normal',
+            activo=False, precio_compra=8000, precio_local=11000,
+            precio_domicilio=12900,
+        )
+
+    def test_lista_los_activos_en_el_orden_de_los_sobres(self):
+        self.client.force_login(self.camionero_a)
+        respuesta = self.client.get(RUTA_BALONES)
+
+        self.assertEqual(respuesta.status_code, 200)
+        ids = [balon['id'] for balon in respuesta.json()['data']]
+
+        self.assertNotIn(
+            self.retirado.id, ids, 'un balón retirado no se puede vender'
+        )
+        # El orden sale de `services.catalogos`: normal antes que catalítico.
+        self.assertLess(ids.index(self.normal.id), ids.index(self.catalitico.id))
+
+    def test_no_expone_el_precio_de_compra(self):
+        """El costo no viaja al teléfono: con él se reconstruye el margen."""
+        self.client.force_login(self.camionero_a)
+        datos = self.client.get(RUTA_BALONES).json()['data']
+
+        self.assertEqual(
+            set(datos[0]),
+            {'id', 'nombre', 'peso_neto_gas', 'precio_domicilio'},
+        )
+
+    def test_sin_sesion_devuelve_401(self):
+        respuesta = self.client.get(RUTA_BALONES)
+
+        self.assertEqual(respuesta.status_code, 401)
+        self.assertEqual(respuesta.json()['error']['codigo'], 'no_autenticado')
+
+    def test_rol_incorrecto_devuelve_403(self):
+        self.client.force_login(self.telefonista)
+        respuesta = self.client.get(RUTA_BALONES)
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.json()['error']['codigo'], 'sin_permiso')
+
+
+class TarreoApiTest(BaseApiTest):
+    """Venta en la calle del §7.4."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.camionero_a)
+        self.retirado = TipoBalon.objects.create(
+            nombre='Gas 5 kg', peso_neto_gas=5, tipo_gas='normal', activo=False,
+            precio_compra=8000, precio_local=11000, precio_domicilio=12900,
+        )
+
+    def _venta(self, payload):
+        return self._post_api(RUTA_TARREO, payload)
+
+    def _payload(self, **extra):
+        payload = {
+            'metodo_pago': 'efectivo',
+            'lineas': [{'balon_id': self.balon.id, 'cantidad': 2}],
+        }
+        payload.update(extra)
+        return payload
+
+    def _ventas(self):
+        return Pedido.objects.filter(origen='tarreo')
+
+    def test_registra_la_venta_ya_entregada_y_calcula_los_totales(self):
+        respuesta = self._venta(self._payload(direccion_entrega='Frente a la plaza'))
+
+        self.assertEqual(respuesta.status_code, 200)
+        pedido_json = respuesta.json()['data']['pedido']
+        self.assertEqual(pedido_json['origen'], 'tarreo')
+        self.assertEqual(pedido_json['estado'], 'entregado')
+        self.assertEqual(pedido_json['direccion_entrega'], 'Frente a la plaza')
+        self.assertEqual(pedido_json['monto_total'], 45800)
+
+        pedido = self._ventas().get()
+        self.assertEqual(pedido.registrador, self.camionero_a)
+        self.assertEqual(pedido.entregador, self.camionero_a)
+        # `calcular_totales()`: la web deja estos dos campos en cero (§7.4).
+        self.assertEqual(int(pedido.ganancia_total), 15800)
+        self.assertEqual(int(pedido.descuento_total), 0)
+        self.assertTrue(
+            HistorialEstadoPedido.objects.filter(
+                pedido=pedido, estado_nuevo='entregado'
+            ).exists()
+        )
+
+    def test_ignora_los_precios_y_descuentos_que_mande_el_cliente(self):
+        """El camionero no está en `ROLES_CON_DESCUENTO` y el precio lo fija el
+        catálogo: si el payload pudiera imponerlos, vendería a cualquier precio."""
+        respuesta = self._venta(
+            {
+                'metodo_pago': 'efectivo',
+                'lineas': [
+                    {
+                        'balon_id': self.balon.id,
+                        'cantidad': 2,
+                        'precio_venta_unitario': 1,
+                        'precio_compra_unitario': 1,
+                        'descuento_unitario': 20000,
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        pedido_json = respuesta.json()['data']['pedido']
+        self.assertEqual(pedido_json['lineas'][0]['precio_venta_unitario'], 22900)
+        self.assertEqual(pedido_json['lineas'][0]['descuento_unitario'], 0)
+        self.assertEqual(pedido_json['monto_total'], 45800)
+        self.assertEqual(int(self._ventas().get().descuento_total), 0)
+
+    def test_direccion_vacia_usa_la_por_defecto(self):
+        for direccion in (None, '', '   '):
+            with self.subTest(direccion=direccion):
+                payload = self._payload()
+                if direccion is not None:
+                    payload['direccion_entrega'] = direccion
+
+                respuesta = self._venta(payload)
+
+                self.assertEqual(respuesta.status_code, 200)
+                self.assertEqual(
+                    respuesta.json()['data']['pedido']['direccion_entrega'],
+                    'Tarreo / venta directa en camión',
+                )
+
+    def test_suma_las_lineas_repetidas_del_mismo_balon(self):
+        """La web tiene un campo por balón; dos líneas del mismo balón solo pueden
+        venir de la app, y sumarlas es lo que el usuario quiso decir."""
+        respuesta = self._venta(
+            {
+                'metodo_pago': 'efectivo',
+                'lineas': [
+                    {'balon_id': self.balon.id, 'cantidad': 1},
+                    {'balon_id': self.balon.id, 'cantidad': 2},
+                ],
+            }
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        pedido_json = respuesta.json()['data']['pedido']
+        self.assertEqual(len(pedido_json['lineas']), 1)
+        self.assertEqual(pedido_json['lineas'][0]['cantidad'], 3)
+        self.assertEqual(pedido_json['monto_total'], 68700)
+
+    def test_sin_metodo_pago_no_crea_nada(self):
+        respuesta = self._venta({'lineas': [{'balon_id': self.balon.id, 'cantidad': 2}]})
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()['error']['codigo'], 'validacion')
+        self.assertEqual(self._ventas().count(), 0)
+
+    def test_metodo_pago_desconocido_devuelve_400(self):
+        respuesta = self._venta(self._payload(metodo_pago='trueque'))
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()['error']['codigo'], 'validacion')
+        self.assertEqual(self._ventas().count(), 0)
+
+    def test_sin_lineas_utiles_no_crea_nada(self):
+        casos = (
+            self._payload(lineas=[]),
+            self._payload(lineas=[{'balon_id': self.balon.id, 'cantidad': 0}]),
+            self._payload(lineas='dos balones'),
+        )
+        for payload in casos:
+            with self.subTest(payload=payload):
+                respuesta = self._venta(payload)
+
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertEqual(respuesta.json()['error']['codigo'], 'validacion')
+                self.assertEqual(self._ventas().count(), 0)
+
+    def test_balon_retirado_o_inexistente_devuelve_400(self):
+        for balon_id in (self.retirado.id, 999999):
+            with self.subTest(balon_id=balon_id):
+                respuesta = self._venta(
+                    {
+                        'metodo_pago': 'efectivo',
+                        'lineas': [{'balon_id': balon_id, 'cantidad': 1}],
+                    }
+                )
+
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertEqual(respuesta.json()['error']['codigo'], 'validacion')
+                self.assertEqual(self._ventas().count(), 0)
+
+    def test_campo_no_permitido_en_el_payload_devuelve_400(self):
+        respuesta = self._venta(self._payload(total=1))
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()['error']['codigo'], 'validacion')
+        self.assertEqual(self._ventas().count(), 0)
+
+    def test_get_devuelve_405_con_sobre(self):
+        respuesta = self.client.get(RUTA_TARREO)
+
+        self.assertEqual(respuesta.status_code, 405)
+        self.assertEqual(respuesta.json()['error']['codigo'], 'metodo_no_permitido')
+
+    def test_sin_sesion_devuelve_401(self):
+        self.client.logout()
+
+        respuesta = self._venta(self._payload())
+
+        self.assertEqual(respuesta.status_code, 401)
+        self.assertEqual(respuesta.json()['error']['codigo'], 'no_autenticado')
+        self.assertEqual(self._ventas().count(), 0)
+
+    def test_rol_incorrecto_devuelve_403(self):
+        self.client.force_login(self.telefonista)
+
+        respuesta = self._venta(self._payload())
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(respuesta.json()['error']['codigo'], 'sin_permiso')
+        self.assertEqual(self._ventas().count(), 0)
+
+
+# Pendiente de cubrir:
+#   * idempotencia con `Idempotency-Key`: ningún mutador la exige todavía
+#     (necesita migración, docs/API_MOVIL.md §6.2);
+#   * concurrencia real (`select_for_update` con dos procesos) y del limitador
+#     (hilos): se probó la carrera secuencial y el fallo abierto;
+#   * `resumen-hoy/` e `historial/` → F6.
