@@ -2,7 +2,7 @@
 Pruebas de los avisos in-app (efimeros) del telefonista.
 
 Ejecutar:
-    python manage.py test mockups.tests_notificaciones_telefonista -v 2
+    python manage.py test mockups.tests.notificaciones.test_telefonista -v 2
 
 Cubren:
 - El telefonista REGISTRADOR recibe aviso cuando su camionero toma, entrega,
@@ -17,61 +17,36 @@ Cubren:
 from datetime import timedelta
 from urllib.parse import quote
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from mockups.models import (
-    DetallePedido,
-    HistorialEstadoPedido,
-    Pedido,
-    TipoBalon,
-)
-
-User = get_user_model()
+from mockups.models import HistorialEstadoPedido
+from mockups.tests.base import crear_balon_11kg, crear_pedido, crear_usuario
 
 
 class NotifFixturesMixin:
     @classmethod
     def setUpTestData(cls):
-        cls.telefonista = User.objects.create_user(
-            username='tel_notif', password='test12345', rol='telefonista',
-            first_name='Tere', last_name='Fonista',
+        cls.telefonista = crear_usuario(
+            'telefonista', 'tel_notif', first_name='Tere', last_name='Fonista',
         )
-        cls.otro_telefonista = User.objects.create_user(
-            username='tel_notif2', password='test12345', rol='telefonista',
+        cls.otro_telefonista = crear_usuario('telefonista', 'tel_notif2')
+        cls.camionero = crear_usuario(
+            'camionero', 'cam_notif', first_name='Cami', last_name='Nero',
         )
-        cls.camionero = User.objects.create_user(
-            username='cam_notif', password='test12345', rol='camionero',
-            first_name='Cami', last_name='Nero',
-        )
-        cls.jefe = User.objects.create_user(
-            username='jefe_notif', password='test12345', rol='jefe',
-        )
-        cls.balon = TipoBalon.objects.create(
-            nombre='Balón 11 kg', peso_neto_gas=11, tipo_gas='normal',
-            precio_compra=8000, precio_local=12000, precio_domicilio=14000, activo=True,
-        )
+        cls.jefe = crear_usuario('jefe', 'jefe_notif')
+        cls.balon = crear_balon_11kg()
 
     def _crear_pedido(self, *, registrador=None, estado='pendiente', entregador=None,
                       origen='telefono'):
-        pedido = Pedido.objects.create(
+        return crear_pedido(
             registrador=registrador or self.telefonista,
             entregador=entregador,
-            origen=origen,
             estado=estado,
-            metodo_pago='efectivo',
+            origen=origen,
+            lineas=[(self.balon, 2)],
         )
-        DetallePedido.objects.create(
-            pedido=pedido,
-            balon=self.balon,
-            cantidad=2,
-            precio_venta_unitario=self.balon.precio_domicilio,
-            precio_compra_unitario=self.balon.precio_compra,
-        )
-        pedido.calcular_totales()
-        return pedido
 
     def _desde(self, delta=timedelta(minutes=1)):
         return timezone.now() - delta

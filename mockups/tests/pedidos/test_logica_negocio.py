@@ -2,7 +2,7 @@
 Pruebas de lógica y matemática de negocio (baseline antes de refactors críticos).
 
 Ejecutar:
-    python manage.py test mockups.tests_logica_negocio -v 2
+    python manage.py test mockups.tests.pedidos.test_logica_negocio -v 2
 
 Estas pruebas documentan el comportamiento correcto de:
 - Totales de pedidos (monto / ganancia)
@@ -15,14 +15,21 @@ Si un refactor rompe estas pruebas, los números operativos cambiaron: revisar a
 
 from datetime import date, datetime, time
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
-from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from django.test import TestCase
 from django.utils import timezone
 
-from mockups.models import DetallePedido, Pedido, SobreDiario, TipoBalon
+from mockups.models import Pedido
+from mockups.tests.base import (
+    TZ_CHILE,
+    crear_balon_11kg,
+    crear_balon_5kg,
+    crear_pedido,
+    crear_sobre,
+    crear_usuario,
+    dt_chile,
+)
 from mockups.views import (
     _kilos_de_pedido,
     _stats_dia_camionero,
@@ -31,59 +38,27 @@ from mockups.views import (
     stats_ventas_camionero,
 )
 
-User = get_user_model()
-TZ_CHILE = ZoneInfo('America/Santiago')
-
 
 class LogicaNegocioFixturesMixin:
     """Datos mínimos compartidos para escenarios de cuadratura."""
 
     @classmethod
     def setUpTestData(cls):
-        cls.bodeguero = User.objects.create_user(
-            username='bodeguero_test',
-            password='test',
-            rol='bodeguero',
-            first_name='Bode',
-            last_name='Guero',
+        cls.bodeguero = crear_usuario(
+            'bodeguero', 'bodeguero_test', password='test',
+            first_name='Bode', last_name='Guero',
         )
-        cls.camionero = User.objects.create_user(
-            username='camionero_test',
-            password='test',
-            rol='camionero',
-            first_name='Camion',
-            last_name='Ero',
+        cls.camionero = crear_usuario(
+            'camionero', 'camionero_test', password='test',
+            first_name='Camion', last_name='Ero',
         )
-        cls.otro_camionero = User.objects.create_user(
-            username='camionero2_test',
-            password='test',
-            rol='camionero',
-        )
+        cls.otro_camionero = crear_usuario('camionero', 'camionero2_test', password='test')
 
-        cls.balon_11 = TipoBalon.objects.create(
-            nombre='Balón 11 kg',
-            peso_neto_gas=11,
-            tipo_gas='normal',
-            precio_compra=8000,
-            precio_local=12000,
-            precio_domicilio=14000,
-            activo=True,
-        )
-        cls.balon_5 = TipoBalon.objects.create(
-            nombre='Balón 5 kg',
-            peso_neto_gas=5,
-            tipo_gas='normal',
-            precio_compra=4000,
-            precio_local=7000,
-            precio_domicilio=8500,
-            activo=True,
-        )
+        cls.balon_11 = crear_balon_11kg()
+        cls.balon_5 = crear_balon_5kg()
 
         cls.fecha_dia = date(2026, 6, 15)
-        cls.mediodia_chile = timezone.make_aware(
-            datetime.combine(cls.fecha_dia, time(12, 0)),
-            TZ_CHILE,
-        )
+        cls.mediodia_chile = dt_chile(cls.fecha_dia)
 
     def _crear_pedido_entregado(
         self,
@@ -95,30 +70,17 @@ class LogicaNegocioFixturesMixin:
         lineas=None,
     ):
         """Crea pedido entregado con detalles y totales calculados."""
-        pedido = Pedido.objects.create(
+        return crear_pedido(
             registrador=registrador,
             entregador=entregador or registrador,
-            origen=origen,
             estado='entregado',
+            origen=origen,
             fecha=fecha or self.mediodia_chile,
-            metodo_pago='efectivo',
+            lineas=lineas or [(self.balon_11, 2)],
         )
-        for balon, cantidad in lineas or [(self.balon_11, 2)]:
-            DetallePedido.objects.create(
-                pedido=pedido,
-                balon=balon,
-                cantidad=cantidad,
-                precio_venta_unitario=(
-                    balon.precio_local if origen == 'local' else balon.precio_domicilio
-                ),
-                precio_compra_unitario=balon.precio_compra,
-            )
-        pedido.calcular_totales()
-        pedido.refresh_from_db()
-        return pedido
 
     def _crear_sobre_bodega(self):
-        return SobreDiario.objects.create(
+        return crear_sobre(
             tipo='bodega',
             fecha_correspondiente=self.fecha_dia,
             creado_por=self.bodeguero,
@@ -126,7 +88,7 @@ class LogicaNegocioFixturesMixin:
         )
 
     def _crear_sobre_camion(self, camionero=None):
-        return SobreDiario.objects.create(
+        return crear_sobre(
             tipo='camion',
             fecha_correspondiente=self.fecha_dia,
             creado_por=self.bodeguero,

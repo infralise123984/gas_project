@@ -1,9 +1,9 @@
 """Tests del API móvil (F1).
 
-Archivo aparte a propósito: no se toca ninguno de los tests existentes.
+Suite funcional del API v1 (F1, F2, F4 y F6).
 Ejecutar con:
 
-    python manage.py test mockups.tests_api_movil -v 2
+    python manage.py test mockups.tests.api.test_movil -v 2
 
 Cubre el mínimo del docs/API_MOVIL.md §8 y los casos que exige el spike de
 sesión + CSRF + django-axes. Lo que NO se cubre queda listado al final del
@@ -26,13 +26,12 @@ from django.test.utils import CaptureQueriesContext
 from mockups.api.limites import consumir
 from mockups.models import (
     AuditoriaAccion,
-    DetallePedido,
     HistorialCambioPedido,
     HistorialEstadoPedido,
     Pedido,
     TipoBalon,
-    Usuario,
 )
+from mockups.tests.base import crear_pedido, crear_usuario
 from mockups.utils.fechas import navegacion_mes, rango_dia_chile, today_chile
 
 RUTA_CSRF = '/api/v1/auth/csrf/'
@@ -67,16 +66,11 @@ class BaseApiTest(TestCase):
     def setUp(self):
         cache.clear()  # el limitador vive en la caché del proceso
 
-        self.camionero_a = Usuario.objects.create_user(
-            username='camionero_a', password='ClaveDePrueba123', rol='camionero'
-        )
-        self.camionero_b = Usuario.objects.create_user(
-            username='camionero_b', password='ClaveDePrueba123', rol='camionero'
-        )
-        self.telefonista = Usuario.objects.create_user(
-            username='telefonista_1', password='ClaveDePrueba123', rol='telefonista'
-        )
+        self.camionero_a = crear_usuario('camionero', 'camionero_a', password='ClaveDePrueba123')
+        self.camionero_b = crear_usuario('camionero', 'camionero_b', password='ClaveDePrueba123')
+        self.telefonista = crear_usuario('telefonista', 'telefonista_1', password='ClaveDePrueba123')
 
+        # Catálogo propio de la suite de API (precios distintos a los de otras suites).
         self.balon = TipoBalon.objects.create(
             nombre='Gas 11 kg', peso_neto_gas=11,
             precio_compra=15000, precio_local=20000, precio_domicilio=22900,
@@ -98,25 +92,18 @@ class BaseApiTest(TestCase):
 
     def _pedido(self, *, estado, entregador=None, origen='telefono', fecha=None):
         """Pedido con una línea de 2 balones. `monto_total` = 45.800 (int en pesos)."""
-        pedido = Pedido.objects.create(
-            sector='Población Recreo',
-            direccion_entrega='Los Aromos 1234, casa esquina',
+        return crear_pedido(
             registrador=self.telefonista,
             entregador=entregador,
             estado=estado,
             origen=origen,
-            metodo_pago='efectivo',
             fecha=fecha or creado_hoy(),
+            sector='Población Recreo',
+            direccion_entrega='Los Aromos 1234, casa esquina',
             monto_total=45800,
+            lineas=[(self.balon, 2)],
+            calcular_totales=False,
         )
-        DetallePedido.objects.create(
-            pedido=pedido,
-            balon=self.balon,
-            cantidad=2,
-            precio_venta_unitario=22900,
-            precio_compra_unitario=15000,
-        )
-        return pedido
 
     def _token_csrf(self, cliente=None):
         """Token del doble envío. Requiere que /auth/csrf/ siembre la cookie."""
