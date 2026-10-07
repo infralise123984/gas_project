@@ -12,6 +12,7 @@ archivo.
 
 import json
 import time
+from calendar import monthrange
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -32,7 +33,7 @@ from mockups.models import (
     TipoBalon,
     Usuario,
 )
-from mockups.utils.fechas import rango_dia_chile, today_chile
+from mockups.utils.fechas import navegacion_mes, rango_dia_chile, today_chile
 
 RUTA_CSRF = '/api/v1/auth/csrf/'
 RUTA_LOGIN = '/api/v1/auth/login/'
@@ -41,6 +42,8 @@ RUTA_PERFIL = '/api/v1/auth/perfil/'
 RUTA_ENTREGAS = '/api/v1/entregas/'
 RUTA_TARREO = '/api/v1/tarreo/'
 RUTA_BALONES = '/api/v1/balones/'
+RUTA_RESUMEN_HOY = '/api/v1/resumen-hoy/'
+RUTA_HISTORIAL = '/api/v1/historial/'
 RUTA_VERSION = '/api/v1/version/'
 
 
@@ -986,9 +989,176 @@ class TarreoApiTest(BaseApiTest):
         self.assertEqual(self._ventas().count(), 0)
 
 
+class ResumenHistorialApiTest(BaseApiTest):
+    """Resúmenes del camionero: día, mes y detalle de un día (§7.5)."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.camionero_a)
+        # Cancelado del día: aparece en la lista pero no suma plata ni kilos.
+        self.cancelado_a = self._pedido(
+            estado='cancelado', entregador=self.camionero_a
+        )
+
+    def _historial_dia(self, fecha):
+        return self.client.get(f'{RUTA_HISTORIAL}{fecha}/')
+
+    # --- resumen-hoy ---------------------------------------------------
+
+    def test_resumen_hoy_suma_solo_los_entregados(self):
+        """Total = entregados; lista = toda la actividad (cancelados incluidos)."""
+        datos = self.client.get(RUTA_RESUMEN_HOY).json()['data']
+
+        self.assertEqual(datos['hoy'], today_chile().isoformat())
+        self.assertEqual(datos['entregas'], 1)
+        self.assertEqual(datos['monto'], 45800)
+        self.assertEqual(datos['kilos'], 22)
+
+        pedidos = datos['pedidos']
+        self.assertEqual(len(pedidos), 3)  # en ruta, entregado y cancelado
+        self.assertIn('cancelado', [pedido['estado'] for pedido in pedidos])
+
+    def test_resumen_hoy_no_mezcla_al_otro_camionero(self):
+        datos = self.client.get(RUTA_RESUMEN_HOY).json()['data']
+
+        ids = [pedido['id'] for pedido in datos['pedidos']]
+        self.assertNotIn(self.entregado_hoy_b.id, ids)
+        self.assertNotIn(self.en_ruta_b.id, ids)
+        # El pendiente sin asignar no es actividad de nadie todavía.
+        self.assertNotIn(self.pendiente_hoy.id, ids)
+        # El de ayer no entra en el día de hoy.
+        self.assertNotIn(self.pendiente_ayer.id, ids)
+
+    # --- historial del mes ---------------------------------------------
+
+    def test_historial_sin_mes_usa_el_actual(self):
+        hoy = today_chile()
+        ultimo = monthrange(hoy.year, hoy.month)[1]
+        datos = self.client.get(RUTA_HISTORIAL).json()['data']
+
+        self.assertEqual(datos['mes'], f'{hoy.year:04d}-{hoy.month:02d}')
+        self.assertEqual(len(datos['dias']), ultimo)
+        # Orden descendente: el último día del mes va primero (como la web).
+        self.assertEqual(
+            datos['dias'][0]['fecha'],
+            f'{hoy.year:04d}-{hoy.month:02d}-{ultimo:02d}',
+        )
+
+        self.assertEqual(datos['totales']['entregas'], 1)
+        self.assertEqual(datos['totales']['monto'], 45800)
+        self.assertEqual(datos['totales']['kilos'], 22)
+        self.assertEqual(datos['dias_con_venta'], 1)
+
+        self.assertFalse(
+            datos['mes_siguiente_habilitado'],
+            'no se navega al futuro: no hay nada que mostrar',
+        )
+
+    def test_historial_marca_hoy_y_los_dias_sin_venta(self):
+        hoy = today_chile()
+        datos = self.client.get(RUTA_HISTORIAL).json()['data']
+        fila_hoy = next(f for f in datos['dias'] if f['es_hoy'])
+
+        self.assertEqual(fila_hoy['fecha'], hoy.isoformat())
+        self.assertTrue(fila_hoy['tiene_venta'])
+        self.assertEqual(
+            set(fila_hoy),
+            {
+                'fecha', 'es_hoy', 'tiene_venta', 'entregas', 'monto',
+                'kilos', 'kilos_domicilio', 'kilos_tarreo',
+            },
+        )
+        vacias = [f for f in datos['dias'] if not f['tiene_venta']]
+        self.assertTrue(vacias and all(f['monto'] == 0 for f in vacias))
+
+    def test_historial_de_un_mes_anterior_no_tiene_ventas(self):
+        anterior = navegacion_mes(today_chile().year, today_chile().month)[0]
+        datos = self.client.get(
+            RUTA_HISTORIAL, {'mes': f'{anterior[0]:04d}-{anterior[1]:02d}'}
+        ).json()['data']
+
+        self.assertEqual(datos['totales']['entregas'], 0)
+        self.assertEqual(datos['dias_con_venta'], 0)
+        self.assertTrue(datos['mes_siguiente_habilitado'])
+
+    def test_historial_con_mes_invalido_devuelve_400(self):
+        """La web cae al mes actual en silencio; el API lo rechaza: mostrarle al
+        camionero un mes que no pidió es peor que un error."""
+        for mes in ('2026-13', '2026-00', 'octubre', '2026', '', '2026-1x'):
+            with self.subTest(mes=mes):
+                respuesta = self.client.get(RUTA_HISTORIAL, {'mes': mes})
+
+                if mes == '':
+                    # Vacío es "sin parámetro": mes actual, como la web.
+                    self.assertEqual(respuesta.status_code, 200)
+                    continue
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertEqual(respuesta.json()['error']['codigo'], 'validacion')
+
+    # --- detalle de un día ---------------------------------------------
+
+    def test_historial_dia_devuelve_solo_los_entregados(self):
+        hoy = today_chile()
+        datos = self._historial_dia(hoy.isoformat()).json()['data']
+
+        self.assertEqual(datos['fecha'], hoy.isoformat())
+        self.assertTrue(datos['es_hoy'])
+        self.assertEqual(datos['entregas'], 1)
+        self.assertEqual(datos['monto'], 45800)
+        self.assertEqual(datos['kilos'], 22)
+        self.assertEqual(datos['kilos_domicilio'], 22)
+        self.assertEqual(datos['kilos_tarreo'], 0)
+
+        # El día se lista como ventas: el cancelado del día no es una venta.
+        ids = [pedido['id'] for pedido in datos['pedidos']]
+        self.assertEqual(ids, [self.entregado_hoy_a.id])
+        self.assertEqual(datos['pedidos'][0]['kilos'], 22)
+
+    def test_historial_dia_sin_ventas(self):
+        ayer = (today_chile() - timedelta(days=1)).isoformat()
+        datos = self._historial_dia(ayer).json()['data']
+
+        self.assertFalse(datos['es_hoy'])
+        self.assertEqual(datos['entregas'], 0)
+        self.assertEqual(datos['monto'], 0)
+        self.assertEqual(datos['kilos'], 0)
+        self.assertEqual(datos['pedidos'], [])
+
+    def test_historial_dia_con_fecha_invalida_devuelve_400(self):
+        for fecha in ('2026-02-30', 'ayer', '2026-13-01', '07-10-2026'):
+            with self.subTest(fecha=fecha):
+                respuesta = self._historial_dia(fecha)
+
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertEqual(respuesta.json()['error']['codigo'], 'validacion')
+
+    # --- guardas comunes -----------------------------------------------
+
+    def test_sin_sesion_devuelve_401(self):
+        self.client.logout()
+
+        for ruta in (RUTA_RESUMEN_HOY, RUTA_HISTORIAL, f'{RUTA_HISTORIAL}2026-10-07/'):
+            with self.subTest(ruta=ruta):
+                respuesta = self.client.get(ruta)
+
+                self.assertEqual(respuesta.status_code, 401)
+                self.assertEqual(respuesta.json()['error']['codigo'], 'no_autenticado')
+
+    def test_rol_incorrecto_devuelve_403(self):
+        self.client.force_login(self.telefonista)
+
+        for ruta in (RUTA_RESUMEN_HOY, RUTA_HISTORIAL, f'{RUTA_HISTORIAL}2026-10-07/'):
+            with self.subTest(ruta=ruta):
+                respuesta = self.client.get(ruta)
+
+                self.assertEqual(respuesta.status_code, 403)
+                self.assertEqual(respuesta.json()['error']['codigo'], 'sin_permiso')
+
+
 # Pendiente de cubrir:
 #   * idempotencia con `Idempotency-Key`: ningún mutador la exige todavía
 #     (necesita migración, docs/API_MOVIL.md §6.2);
 #   * concurrencia real (`select_for_update` con dos procesos) y del limitador
 #     (hilos): se probó la carrera secuencial y el fallo abierto;
-#   * `resumen-hoy/` e `historial/` → F6.
+#   * que el mes con muchas ventas no degrade: 31 días de consultas es el costo
+#     aceptado de replicar `camionero_historial` tal cual.
