@@ -2,7 +2,7 @@
 Pruebas del cambio de fecha de un pedido por parte del administrador.
 
 Ejecutar:
-    python manage.py test mockups.tests_admin_fecha_pedido -v 2
+    python manage.py test mockups.tests.admin.test_fecha_pedido -v 2
 
 Cubren:
 - Solo admin puede cambiar la fecha (jefe/telefonista no).
@@ -14,24 +14,15 @@ Cubren:
 - Trazabilidad en HistorialCambioPedido y AuditoriaAccion.
 """
 
-from datetime import date, datetime, time
+from datetime import date
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from mockups.models import (
-    AuditoriaAccion,
-    DetallePedido,
-    HistorialCambioPedido,
-    Pedido,
-    SobreDiario,
-    TipoBalon,
-)
+from mockups.models import AuditoriaAccion, HistorialCambioPedido, SobreDiario
+from mockups.tests.base import crear_balon_11kg, crear_pedido, crear_sobre, crear_usuario, dt_chile
 from mockups.utils.fechas import TZ_CHILE
-
-User = get_user_model()
 
 DIA_ORIGEN = date(2026, 6, 15)
 DIA_DESTINO = date(2026, 6, 16)
@@ -40,59 +31,38 @@ DIA_DESTINO = date(2026, 6, 16)
 class AdminFechaPedidoFixturesMixin:
     @classmethod
     def setUpTestData(cls):
-        cls.admin = User.objects.create_user(
-            username='admin_fecha', password='test12345', rol='admin',
+        cls.admin = crear_usuario('admin', 'admin_fecha')
+        cls.jefe = crear_usuario('jefe', 'jefe_fecha')
+        cls.telefonista = crear_usuario('telefonista', 'telefonista_fecha')
+        cls.camionero = crear_usuario(
+            'camionero', 'camionero_fecha', first_name='Camion', last_name='Ero',
         )
-        cls.jefe = User.objects.create_user(
-            username='jefe_fecha', password='test12345', rol='jefe',
-        )
-        cls.telefonista = User.objects.create_user(
-            username='telefonista_fecha', password='test12345', rol='telefonista',
-        )
-        cls.camionero = User.objects.create_user(
-            username='camionero_fecha', password='test12345', rol='camionero',
-            first_name='Camion', last_name='Ero',
-        )
-        cls.balon = TipoBalon.objects.create(
-            nombre='Balón 11 kg', peso_neto_gas=11, tipo_gas='normal',
-            precio_compra=8000, precio_local=12000, precio_domicilio=14000, activo=True,
-        )
+        cls.balon = crear_balon_11kg()
 
     def _dt_chile(self, dia, hora=12):
         """Datetime aware (UTC internamente) para un día/hora en Chile."""
-        return timezone.make_aware(datetime.combine(dia, time(hora, 0)), TZ_CHILE)
+        return dt_chile(dia, hora)
 
     def _crear_pedido(self, *, dia, estado='entregado', entregador=None, cantidad=2, origen='telefono'):
-        pedido = Pedido.objects.create(
+        return crear_pedido(
             registrador=self.telefonista,
-            entregador=entregador if entregador is not None else (self.camionero if estado == 'entregado' else None),
-            origen=origen,
+            entregador=entregador if entregador is not None else (
+                self.camionero if estado == 'entregado' else None
+            ),
             estado=estado,
-            metodo_pago='efectivo',
+            origen=origen,
             fecha=self._dt_chile(dia),
+            lineas=[(self.balon, cantidad)],
         )
-        DetallePedido.objects.create(
-            pedido=pedido,
-            balon=self.balon,
-            cantidad=cantidad,
-            precio_venta_unitario=self.balon.precio_domicilio,
-            precio_compra_unitario=self.balon.precio_compra,
-        )
-        pedido.calcular_totales()
-        pedido.refresh_from_db()
-        return pedido
 
     def _crear_sobre_camion(self, *, dia, cerrado=False):
-        sobre = SobreDiario.objects.create(
+        return crear_sobre(
             tipo='camion',
             fecha_correspondiente=dia,
             creado_por=self.admin,
             trabajador=self.camionero,
+            cerrado=cerrado,
         )
-        if cerrado:
-            sobre.cerrado = True
-            sobre.save(update_fields=['cerrado'])
-        return sobre
 
     def _post_cambio(self, pedido, nueva_fecha, **kwargs):
         return self.client.post(

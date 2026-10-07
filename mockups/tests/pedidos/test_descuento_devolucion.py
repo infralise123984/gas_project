@@ -2,7 +2,7 @@
 Pruebas de las features de devolución de pedidos y descuento por línea.
 
 Ejecutar:
-    python manage.py test mockups.tests_descuento_devolucion -v 2
+    python manage.py test mockups.tests.pedidos.test_descuento_devolucion -v 2
 
 Cubren:
 - Descuento por balón: cálculo de totales (monto baja, ganancia no) y tope del 50%.
@@ -14,7 +14,6 @@ Cubren:
 
 from decimal import Decimal
 
-from django.contrib.auth import get_user_model
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.db.models import Sum
 from django.test import TestCase
@@ -26,11 +25,9 @@ from mockups.models import (
     DetallePedido,
     HistorialEstadoPedido,
     Pedido,
-    TipoBalon,
 )
+from mockups.tests.base import crear_balon_5kg, crear_pedido, crear_usuario
 from mockups.views.pedidos import _pedidos_devueltos_al_pool
-
-User = get_user_model()
 
 
 class FixturesMixin:
@@ -38,48 +35,25 @@ class FixturesMixin:
 
     @classmethod
     def setUpTestData(cls):
-        cls.telefonista = User.objects.create_user(
-            username='telefonista_desc', password='test12345', rol='telefonista',
+        cls.telefonista = crear_usuario('telefonista', 'telefonista_desc')
+        cls.jefe = crear_usuario('jefe', 'jefe_desc')
+        cls.bodeguero = crear_usuario('bodeguero', 'bodeguero_desc')
+        cls.camionero = crear_usuario(
+            'camionero', 'camionero_desc', first_name='Camion', last_name='Ero',
         )
-        cls.jefe = User.objects.create_user(
-            username='jefe_desc', password='test12345', rol='jefe',
-        )
-        cls.bodeguero = User.objects.create_user(
-            username='bodeguero_desc', password='test12345', rol='bodeguero',
-        )
-        cls.camionero = User.objects.create_user(
-            username='camionero_desc', password='test12345', rol='camionero',
-            first_name='Camion', last_name='Ero',
-        )
-        cls.otro_camionero = User.objects.create_user(
-            username='camionero_desc2', password='test12345', rol='camionero',
-        )
+        cls.otro_camionero = crear_usuario('camionero', 'camionero_desc2')
 
         # 5 kg: precio_domicilio 8500 → tope de descuento 4250 por unidad.
-        cls.balon_5 = TipoBalon.objects.create(
-            nombre='Balón 5 kg', peso_neto_gas=5, tipo_gas='normal',
-            precio_compra=4000, precio_local=7000, precio_domicilio=8500, activo=True,
-        )
+        cls.balon_5 = crear_balon_5kg()
 
     def _crear_pedido(self, *, estado='pendiente', entregador=None, con_descuento=0, cantidad=2):
-        pedido = Pedido.objects.create(
+        return crear_pedido(
             registrador=self.telefonista,
             entregador=entregador,
-            origen='telefono',
             estado=estado,
-            metodo_pago='efectivo',
+            origen='telefono',
+            lineas=[(self.balon_5, cantidad, con_descuento)],
         )
-        DetallePedido.objects.create(
-            pedido=pedido,
-            balon=self.balon_5,
-            cantidad=cantidad,
-            precio_venta_unitario=self.balon_5.precio_domicilio,
-            precio_compra_unitario=self.balon_5.precio_compra,
-            descuento_unitario=con_descuento,
-        )
-        pedido.calcular_totales()
-        pedido.refresh_from_db()
-        return pedido
 
 
 class DescuentoTotalesTests(FixturesMixin, TestCase):

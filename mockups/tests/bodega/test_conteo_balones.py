@@ -1,4 +1,8 @@
-"""Tests del conteo diario de balones (sección del bodeguero)."""
+"""Tests del conteo diario de balones (sección del bodeguero).
+
+Ejecutar:
+    python manage.py test mockups.tests.bodega.test_conteo_balones -v 2
+"""
 
 import re
 from datetime import timedelta
@@ -9,26 +13,21 @@ from django.urls import reverse
 from mockups.models import (
     AuditoriaAccion,
     ConteoDiarioBalon,
-    LineaConteoBalon,
     TipoBalon,
-    Usuario,
 )
 from mockups.services.conteo import (
     es_editable,
     obtener_o_crear_conteo,
     saldos_iniciales,
 )
+from mockups.tests.base import crear_usuario
 from mockups.utils.fechas import today_chile
 
 
 class BaseConteoTest(TestCase):
     def setUp(self):
-        self.bodeguero = Usuario.objects.create_user(
-            username='bode', password='Clave.Segura.123', rol='bodeguero'
-        )
-        self.camionero = Usuario.objects.create_user(
-            username='cam', password='Clave.Segura.123', rol='camionero'
-        )
+        self.bodeguero = crear_usuario('bodeguero', 'bode', password='Clave.Segura.123')
+        self.camionero = crear_usuario('camionero', 'cam', password='Clave.Segura.123')
         self.b15 = TipoBalon.objects.create(nombre='Gas 15 kg', peso_neto_gas=15)
         self.b5 = TipoBalon.objects.create(nombre='Gas 5 kg', peso_neto_gas=5)
         self.b_inactivo = TipoBalon.objects.create(
