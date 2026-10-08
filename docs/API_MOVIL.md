@@ -33,8 +33,8 @@ Tomadas de `docs/PLAN_AUDITORIA_OPERATIVA.md` §3. Aplican también a este traba
   `0033_pedido_descuento_linea_y_devolucion` y `0034_conteo_diario_balones`; la migración de idempotencia
   (§6.2) se agrega **como nueva**, al final.
 - **No** editar `mockups/views_monolith_backup.py`, `backups/*.sql`, `logs/*`, `graphify-out/`.
-- **No** modificar los tests existentes (`mockups/tests.py`, `mockups/tests_logica_negocio.py`, y los
-  demás `tests_*.py` del app). Si hacen falta tests nuevos, van en archivo aparte.
+- **No** modificar los tests existentes (`mockups/tests/`, agrupados por dominio). Si hacen falta
+  tests nuevos, van en el subpaquete que corresponda.
 - **No** tocar autenticación, 2FA, `AXES_*`, `SECRET_KEY`, `VAPID_*`, `CSRF_*`, `ALLOWED_HOSTS` ni las
   cabeceras de seguridad (`mockups/middleware.py`).
 - **No** debilitar el CSP.
@@ -61,7 +61,7 @@ mockups/
     ├── limites.py            ← control de abuso, ventana fija (§6.4)           [F1 ✔]
     ├── serializadores.py     ← modelos → JSON del §7.2                         [F1 ✔]
     ├── auth.py               ← csrf / login / logout / perfil                 [F1 ✔]
-    ├── entregas.py           ← listado [F1 ✔] y las 4 acciones [F2]
+    ├── entregas.py           ← listado [F1 ✔], las 4 acciones [F2] y editar pedido [especificado, §7.6]
     ├── idempotencia.py       ← decorador + modelo de la §6.2                 [pendiente]
     ├── tarreo.py             ← venta tarreo                                  [F4 ✔]
     ├── historial.py          ← resumen del día, del mes y detalle de un día  [F6 ✔]
@@ -126,6 +126,7 @@ POST   /api/v1/entregas/<id>/tomar/      ← F2
 POST   /api/v1/entregas/<id>/entregar/   ← F2
 POST   /api/v1/entregas/<id>/cancelar/   ← F2
 POST   /api/v1/entregas/<id>/devolver/   ← F2
+POST   /api/v1/entregas/<id>/editar/     ← PENDIENTE: especificado en §7.6, NO implementado
 
 GET    /api/v1/resumen-hoy/                             ← F6 ✔
 POST   /api/v1/tarreo/                                  ← F4
@@ -138,7 +139,7 @@ GET    /api/v1/version/                                 ← F1
 Fases: **F1** = `auth/*`, `entregas/` (GET) y `version/`. **F2** = las cuatro acciones.
 **F4** = `tarreo/`, `balones/`. **F6** = `resumen-hoy/`, `historial/*`.
 
-**Estado: F1, F2, F4 y F6 implementados y probados** (`mockups/api/`, suite en `mockups/tests_api_movil.py`).
+**Estado: F1, F2, F4 y F6 implementados y probados** (`mockups/api/`, suite en `mockups/tests/api/test_movil.py`).
 Queda la idempotencia con `Idempotency-Key` (§8): es aditiva, pero necesita una migración.
 
 ---
@@ -423,6 +424,11 @@ Detalles que **no** se pueden omitir:
    web" y "`select_for_update` en las cuatro" son incompatibles. La API lo implementa igual (es aditivo y no
    cambia la web), pero queda **pendiente decidir** si se endurece también la vista web — §10.
 2. `Pedido.DoesNotExist` → `409 no_disponible` y log de seguridad, **no** un 500.
+   Esto cubre **también** el caso "el pedido es de otro camionero", y es deliberado: el filtro de
+   propiedad va dentro del `select_for_update().get()`, así que el endpoint no puede distinguir
+   "no es tuyo" de "ya no está disponible". Devolver `403` ahí permitiría **enumerar pedidos
+   ajenos** por diferencia de código. La fila `403` del §5.2 ("el pedido no le pertenece") **no
+   aplica** a las cuatro acciones; sí a rutas como `/entregas/` (rol incorrecto).
 3. `/devolver/` además **re-notifica** a los demás camioneros:
    ```python
    from mockups.push_notifications import notificar_nuevo_pedido
@@ -462,7 +468,16 @@ Reglas, iguales que en la web:
   solo afecta al endpoint nuevo; conviene reflejarla también en la web en una tarea aparte.
 - **Sin descuentos.** El camionero no está en `ROLES_CON_DESCUENTO`: si llega `descuento_unitario`
   en el payload, se **ignora** (misma regla que `DetallePedidoForm._configurar_campo_descuento()`).
-- El `Idempotency-Key` reemplaza al `form_token` de sesión que usa la web.
+- El `Idempotency-Key` reemplaza al `form_token` de sesión que usa la web. **Todavía no está
+  implementado** (§6.2): hoy **un reintento duplica la venta**. Está fijado con un test que lo
+  documenta — §10 #12.
+- **Nota de revisión — validación más estricta que la web.** `balon_id` y `cantidad` exigen
+  **entero limpio**: se rechaza `2.9` (que `int()` truncaría a 2, vendiendo otro balón) y `true`
+  (que `int()` convertiría en 1). Se aceptan strings de dígitos porque la web manda texto de
+  formulario. Además hay un tope de **1000 unidades por balón**, contando líneas repetidas: sin
+  él, `monto_total` desborda `DecimalField(max_digits=12)` y el cliente provoca un error de base
+  desde afuera — o sea un 500 pedido por el cliente, que es lo que la prueba reproducía como
+  `decimal.InvalidOperation`.
 
 Detalles que la web no necesita y la API sí fija:
 
@@ -507,6 +522,13 @@ Objeto `Usuario` (identidad, sin secretos):
 `{"id", "username", "nombre", "rol", "rol_etiqueta", "totp_activo"}`. Nunca incluye `password`,
 `totp_secret` ni permisos internos; hay un test que lo fija.
 
+**Nota de revisión — `?mes=` con un año absurdo devolvía 500.** `calendar.monthrange()` levanta
+`ValueError` con un año fuera de rango, así que `?mes=999999-01` reventaba. Se acotó el año en
+`utils/fechas.parse_mes_param` (2000–2100), lo que además **corrige el mismo 500 en
+`/entregas/historial/` de la web** (ahí ahora cae al mes actual, que es lo que ya hacía con un mes
+mal formado). Y en `historial_dia` se exige el formato `AAAA-MM-DD` exacto: `strptime` es laxo y
+aceptaba `2026-1-1`.
+
 `/auth/perfil/` **no** filtra por rol (es el arranque de identidad, no un dato de negocio); los endpoints
 de negocio sí exigen `['camionero']`. `/version/` sí exige sesión: sin ella cualquiera podría sondear la
 ruta de distribución del APK.
@@ -518,13 +540,81 @@ tolerar `null` hasta que se defina el hosting (release de GitHub, S3 u otro) —
 
 ---
 
+### 7.6 `POST /api/v1/entregas/<id>/editar/` — editar un pedido en ruta
+
+**Estado: especificado, NO implementado.** Falta el endpoint y el botón en la app: hoy el botón existe y
+solo muestra un aviso. Esta sección es el traspaso completo para quien lo implemente.
+
+**Referencia web** (verificada el 2026-10-07):
+- vista `mockups/views/pedidos.py` → `editar_pedido` (l. 193)
+- formulario `templates/pedidos/editar_pedido.html`
+- botón `templates/partials/_entregas_cards.html` (l. 70) → `{% url 'pedidos_editar' pedido.id %}`
+
+En la web el mismo formulario sirve a cinco roles. El API implementa **solo la rama del camionero**:
+`entregador == request.user` **y** `estado == 'en_ruta'`. El resto (telefonista, bodeguero, jefe/admin) queda
+en la web.
+
+```json
+{
+  "metodo_pago": "efectivo",
+  "sector": "Población Recreo",
+  "direccion_entrega": "Los Aromos 1234, casa esquina",
+  "lineas": [
+    {"balon_id": 2, "cantidad": 3}
+  ]
+}
+```
+
+Reglas, todas tomadas de la vista web:
+
+1. **`lineas` reemplaza** a las del pedido: es lo que hace el formset (guarda lo enviado y borra lo marcado
+   para eliminar). Un `balon_id` fuera del catálogo activo → `400 validacion`.
+2. **Los precios se re-escriben desde el catálogo**, no se conservan: `precio_venta_unitario =
+   balon.precio_domicilio` y `precio_compra_unitario = balon.precio_compra`. Editar **reprecia** el pedido a
+   los valores vigentes, igual que la web.
+3. **Sin descuentos.** El camionero no está en `ROLES_CON_DESCUENTO`: en la web el campo se elimina del
+   formulario. Acá se **ignora** cualquier `descuento_unitario` del payload y **se conserva** el que la línea
+   ya tuviera (la web no lo pisa justamente porque el campo no viaja).
+4. **Al final `calcular_totales()`**, como en el tarreo: `monto_total`, `ganancia_total` y
+   `descuento_total` quedan consistentes.
+5. `transaction.atomic()` + `select_for_update()`, como las cuatro acciones del §7.3.
+6. **Historial y auditoría solo si algo cambió**, comparando método de pago, sector, dirección, líneas (con
+   su descuento) y estado antes/después:
+   - `HistorialCambioPedido` con el resumen de los cambios, y
+   - `AuditoriaAccion(tipo='PEDIDO_UPDATE')` con `datos_anteriores` / `datos_nuevos`.
+   Si además cambió el descuento total: `AuditoriaAccion(tipo='PEDIDO_DESCUENTO')`.
+   **No** se escribe `HistorialEstadoPedido`: el estado no cambia.
+7. Respuesta `200` con `{"data": {"pedido": Pedido}}`: el objeto del §7.2 ya recalculado.
+8. Errores: `409 conflicto_estado` si el pedido no está `en_ruta`, `403 sin_permiso` si es de otro camionero,
+   `404 no_encontrado` si no existe y `400 validacion` si el payload está mal formado.
+
+**Decisiones del dueño antes de implementarlo:**
+
+| # | Pregunta | Por qué importa |
+|---|---|---|
+| 1 | ¿Se permite dejar el pedido **sin líneas**? | La web no lo impide y quedaría con monto 0. Lo razonable es `400 validacion` y mandarlo a cancelar |
+| 2 | ¿El camionero puede cambiar **sector** y **dirección**? | La web sí lo permite; en la calle puede tener sentido corregir la dirección |
+| 3 | Al guardar, la app ¿vuelve al inicio (como el tarreo) o a "Entregas Pendientes" (como la web)? | Coherencia con lo ya decidido |
+
+**Pruebas mínimas** (en `mockups/tests_api_movil.py`): sin sesión → `401`; rol incorrecto → `403`; pedido de
+otro camionero → `403`; pedido `entregado` o `pendiente` → `409`; `descuento_unitario` en el payload →
+ignorado; precios re-escritos desde el catálogo; totales coherentes tras `calcular_totales()`; deja
+`HistorialCambioPedido` + `AuditoriaAccion`; **sin cambios reales → no deja historial**.
+
+**En la app:** `lib/screens/entregas_screen.dart` ya muestra el botón "Editar Pedido" con un aviso. Hay que
+reemplazarlo por una pantalla de edición espejo de `editar_pedido.html` (método de pago, líneas con
+cantidades, sector y dirección) y, al guardar, recargar `ControladorEntregas`.
+
+---
+
 ## 8. Testing
 
-- **Archivo nuevo:** `mockups/tests_api_movil.py`. **No** tocar los tests existentes.
-- `django.test.TestCase` + `self.client` (ver `mockups/tests_logica_negocio.py` como referencia).
+- **Archivo:** `mockups/tests/api/test_movil.py`. **No** tocar los tests existentes.
+- `django.test.TestCase` + `self.client` (ver `mockups/tests/pedidos/test_logica_negocio.py` como referencia).
 - **`Client(enforce_csrf_checks=True)`** es obligatorio para probar CSRF: el cliente de tests lo omite por
   defecto. Y `secure=True` para ejercitar la rama HTTPS de Django.
-- Estado: **78 tests en `mockups/tests_api_movil.py`, todos en verde** (F1 + F2 + F4 + F6).
+- Estado: **78 tests en `mockups/tests/api/test_movil.py`, todos en verde** (F1 + F2 + F4 + F6), más
+  **45 de seguridad** en `mockups/tests/api/test_seguridad.py` (§8.1). Suite completa del app: 252 OK.
 - Mínimo exigido antes de dar un endpoint por terminado:
 
 | Caso | Se espera |
@@ -532,7 +622,7 @@ tolerar `null` hasta que se defina el hosting (release de GitHub, S3 u otro) —
 | Sin sesión | `401 no_autenticado` |
 | Sesión de `telefonista` o `bodeguero` | `403 sin_permiso` (y `PERM_DENIED` auditado) |
 | Cuerpo de ese `403` | Sobre del §5.2 (`servidor_ahora` + `error.codigo`), **no** el `{"error": "No autorizado"}` del helper |
-| Camionero A intenta operar un pedido del camionero B | `403 sin_permiso` |
+| Camionero A intenta operar un pedido del camionero B | `409 no_disponible`, **sin mutación** (ver la nota en §7.3) |
 | `tomar` un pedido ya tomado | `409 no_disponible` |
 | `entregar` un pedido `pendiente` | `409 conflicto_estado` |
 | Mismo `Idempotency-Key` dos veces | Una sola escritura; la segunda devuelve la respuesta guardada |
@@ -554,7 +644,27 @@ tolerar `null` hasta que se defina el hosting (release de GitHub, S3 u otro) —
 | Intento de login fallido | Ni la base (`AccessAttempt`) ni los logs guardan la contraseña |
 | Listado con más pedidos | El número de consultas **no** crece (detector de N+1) |
 
-Comando: `python manage.py test mockups.tests_api_movil -v 2`
+Comando: `python manage.py test mockups.tests.api.test_movil -v 2`
+
+### 8.1 Suite de seguridad: `mockups/tests/api/test_seguridad.py`
+
+Archivo aparte, porque ataca el **borde del request** y no la funcionalidad. Se apoya en
+**matrices**: la lista `RUTAS_PRIVADAS` se recorre entera contra cada condición, así que una ruta
+nueva que quede sin protección hace fallar los tests aunque nadie se acuerde de agregarla.
+
+| Pregunta | Cómo se comprueba |
+|---|---|
+| ¿Cuenta válida? | Toda ruta privada sin sesión → `401` con sobre; `is_active=False` a mitad de sesión → `401` al instante; usuario borrado → `401` |
+| ¿Sesión sana? | `logout` mata la sesión **en el servidor** (la cookie vieja deja de servir); el login rota el identificador (anti-*fixation*); la cookie es `HttpOnly` + `SameSite` y **no** aparece en el cuerpo |
+| ¿Permisos? | Matriz de 4 roles no-camionero × 10 rutas de negocio → `403`; cambio de rol en caliente → `403` inmediato; las 4 acciones sobre un pedido ajeno → `409` **sin mutación** |
+| ¿CSRF? | Todo mutador sin `X-CSRFToken` → `403` (ninguno quedó `csrf_exempt` por descuido) |
+| ¿Límites? | Las 4 acciones **comparten** un cubo (no se multiplica el cupo alternándolas); rotar `X-Forwarded-For` **no** evade el límite; el cubo es por usuario, no por IP |
+| ¿Entrada? | `?mes=` absurdo → `400` (no `500`); fecha laxa → `400`; `balon_id` decimal o booleano → `400`; cantidad desmedida → `400` (no error de base); precio y descuento inyectados → se ignoran |
+| ¿Fuga? | Ningún error del sobre contiene `Traceback`, `SELECT`, `mockups_`, `sqlite`, `django.`, `SECRET_KEY` ni `File "` |
+
+Dos tests llevan `documenta_` en el nombre y **fijan el comportamiento actual de un hueco
+conocido** (el 500 en HTML y la falta de idempotencia). Cuando se corrijan, esos tests fallan y
+obligan a actualizarlos: es a propósito, para que el hueco no se esconda detrás de un decorador.
 
 ---
 
@@ -562,7 +672,7 @@ Comando: `python manage.py test mockups.tests_api_movil -v 2`
 
 | Repo | Qué cambia | Cuándo |
 |---|---|---|
-| `gas_project` | El paquete `mockups/api/`, la línea en `gasmanager/urls.py`, la tabla de idempotencia (migración nueva) y `mockups/tests_api_movil.py` | F1, F2, F4 |
+| `gas_project` | El paquete `mockups/api/`, la línea en `gasmanager/urls.py`, la tabla de idempotencia (migración nueva) y `mockups/tests/api/test_movil.py` | F1, F2, F4 |
 | `gas_facil_movil` | La capa `data/` de Flutter: reemplazar `DatosMock` por un repositorio que consuma `/api/v1/`. Las pantallas no cambian | F1 |
 
 Orden recomendado: **primero la API, después el cliente.** Cada endpoint se prueba con
@@ -591,3 +701,8 @@ rompe**. Si hiciera falta un cambio incompatible, se agrega `/api/v2/` y la app 
 | 9 | **`get_client_ip()` confía en `X-Forwarded-For`** (`utils/permisos.py:25`, y `AuditoriaAccion.registrar` hace lo mismo). Si el proxy no sobreescribe esa cabecera, se puede **envenenar la IP de auditoría**. Es un riesgo preexistente del proyecto, no del API; el limitador **no** la usa como clave | Abierto (Dueño). Verificar cómo la fija Render |
 | 10 | **Oráculo de 2FA:** `202 requiere_2fa` solo se responde cuando la contraseña era correcta, así que confirma que la clave es válida. Decisión consciente (contrato del §6.1); si molesta, se debe responder siempre `202` para usuarios con 2FA activo | Decidido |
 | 11 | **Llevar `calcular_totales()` a `tarreo_pedido` de la web** (§7.4): hoy la venta en la calle se guarda con `ganancia_total` y `descuento_total` en 0, así que el margen del tarreo no cuadra en los reportes | Abierto (Dueño). El API ya lo calcula; la web no cambia por ahora |
+| 12 | **Falta la idempotencia del §6.2.** Ningún mutador exige `Idempotency-Key`, así que **reintentar `/tarreo/` duplica la venta** (la web se protege con `form_token`). Es el hueco más caro: la app encola acciones offline y reintenta **por diseño** | **Abierto y prioritario.** Necesita migración (`0035`) y el comando `purgar_idempotencia` |
+| 13 | **El 500 no usa el sobre:** un error interno sale como HTML de Django, así que la app recibe algo que no es JSON. Cerrarlo pide un `handler500` propio para `/api/v1/` | Abierto (Dueño). Fijado con un test que lo documenta |
+| 14 | **`django-axes` bloquea por IP, no por usuario** (`AXES_LOCKOUT_PARAMETERS = ['ip_address']`, porque el proyecto no configura los flags legacy). En móvil es grave: los operadores usan **CGNAT**, así que 5 fallos de **cualquier** usuario detrás de esa IP dejan fuera a **todos** los camioneros de esa IP durante 1 hora. Alternativa: `AXES_LOCKOUT_PARAMETERS = [['username', 'ip_address']]` (toca `AXES_*`, prohibido por §2) | Abierto (Dueño). Decisión de seguridad vs disponibilidad |
+| 15 | **`admin` no puede usar la app:** el API exige `['camionero']` y la web deja entrar a `camionero` **y** `admin` a `camionero_entregas`. Queda probado que es a propósito | Decidido (más estricto). Revisar si molesta en la operación |
+| 16 | **Cambiar la contraseña no invalida las otras sesiones abiertas.** Django solo mantiene viva la sesión que hizo el cambio (`update_session_auth_hash`). Con sesiones de 48 h (`SESSION_COOKIE_AGE`), un teléfono perdido sigue dentro hasta dos días | Abierto (Dueño) |
