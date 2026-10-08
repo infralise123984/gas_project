@@ -596,10 +596,12 @@ Reglas, todas tomadas de la vista web:
 | 2 | ¿El camionero puede cambiar **sector** y **dirección**? | La web sí lo permite; en la calle puede tener sentido corregir la dirección |
 | 3 | Al guardar, la app ¿vuelve al inicio (como el tarreo) o a "Entregas Pendientes" (como la web)? | Coherencia con lo ya decidido |
 
-**Pruebas mínimas** (en `mockups/tests_api_movil.py`): sin sesión → `401`; rol incorrecto → `403`; pedido de
-otro camionero → `403`; pedido `entregado` o `pendiente` → `409`; `descuento_unitario` en el payload →
-ignorado; precios re-escritos desde el catálogo; totales coherentes tras `calcular_totales()`; deja
-`HistorialCambioPedido` + `AuditoriaAccion`; **sin cambios reales → no deja historial**.
+**Pruebas mínimas** (en `mockups/tests/api/`, reusando las fábricas de `mockups/tests/base.py` —
+`crear_usuario`, `crear_balon_11kg`, `crear_pedido`— en vez de repetir fixtures): sin sesión → `401`; rol
+incorrecto → `403`; pedido de otro camionero → `403`; pedido `entregado` o `pendiente` → `409`;
+`descuento_unitario` en el payload → ignorado; precios re-escritos desde el catálogo; totales coherentes tras
+`calcular_totales()`; deja `HistorialCambioPedido` + `AuditoriaAccion`; **sin cambios reales → no deja
+historial**.
 
 **En la app:** `lib/screens/entregas_screen.dart` ya muestra el botón "Editar Pedido" con un aviso. Hay que
 reemplazarlo por una pantalla de edición espejo de `editar_pedido.html` (método de pago, líneas con
