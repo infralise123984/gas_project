@@ -13,6 +13,13 @@ MESES_ES_CAMIONERO = (
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 )
 
+# Rango aceptado para ?mes= / ?fecha=. Sin cota de año, `calendar.monthrange()`
+# levanta ValueError y eso terminaba en un 500 con `?mes=999999-01`, tanto en
+# /entregas/historial/ de la web como en /api/v1/historial/. La empresa no tiene
+# datos fuera de este rango.
+ANIO_MINIMO_HISTORIAL = 2000
+ANIO_MAXIMO_HISTORIAL = 2100
+
 
 def now_chile():
     """Hora actual en America/Santiago."""
@@ -52,6 +59,8 @@ def parse_mes_param(request, default_hoy=True):
             anio = int(partes[0])
             mes = int(partes[1])
             if mes < 1 or mes > 12:
+                raise ValueError
+            if not ANIO_MINIMO_HISTORIAL <= anio <= ANIO_MAXIMO_HISTORIAL:
                 raise ValueError
             return anio, mes
         except (ValueError, IndexError):
