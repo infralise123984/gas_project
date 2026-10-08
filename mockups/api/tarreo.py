@@ -46,6 +46,30 @@ METODOS_PAGO = tuple(
     valor for valor, _ in Pedido._meta.get_field('metodo_pago').choices
 )
 
+# Tope de seguridad, no regla de negocio: un camión carga decenas de balones, así
+# que mil por balón solo puede venir de un cliente roto o de un abuso. Sin tope,
+# `monto_total` desborda `DecimalField(max_digits=12)` y el usuario provoca un
+# error de base desde afuera (`decimal.InvalidOperation` en SQLite, error de
+# rango en MySQL): un 500 pedido por el cliente.
+MAX_CANTIDAD_POR_BALON = 1000
+
+
+def _entero_estricto(valor):
+    """Convierte a entero sin aceptar lo que `int()` acepta de más.
+
+    `int(2.9)` da 2 y `int(True)` da 1: quedarse con eso significa vender otro
+    balón (o una cantidad distinta) del que se pidió, en vez de rechazar la
+    petición. Devuelve ``None`` si no es un entero limpio. Se aceptan strings de
+    dígitos porque la web manda texto (viene de un formulario).
+    """
+    if isinstance(valor, bool):
+        return None
+    if isinstance(valor, int):
+        return valor
+    if isinstance(valor, str) and valor.strip().isdigit():
+        return int(valor.strip())
+    return None
+
 
 def _parsear_lineas(lineas):
     """Valida la forma de ``lineas`` y devuelve ``(cantidades, None)``.
@@ -65,18 +89,34 @@ def _parsear_lineas(lineas):
         if not isinstance(linea, dict):
             return None, respuestas.error('validacion')
 
-        try:
-            balon_id = int(linea.get('balon_id'))
-            cantidad = int(linea.get('cantidad', 0))
-        except (TypeError, ValueError):
-            return None, respuestas.error('validacion')
+        balon_id = _entero_estricto(linea.get('balon_id'))
+        if balon_id is None or balon_id < 1:
+            return None, respuestas.error(
+                'validacion', mensaje='Uno de los balones no es válido.'
+            )
+
+        # Una línea sin `cantidad` equivale a cero, igual que en la web (campo
+        # ausente en el formulario). Un valor que no es entero sí es un error.
+        cantidad_cruda = linea.get('cantidad', 0)
+        cantidad = 0 if cantidad_cruda is None else _entero_estricto(cantidad_cruda)
+        if cantidad is None:
+            return None, respuestas.error(
+                'validacion', mensaje='Las cantidades deben ser números enteros.'
+            )
 
         if cantidad <= 0:
             # Igual que la web: una línea en cero no es un error, simplemente no
             # se guarda. Si ninguna línea trae cantidad, se rechaza más abajo.
             continue
 
+        # El tope se aplica a la SUMA por balón: repetir líneas del mismo balón
+        # es válido (solo puede venir de la app), pero no sirve para saltarse el
+        # límite troceando la cantidad.
         cantidades[balon_id] = cantidades.get(balon_id, 0) + cantidad
+        if cantidades[balon_id] > MAX_CANTIDAD_POR_BALON:
+            return None, respuestas.error(
+                'validacion', mensaje='Una de las cantidades es demasiado alta.'
+            )
 
     if not cantidades:
         return None, respuestas.error(

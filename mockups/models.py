@@ -927,3 +927,40 @@ class AuditoriaAccion(models.Model):
         
         registro.save()
         return registro
+
+
+class UbicacionCamion(models.Model):
+    """Una muestra de posición del camionero (docs/API_MOVIL.md §7.6).
+
+    Vive **24 horas**: se poda en el propio endpoint de ingesta. No hay
+    histórico acumulativo ni forma de reconstruir días anteriores, que es el
+    argumento de minimización más fuerte del diseño (§6 del plan móvil).
+
+    Este modelo no se relaciona con `Pedido` ni con `SobreDiario`: no cambia
+    ningún estado del negocio, solo guarda muestras."""
+
+    trabajador = models.ForeignKey(
+        Usuario, on_delete=models.CASCADE, related_name="ubicaciones",
+        verbose_name="Camionero"
+    )
+    lat = models.DecimalField(max_digits=9, decimal_places=6, verbose_name="Latitud")
+    lng = models.DecimalField(max_digits=9, decimal_places=6, verbose_name="Longitud")
+    precision_m = models.FloatField(null=True, blank=True, verbose_name="Precisión (m)")
+    velocidad = models.FloatField(null=True, blank=True, verbose_name="Velocidad (m/s)")
+    bateria = models.PositiveSmallIntegerField(
+        null=True, blank=True, verbose_name="Batería (%)"
+    )
+    capturado_el = models.DateTimeField(verbose_name="Capturada el")
+    recibido_el = models.DateTimeField(auto_now_add=True, verbose_name="Recibida el")
+
+    class Meta:
+        verbose_name = "Ubicación del camión"
+        verbose_name_plural = "Ubicaciones del camión"
+        ordering = ["-capturado_el"]
+        indexes = [models.Index(fields=["trabajador", "capturado_el"])]
+
+    def __str__(self):
+        return (
+            f"{self.trabajador_id} · {self.lat},{self.lng} · "
+            f"{self.capturado_el:%d/%m %H:%M}"
+        )

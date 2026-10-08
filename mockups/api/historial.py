@@ -13,6 +13,7 @@ estrecho que el del listado.
 """
 
 import logging
+import re
 from calendar import monthrange
 from datetime import datetime
 
@@ -141,6 +142,11 @@ def historial_mes(request):
     )
 
 
+# El contrato dice AAAA-MM-DD exacto. `strptime` es laxo y aceptaría tanto
+# '2026-1-1' como '26-10-07', así que la forma se comprueba antes.
+FORMATO_FECHA = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
 @never_cache
 @acceso_api(ROLES_CAMIONERO)
 @limitar('historial', **LIMITE_HISTORIAL)
@@ -151,6 +157,11 @@ def historial_dia(request, fecha):
     ``kilos``: la web arma un resumen aparte porque su plantilla no los calcula,
     la app no necesita ese envoltorio.
     """
+    if not FORMATO_FECHA.match(fecha):
+        return respuestas.error(
+            'validacion', mensaje='La fecha debe venir como AAAA-MM-DD.'
+        )
+
     try:
         fecha_dia = datetime.strptime(fecha, '%Y-%m-%d').date()
     except ValueError:
