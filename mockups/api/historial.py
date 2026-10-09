@@ -35,17 +35,14 @@ from mockups.utils.fechas import (
     today_chile,
 )
 
-# Lectura barata: una sola pasada por la actividad del día.
-LIMITE_RESUMEN = {'peticiones': 60, 'ventana_segundos': 60}
-
-# El historial de un mes recorre el mes entero día por día: es la consulta más
-# cara del API, así que va la mitad de estrecha que las acciones.
-LIMITE_HISTORIAL = {'peticiones': 20, 'ventana_segundos': 60}
+# Los cupos viven en `limites.POLITICA` (tabla única, publicada en el §6.4):
+# `resumen_hoy` es una pasada por la actividad del día y `historial` es la
+# consulta más cara del API (recorre el mes entero día por día).
 
 
 @never_cache
 @acceso_api(ROLES_CAMIONERO)
-@limitar('resumen_hoy', **LIMITE_RESUMEN)
+@limitar('resumen_hoy')
 def resumen_hoy(request):
     """Totales y actividad del día del camionero (§7.5).
 
@@ -85,7 +82,7 @@ def _fila_dia(fecha_dia, hoy, datos):
 
 @never_cache
 @acceso_api(ROLES_CAMIONERO)
-@limitar('historial', **LIMITE_HISTORIAL)
+@limitar('historial')
 def historial_mes(request):
     """Resumen del mes, día por día, en orden descendente (§7.5).
 
@@ -149,7 +146,7 @@ FORMATO_FECHA = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 @never_cache
 @acceso_api(ROLES_CAMIONERO)
-@limitar('historial', **LIMITE_HISTORIAL)
+@limitar('historial')
 def historial_dia(request, fecha):
     """Detalle de las ventas de un día, con sus pedidos entregados (§7.5).
 

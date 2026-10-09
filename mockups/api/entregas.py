@@ -28,16 +28,14 @@ from mockups.utils.permisos import get_client_ip
 security_logger = logging.getLogger('security')
 audit_logger = logging.getLogger('audit')
 
-# Se aplica después de acceso_api: el límite siempre cuenta a un usuario real.
-LIMITE_ENTREGAS = {'peticiones': 60, 'ventana_segundos': 60}
-
-# Las acciones mueven estado y dinero: límite más estrecho que el del listado.
-LIMITE_ACCIONES = {'peticiones': 30, 'ventana_segundos': 60}
+# Los cupos viven en `limites.POLITICA` (tabla única, publicada en el §6.4): acá
+# solo se nombra el alcance. Se aplican después de ``acceso_api``, así que el
+# límite siempre cuenta a un usuario real.
 
 
 @never_cache
 @acceso_api(ROLES_CAMIONERO)
-@limitar('entregas', **LIMITE_ENTREGAS)
+@limitar('entregas')
 def listar_entregas(request):
     """Réplica de las tres consultas de ``camionero_entregas``, sin reinterpretarlas.
 
@@ -138,7 +136,7 @@ def _no_disponible(request, pedido_id, accion):
 @never_cache
 @solo_post
 @acceso_api(ROLES_CAMIONERO)
-@limitar('acciones_entregas', **LIMITE_ACCIONES)
+@limitar('acciones_entregas')
 def tomar_pedido(request, pedido_id):
     """`pendiente` → `en_ruta`, asignado a quien lo toma (§7.3)."""
     try:
@@ -181,7 +179,7 @@ def tomar_pedido(request, pedido_id):
 @never_cache
 @solo_post
 @acceso_api(ROLES_CAMIONERO)
-@limitar('acciones_entregas', **LIMITE_ACCIONES)
+@limitar('acciones_entregas')
 def entregar_pedido(request, pedido_id):
     """`en_ruta` propio → `entregado` (§7.3)."""
     try:
@@ -227,7 +225,7 @@ def entregar_pedido(request, pedido_id):
 @never_cache
 @solo_post
 @acceso_api(ROLES_CAMIONERO)
-@limitar('acciones_entregas', **LIMITE_ACCIONES)
+@limitar('acciones_entregas')
 def cancelar_pedido(request, pedido_id):
     """`en_ruta` propio → `cancelado`, conservando el entregador (§7.3).
 
@@ -285,7 +283,7 @@ def cancelar_pedido(request, pedido_id):
 @never_cache
 @solo_post
 @acceso_api(ROLES_CAMIONERO)
-@limitar('acciones_entregas', **LIMITE_ACCIONES)
+@limitar('acciones_entregas')
 def devolver_pedido(request, pedido_id):
     """`en_ruta` propio → `pendiente` otra vez en el pool, y re-notifica (§7.3)."""
     try:
@@ -348,12 +346,16 @@ def devolver_pedido(request, pedido_id):
     # la fila. Si falla, el pedido ya volvió al pool igual; se registra y no se
     # propaga, porque la notificación no es parte del resultado de la acción.
     try:
-        from mockups.push_notifications import notificar_nuevo_pedido
+        from mockups.notificaciones_pedidos import notificar_pedido_disponible
 
-        notificar_nuevo_pedido(
+        notificar_pedido_disponible(
             pedido,
             excluir_usuario_id=request.user.id,
             title='🚚 ¡Pedido disponible!',
+            motivo='API_PEDIDO_DEVOLVER',
+            # El API registra sus fallos de push en el logger de seguridad, como
+            # antes de tener dos canales.
+            logger_fallo=security_logger,
         )
     except Exception as error:
         security_logger.warning(

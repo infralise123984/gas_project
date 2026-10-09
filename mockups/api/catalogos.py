@@ -18,7 +18,7 @@ URL_APK = None
 
 @never_cache
 @acceso_api()
-@limitar('version', peticiones=10, ventana_segundos=60)
+@limitar('version')
 def version_api(request):
     """Versión mínima exigida y origen del APK.
 
@@ -29,7 +29,7 @@ def version_api(request):
 
 @never_cache
 @acceso_api(ROLES_CAMIONERO)
-@limitar('balones', peticiones=60, ventana_segundos=60)
+@limitar('balones')
 def listar_balones(request):
     """Catálogo vigente para la venta en la calle (§7.5).
 

@@ -964,3 +964,54 @@ class UbicacionCamion(models.Model):
             f"{self.trabajador_id} · {self.lat},{self.lng} · "
             f"{self.capturado_el:%d/%m %H:%M}"
         )
+
+
+# ──────────────────────────────────────────────────────────────
+# DISPOSITIVOS CON NOTIFICACIONES DE LA APP NATIVA (FCM)
+# ──────────────────────────────────────────────────────────────
+class DispositivoPush(models.Model):
+    """Un teléfono suscrito a los avisos de la app nativa (docs/API_MOVIL.md §7.7).
+
+    Convive con `PushSubscription` (Web Push de la PWA): son dos canales
+    distintos y **no** se pisan. La PWA del camionero sigue con Web Push
+    intacto (D-2 del plan móvil).
+
+    El `token` es una credencial de envío: permite hacerle llegar avisos a ese
+    teléfono. **Nunca** se registra completo en logs ni se devuelve al cliente.
+    No se puede hashear —hay que mandarlo literal a FCM— y por eso se guarda en
+    claro: es una capacidad de un dispositivo, no una contraseña de usuario.
+
+    `unique=True` en `token` (y no `unique_together` con `usuario`) porque el
+    mismo teléfono puede pasar de un camionero a otro: al registrarse, el token
+    se reasigna al usuario nuevo en vez de duplicar la fila."""
+
+    usuario = models.ForeignKey(
+        Usuario, on_delete=models.CASCADE, related_name="dispositivos_push",
+        verbose_name="Camionero"
+    )
+    token = models.CharField(
+        max_length=255, unique=True, verbose_name="Token FCM",
+        help_text="Identificador del dispositivo que entrega Firebase (nunca se registra en logs)"
+    )
+    plataforma = models.CharField(
+        max_length=16, default="android", choices=[("android", "Android")],
+        verbose_name="Plataforma"
+    )
+    app_version = models.CharField(
+        max_length=32, blank=True, default="", verbose_name="Versión de la app"
+    )
+    activa = models.BooleanField(
+        default=True, verbose_name="Activa",
+        help_text="Se desactiva cuando FCM responde que el token ya no existe"
+    )
+    creado_el = models.DateTimeField(auto_now_add=True, verbose_name="Registrado el")
+    actualizado_el = models.DateTimeField(auto_now=True, verbose_name="Última actualización")
+
+    class Meta:
+        verbose_name = "Dispositivo con notificaciones"
+        verbose_name_plural = "Dispositivos con notificaciones"
+        ordering = ["-actualizado_el"]
+
+    def __str__(self):
+        estado = "✓" if self.activa else "✗"
+        return f"{self.usuario.username} · {self.plataforma} [{estado}]"

@@ -15,6 +15,7 @@ campo, así que acá se omite al construir la línea.
 """
 
 import logging
+import re
 
 from django.db import transaction
 from django.utils import timezone
@@ -34,10 +35,8 @@ audit_logger = logging.getLogger('audit')
 # el historial del teléfono y el de la web digan lo mismo.
 DIRECCION_POR_DEFECTO = 'Tarreo / venta directa en camión'
 
-# Único payload complejo del API, así que el límite va igual de estrecho que el
-# de las acciones: mueve estado y dinero.
-LIMITE_TARREO = {'peticiones': 30, 'ventana_segundos': 60}
-
+# Único payload complejo del API: su cupo va en `limites.POLITICA` (mueve
+# estado y dinero, igual que las cuatro acciones).
 CAMPOS_PERMITIDOS = ('lineas', 'metodo_pago', 'direccion_entrega')
 
 # Se derivan del modelo en vez de repetirlos: si mañana cambia el catálogo de
@@ -53,6 +52,14 @@ METODOS_PAGO = tuple(
 # rango en MySQL): un 500 pedido por el cliente.
 MAX_CANTIDAD_POR_BALON = 1000
 
+# Solo dígitos ASCII y con tope de largo. `str.isdigit()` acepta '²' —y
+# `int('²')` levanta ValueError— así que la comprobación tiene que ser explícita
+# sobre el alfabeto: cualquier otro dígito Unicode es una entrada que el
+# contrato no define. El tope de 15 dígitos evita además la conversión de un
+# string desmesurado (`int()` es cuadrático y Python 3.11+ corta a los 4300
+# dígitos levantando ValueError, o sea el mismo 500 por otra puerta).
+_ENTERO_ASCII = re.compile(r'^[0-9]{1,15}$')
+
 
 def _entero_estricto(valor):
     """Convierte a entero sin aceptar lo que `int()` acepta de más.
@@ -60,14 +67,14 @@ def _entero_estricto(valor):
     `int(2.9)` da 2 y `int(True)` da 1: quedarse con eso significa vender otro
     balón (o una cantidad distinta) del que se pidió, en vez de rechazar la
     petición. Devuelve ``None`` si no es un entero limpio. Se aceptan strings de
-    dígitos porque la web manda texto (viene de un formulario).
+    dígitos ASCII porque la web manda texto (viene de un formulario).
     """
     if isinstance(valor, bool):
         return None
     if isinstance(valor, int):
         return valor
-    if isinstance(valor, str) and valor.strip().isdigit():
-        return int(valor.strip())
+    if isinstance(valor, str) and _ENTERO_ASCII.match(valor.strip()):
+        return int(valor)
     return None
 
 
@@ -129,18 +136,19 @@ def _parsear_lineas(lineas):
 @never_cache
 @solo_post
 @acceso_api(ROLES_CAMIONERO)
-@limitar('tarreo', **LIMITE_TARREO)
+@limitar('tarreo')
 def registrar_venta_tarreo(request):
     """Registra una venta directa ya entregada (§7.4)."""
     datos, error = cuerpo_json(request, permitidos=CAMPOS_PERMITIDOS)
     if error is not None:
         return error
 
-    metodo_pago = (datos.get('metodo_pago') or '').strip()
-    if metodo_pago not in METODOS_PAGO:
+    metodo_pago = datos.get('metodo_pago')
+    if not isinstance(metodo_pago, str) or metodo_pago.strip() not in METODOS_PAGO:
         return respuestas.error(
             'validacion', mensaje='Selecciona un método de pago.'
         )
+    metodo_pago = metodo_pago.strip()
 
     cantidades, error = _parsear_lineas(datos.get('lineas'))
     if error is not None:
@@ -155,7 +163,18 @@ def registrar_venta_tarreo(request):
             'validacion', mensaje='Uno de los balones ya no está disponible.'
         )
 
-    direccion = (datos.get('direccion_entrega') or '').strip()
+    # Un `direccion_entrega` que no sea texto (lista, objeto, número) es una
+    # entrada fuera del contrato: se rechaza en vez de dejar que `.strip()`
+    # levante AttributeError y el cliente reciba un 500.
+    direccion_cruda = datos.get('direccion_entrega')
+    if direccion_cruda is None:
+        direccion = ''
+    elif isinstance(direccion_cruda, str):
+        direccion = direccion_cruda.strip()
+    else:
+        return respuestas.error(
+            'validacion', mensaje='La dirección debe ser texto.'
+        )
 
     # Todo en una transacción: un fallo a mitad no puede dejar media venta.
     with transaction.atomic():

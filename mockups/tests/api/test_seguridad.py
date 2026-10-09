@@ -25,9 +25,10 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.core.cache import cache
-from django.test import Client, TestCase
+from django.test import Client, RequestFactory, TestCase
 
 from mockups.api import entregas, historial
+from mockups.api.errores import handler500
 from mockups.models import Pedido, TipoBalon, Usuario
 from mockups.tests.base import crear_pedido, crear_usuario
 from mockups.utils.fechas import rango_dia_chile, today_chile
@@ -420,6 +421,36 @@ class LimiteAbusoTest(BaseSeguridadTest):
         self._agotar('/api/v1/entregas/1/tomar/', 30, metodo='POST')
         self.assertEqual(self.client.get(RUTA_ENTREGAS).status_code, 200)
 
+    def test_cada_respuesta_limitada_publica_su_estado(self):
+        """§6.4: el cliente puede auto-limitarsese sin chocar antes con el 429."""
+        respuesta = self.client.get(RUTA_VERSION)
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta['X-RateLimit-Limit'], '10')
+        self.assertEqual(respuesta['X-RateLimit-Remaining'], '9')
+        self.assertEqual(respuesta['X-RateLimit-Scope'], 'version')
+        # Segundos restantes, no epoch: el contrato lo dice explícitamente.
+        self.assertTrue(1 <= int(respuesta['X-RateLimit-Reset']) <= 60)
+
+    def test_el_429_trae_el_estado_y_retry_after(self):
+        respuesta = self._agotar(RUTA_VERSION, 10)
+
+        self.assertEqual(respuesta.status_code, 429)
+        self.assertEqual(respuesta['X-RateLimit-Limit'], '10')
+        self.assertEqual(respuesta['X-RateLimit-Remaining'], '0')
+        self.assertEqual(respuesta['X-RateLimit-Scope'], 'version')
+        self.assertEqual(
+            respuesta['Retry-After'], respuesta['X-RateLimit-Reset'],
+            'Retry-After debe mandar sobre Reset y coincidir con él',
+        )
+
+    def test_una_ruta_sin_cupo_no_publica_cabeceras_de_limite(self):
+        """`/auth/csrf/` no está limitado: no se le inventa un estado."""
+        respuesta = self.client.get(RUTA_CSRF)
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertNotIn('X-RateLimit-Limit', respuesta)
+
 
 class EntradaNoConfiableTest(BaseSeguridadTest):
     """Pregunta 4: ¿la entrada se valida antes de tocar la base?"""
@@ -495,6 +526,44 @@ class EntradaNoConfiableTest(BaseSeguridadTest):
         )
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(Pedido.objects.count(), 1)
+
+    def test_digitos_unicode_no_revientan_el_endpoint(self):
+        """`'²'.isdigit()` es True, pero `int('²')` levanta ValueError.
+
+        Con `.isdigit()` un `balon_id` así salía como excepción sin manejar
+        (el 500 en HTML del §10 #13) en vez de un 400 con sobre. Los dígitos
+        árabe-índicos ('٤') sí los convierte `int()`, pero aceptar notación
+        ajena no es parte del contrato: la lista es ASCII.
+        """
+        for valor in ('²', '٤'):
+            with self.subTest(valor=valor):
+                respuesta = self._tarreo(
+                    self._payload_tarreo(
+                        lineas=[{'balon_id': valor, 'cantidad': 1}]
+                    )
+                )
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertEqual(
+                    respuesta.json()['error']['codigo'], 'validacion'
+                )
+                self.assertEqual(Pedido.objects.count(), 0)
+
+    def test_metodo_pago_no_textual_da_400_y_no_un_500(self):
+        """`(valor or '').strip()` con un dict levanta AttributeError: era un 500."""
+        respuesta = self._tarreo(
+            self._payload_tarreo(metodo_pago={'a': 1})
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()['error']['codigo'], 'validacion')
+        self.assertEqual(Pedido.objects.count(), 0)
+
+    def test_direccion_no_textual_da_400_y_no_un_500(self):
+        respuesta = self._tarreo(
+            self._payload_tarreo(direccion_entrega=['Los Aromos 1'])
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()['error']['codigo'], 'validacion')
+        self.assertEqual(Pedido.objects.count(), 0)
 
     def test_linea_sin_cantidad_no_rompe(self):
         respuesta = self._tarreo(
@@ -617,26 +686,49 @@ class FugaDeInformacionTest(BaseSeguridadTest):
         respuesta = self.client.get(RUTA_ENTREGAS)
         self.assertEqual(respuesta['Content-Type'], 'application/json')
 
-    def test_documenta_que_un_error_interno_no_usa_el_sobre(self):
-        """Hueco conocido: el 500 sale como HTML de Django, no como sobre.
+    def test_el_500_del_api_usa_el_sobre(self):
+        """§10 #13 cerrado: un fallo inesperado responde JSON, no la página HTML.
 
-        La app debe tolerar que una respuesta deje de ser JSON. Cerrarlo requiere
-        un `handler500` propio para `/api/v1/`, que es una decisión aparte.
+        Antes la app recibía HTML de Django y rompía al parsear la respuesta.
         """
         with patch.object(entregas, 'serializar_pedido', side_effect=RuntimeError('x')):
             self.client.force_login(self.camionero)
             respuesta = self.client.get(RUTA_ENTREGAS)
 
         self.assertEqual(respuesta.status_code, 500)
-        self.assertNotIn('application/json', respuesta['Content-Type'])
+        self.assertEqual(respuesta['Content-Type'], 'application/json')
+        cuerpo = respuesta.json()
+        self.assertEqual(cuerpo['error']['codigo'], 'error_interno')
+        self.assertIn('servidor_ahora', cuerpo)
 
-    def test_documenta_que_un_error_interno_no_expone_la_traza(self):
-        """Con DEBUG=False la traza no viaja al cliente (sí al log)."""
+    def test_el_500_no_expone_la_traza(self):
+        """Con DEBUG=False la traza no viaja al cliente (sí al log del server)."""
         with patch.object(entregas, 'serializar_pedido', side_effect=RuntimeError('secreto')):
             self.client.force_login(self.camionero)
-            cuerpo = self.client.get(RUTA_ENTREGAS).content.decode()
+            respuesta = self.client.get(RUTA_ENTREGAS)
 
-        self.assertNotIn('secreto', cuerpo)
+        cuerpo = respuesta.content.decode()
+        for prohibido in ('secreto', 'RuntimeError', 'Traceback', 'serializar_pedido'):
+            with self.subTest(prohibido=prohibido):
+                self.assertNotIn(prohibido, cuerpo)
+
+    def test_el_500_deja_un_rastro_acotado_en_el_log(self):
+        """Lo que no va al cliente sí queda para operaciones, y sin el mensaje."""
+        with patch.object(entregas, 'serializar_pedido', side_effect=RuntimeError('secreto')):
+            self.client.force_login(self.camionero)
+            with self.assertLogs('security', level='ERROR') as capturado:
+                self.client.get(RUTA_ENTREGAS)
+
+        registro = '\n'.join(capturado.output)
+        self.assertIn('API_ERROR_INTERNO', registro)
+        self.assertIn(RUTA_ENTREGAS, registro)
+        self.assertNotIn('secreto', registro)
+
+    def test_la_web_conserva_su_pagina_de_error(self):
+        """El handler es del API: fuera de `/api/v1/` la web sigue igual."""
+        respuesta = handler500(RequestFactory().get('/pedidos/mios/'))
+        self.assertEqual(respuesta.status_code, 500)
+        self.assertNotIn('application/json', respuesta['Content-Type'])
 
 
 class IdempotenciaAusenteTest(BaseSeguridadTest):

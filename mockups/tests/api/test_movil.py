@@ -698,30 +698,35 @@ class ConsumidorTest(TestCase):
     def setUp(self):
         cache.clear()
 
-    def test_permite_hasta_el_limite(self):
-        for _ in range(3):
-            permitida, espera = consumir('prueba', 'usuario-1', 3, 60)
-            self.assertTrue(permitida)
-            self.assertEqual(espera, 0)
+    def test_permite_hasta_el_limite_y_descuenta_los_restantes(self):
+        for restantes_esperados in (2, 1, 0):
+            estado = consumir('prueba', 'usuario-1', 3, 60)
+            self.assertTrue(estado.permitida)
+            self.assertEqual(estado.restantes, restantes_esperados)
+            self.assertTrue(1 <= estado.reinicio_segundos <= 60)
 
-        permitida, espera = consumir('prueba', 'usuario-1', 3, 60)
-        self.assertFalse(permitida)
-        self.assertTrue(1 <= espera <= 60)
+        estado = consumir('prueba', 'usuario-1', 3, 60)
+        self.assertFalse(estado.permitida)
+        self.assertEqual(estado.restantes, 0)
+        self.assertTrue(1 <= estado.reinicio_segundos <= 60)
 
     def test_claves_distintas_no_se_mezclan(self):
         for _ in range(3):
             consumir('prueba', 'usuario-1', 3, 60)
-        permitida, _ = consumir('prueba', 'usuario-2', 3, 60)
-        self.assertTrue(permitida)
+
+        estado = consumir('prueba', 'usuario-2', 3, 60)
+
+        self.assertTrue(estado.permitida)
+        self.assertEqual(estado.restantes, 2)
 
     def test_la_ventana_expira(self):
-        self.assertTrue(consumir('expira', 'usuario-1', 1, 1)[0])
-        self.assertFalse(consumir('expira', 'usuario-1', 1, 1)[0])
+        self.assertTrue(consumir('expira', 'usuario-1', 1, 1).permitida)
+        self.assertFalse(consumir('expira', 'usuario-1', 1, 1).permitida)
 
         time.sleep(1.1)
 
         self.assertTrue(
-            consumir('expira', 'usuario-1', 1, 1)[0],
+            consumir('expira', 'usuario-1', 1, 1).permitida,
             'pasada la ventana la clave debe haber expirado sola',
         )
 
