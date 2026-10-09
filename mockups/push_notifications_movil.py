@@ -20,9 +20,13 @@ septiembre de 2026 (apagado anunciado para el 29-09-2027), así que se usa
 **Sin dependencias nuevas:** ``cryptography`` y ``requests`` ya están instalados
 como dependencias transitivas de ``pywebpush``.
 
-**El token del dispositivo es una credencial de envío**: permite hacerle llegar
+**El FID del dispositivo es una credencial de envío**: permite hacerle llegar
 avisos a un teléfono concreto. Nunca se escribe completo en un log ni se
 devuelve al cliente; cuando hay que identificarlo se usa un prefijo corto.
+
+**Se apunta con `fid`, no con `token`:** `token` está deprecado en la API v1, que
+acepta un FID en él solo durante la transición. El mensaje viaja con `"fid"`
+(`docs/API_MOVIL.md` §7.7).
 """
 
 import base64
@@ -203,7 +207,7 @@ def _codigo_de_error(respuesta):
     return None, texto[:120]
 
 
-def enviar_fcm(token, title, body, datos=None, canal=CANAL_ANDROID, etiqueta=None):
+def enviar_fcm(fid, title, body, datos=None, canal=CANAL_ANDROID, etiqueta=None):
     """Envía una notificación a un dispositivo. Devuelve ``(ok, error)``.
 
     El mensaje lleva ``notification`` y ``data`` juntos, y ahí está toda la
@@ -228,7 +232,7 @@ def enviar_fcm(token, title, body, datos=None, canal=CANAL_ANDROID, etiqueta=Non
 
     mensaje = {
         'message': {
-            'token': token,
+            'fid': fid,
             'notification': {'title': title, 'body': body},
             'android': {'priority': 'high', 'notification': notificacion},
             # FCM exige que todo valor de `data` sea texto.
@@ -314,7 +318,7 @@ def notificar_nuevo_pedido_movil(pedido, excluir_usuario_id=None, title=None):
 
     for dispositivo in dispositivos:
         ok, error = enviar_fcm(
-            dispositivo.token,
+            dispositivo.fid,
             titulo,
             cuerpo,
             datos={'tipo': 'pedido_nuevo', 'pedido_id': pedido.id},
@@ -326,14 +330,14 @@ def notificar_nuevo_pedido_movil(pedido, excluir_usuario_id=None, title=None):
 
         # Prefijo corto del token: identifica el dispositivo sin ser la
         # credencial completa.
-        pista = dispositivo.token[:8]
+        pista = dispositivo.fid[:8]
         if error == 'dispositivo_invalido':
             sin_servicio.append(dispositivo.id)
         else:
             fallidos.append(f'{dispositivo.usuario.username}|{pista}')
             audit_logger.warning(
                 f'PUSH_MOVIL_FAIL | #{pedido.id} | User: {dispositivo.usuario.username} | '
-                f'Token: {pista}... | Error: {error}'
+                f'FID: {pista}... | Error: {error}'
             )
 
     if sin_servicio:

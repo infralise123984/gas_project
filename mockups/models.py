@@ -976,22 +976,27 @@ class DispositivoPush(models.Model):
     distintos y **no** se pisan. La PWA del camionero sigue con Web Push
     intacto (D-2 del plan móvil).
 
-    El `token` es una credencial de envío: permite hacerle llegar avisos a ese
+    El `fid` es una credencial de envío: permite hacerle llegar avisos a ese
     teléfono. **Nunca** se registra completo en logs ni se devuelve al cliente.
     No se puede hashear —hay que mandarlo literal a FCM— y por eso se guarda en
     claro: es una capacidad de un dispositivo, no una contraseña de usuario.
 
-    `unique=True` en `token` (y no `unique_together` con `usuario`) porque el
-    mismo teléfono puede pasar de un camionero a otro: al registrarse, el token
-    se reasigna al usuario nuevo en vez de duplicar la fila."""
+    **FID, no el token legacy:** FCM migró de los *registration tokens* al Firebase
+    Installation ID, y la v1 de la API **deprecia `token` a favor de `fid`** (el
+    `token` acepta un FID solo durante la transición). Por eso el campo se llama
+    `fid` y el envío lo manda en `"fid"` (`docs/API_MOVIL.md` §7.7).
+
+    `unique=True` en `fid` (y no `unique_together` con `usuario`) porque el
+    mismo teléfono puede pasar de un camionero a otro: al registrarse, el
+    identificador se reasigna al usuario nuevo en vez de duplicar la fila."""
 
     usuario = models.ForeignKey(
         Usuario, on_delete=models.CASCADE, related_name="dispositivos_push",
         verbose_name="Camionero"
     )
-    token = models.CharField(
-        max_length=255, unique=True, verbose_name="Token FCM",
-        help_text="Identificador del dispositivo que entrega Firebase (nunca se registra en logs)"
+    fid = models.CharField(
+        max_length=255, unique=True, verbose_name="Installation ID (FID)",
+        help_text="Firebase Installation ID del teléfono (nunca se registra completo en logs)"
     )
     plataforma = models.CharField(
         max_length=16, default="android", choices=[("android", "Android")],
