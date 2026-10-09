@@ -554,17 +554,14 @@ def camionero_devolver_pedido(request, pedido_id):
         # Re-notificar a los demás camioneros fuera de la transacción, para no
         # alargar el bloqueo de la fila con I/O de red.
         try:
-            from mockups.push_notifications import notificar_nuevo_pedido
+            from mockups.notificaciones_pedidos import notificar_pedido_disponible
 
-            notificados = notificar_nuevo_pedido(
+            notificar_pedido_disponible(
                 pedido,
                 excluir_usuario_id=request.user.id,
                 title='🚚 ¡Pedido disponible!',
+                motivo='PEDIDO_DEVOLVER',
             )
-            if notificados > 0:
-                audit_logger.info(
-                    f"PUSH_SENT | Pedido #{pedido.id} devuelto -> {notificados} camioneros notificados"
-                )
         except Exception as e:
             audit_logger.warning(f"PUSH_ERROR | Pedido #{pedido.id} devuelto | Error: {str(e)}")
 

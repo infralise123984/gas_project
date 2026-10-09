@@ -155,12 +155,12 @@ def transaccional_pedido(request):
             # ══════════════════════════════════════════════════════
             if pedido.estado == 'pendiente' and pedido.origen == 'telefono':
                 try:
-                    from mockups.push_notifications import notificar_nuevo_pedido
-                    notificados = notificar_nuevo_pedido(pedido)
-                    if notificados > 0:
-                        audit_logger.info(
-                            f"PUSH_SENT | Pedido #{pedido.id} -> {notificados} camioneros notificados"
-                        )
+                    # Los dos canales (Web Push de la PWA y FCM de la app) en una
+                    # sola llamada. El despachador nunca levanta: si un canal
+                    # falla, el otro avisa y el pedido ya está creado.
+                    from mockups.notificaciones_pedidos import notificar_pedido_disponible
+
+                    notificar_pedido_disponible(pedido, motivo='PEDIDO_CREATE')
                 except Exception as e:
                     audit_logger.warning(f"PUSH_ERROR | Pedido #{pedido.id} | Error: {str(e)}")
             

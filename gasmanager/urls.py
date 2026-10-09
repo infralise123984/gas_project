@@ -135,3 +135,7 @@ urlpatterns = [
     # ────────────────────────────────────────────────
     path('api/v1/', include('mockups.api.urls')),
 ]
+
+# El 500 del API se responde con el sobre del §5.2 en vez del HTML de Django; el
+# resto del sitio conserva su página de error de siempre (mockups/api/errores.py).
+handler500 = 'mockups.api.errores.handler500'

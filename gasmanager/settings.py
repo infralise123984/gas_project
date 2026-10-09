@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
+import json
 import os
 from pathlib import Path
 import dj_database_url 
@@ -289,9 +290,37 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ──────────────────────────────────────────────────────────────
 # Claves generadas con: python scripts/generate_vapid.py
 # IMPORTANTE: Copiar estas claves a tu archivo .env para producción
-VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', 'BB0yr5YaM0f0zscZ96WzfrUzyRstuxb339lkwKMXFDSZiJSaMvKn_c53YJSUKF7DjLouGgpLxARF-gLky3zbFp8')
-VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', 'yezbxI6LntId1PZcWqOXxLbM2sX039plDZQaUwyGM5M')
-VAPID_ADMIN_EMAIL = os.getenv('VAPID_ADMIN_EMAIL', 'mailto:admin@kimgas.cl')
+VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY')
+VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY')
+VAPID_ADMIN_EMAIL = os.getenv('VAPID_ADMIN_EMAIL')
+
+# ──────────────────────────────────────────────────────────────
+# PUSH DE LA APP NATIVA (FCM · mockups/push_notifications_movil.py)
+# ──────────────────────────────────────────────────────────────
+# Cuenta de servicio de Firebase: el JSON completo en FCM_CREDENCIALES_JSON, o
+# la ruta a un archivo .json en FCM_CREDENCIALES_ARCHIVO. Es un SECRETO: va por
+# variables de entorno (Render), nunca en el repositorio.
+# Sin ella, `push_notifications_movil` no envía nada y el resto del sistema
+# funciona igual: mismo criterio que VAPID vacío.
+
+def _credenciales_fcm():
+    """Lee la cuenta de servicio de Firebase, o ``None`` si no está configurada."""
+    crudo = (os.getenv('FCM_CREDENCIALES_JSON') or '').strip()
+    if not crudo:
+        ruta = (os.getenv('FCM_CREDENCIALES_ARCHIVO') or '').strip()
+        if not ruta or not os.path.exists(ruta):
+            return None
+        with open(ruta, encoding='utf-8') as archivo:
+            crudo = archivo.read().strip()
+    try:
+        return json.loads(crudo)
+    except ValueError:
+        # Un JSON mal pegado se trata como "no configurado": se pierde el aviso,
+        # no el arranque del servidor.
+        return None
+
+
+FCM_CREDENCIALES = _credenciales_fcm()
 
 # ──────────────────────────────────────────────────────────────
 # UBICACIÓN DEL CAMIÓN (mockups/api/ubicacion.py · docs/API_MOVIL.md §7.6)

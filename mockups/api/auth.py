@@ -180,7 +180,7 @@ def logout_api(request):
 
 @never_cache
 @acceso_api()
-@limitar('perfil', peticiones=30, ventana_segundos=60)
+@limitar('perfil')
 def perfil_api(request):
     """Identidad del token de sesión + token CSRF para las siguientes llamadas.
 

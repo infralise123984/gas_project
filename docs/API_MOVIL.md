@@ -134,10 +134,14 @@ GET    /api/v1/balones/                                 ← F4
 GET    /api/v1/historial/?mes=YYYY-MM                   ← F6 ✔
 GET    /api/v1/historial/<YYYY-MM-DD>/                  ← F6 ✔
 GET    /api/v1/version/                                 ← F1
+
+POST   /api/v1/dispositivos/                            ← Push móvil: alta del teléfono (§7.7)
+POST   /api/v1/dispositivos/baja/                       ← Push móvil: baja al cerrar sesión (§7.7)
 ```
 
-Fases: **F1** = `auth/*`, `entregas/` (GET) y `version/`. **F2** = las cuatro acciones.
+**Fases:** **F1** = `auth/*`, `entregas/` (GET) y `version/`. **F2** = las cuatro acciones.
 **F4** = `tarreo/`, `balones/`. **F6** = `resumen-hoy/`, `historial/*`.
+**Push móvil** = `dispositivos/*` (§7.7): aditivo, no cambia nada de lo anterior.
 
 **Estado: F1, F2, F4 y F6 implementados y probados** (`mockups/api/`, suite en `mockups/tests/api/test_movil.py`).
 Queda la idempotencia con `Idempotency-Key` (§8): es aditiva, pero necesita una migración.
@@ -285,25 +289,64 @@ class OperacionIdempotente(models.Model):
 
 ### 6.4 Control de abuso
 
-`mockups/api/limites.py`: ventana fija sobre la caché de Django, **por usuario autenticado**.
+`mockups/api/limites.py`: **política publicada** (tabla única `POLITICA`) y contador de **ventana fija**,
+por **usuario autenticado**. Lo que se promete acá es lo que el contador cumple; cambiar un número es
+cambiar la tabla y esta sección en el mismo commit.
+
+**Algoritmo: ventana fija.** Es el más barato y el único correcto con la caché del proceso. Se aceptan
+sus dos defectos conocidos, y por eso se publican:
+
+- hasta **2× el cupo en el borde** de la ventana (el cupo entero al final de una ventana más el cupo
+  entero al principio de la siguiente);
+- *stampede*: los clientes bloqueados reintentan todos juntos cuando la ventana se reinicia. Por eso la
+  app debe esperar `Retry-After` y sumar *backoff* con jitter, en vez de reintentar en el reinicio.
+
+**Dos números, no uno.** El cupo sostenido (por minuto) y la ráfaga real, que con ventana fija es
+*el cupo completo en el primer instante*. No hay ráfaga adicional deliberada: el único pico legítimo
+—vaciar la cola offline cuando vuelve la señal— se resuelve en el cliente respetando `Retry-After`, y su
+duplicación de escrituras es el pendiente de idempotencia (§6.2).
+
+| Alcance | Cubo | Sostenido | Ráfaga real | Por qué |
+|---|---|---|---|---|
+| `entregas` | propio | 60/min | 60 en el primer instante | Lectura del panel: la consulta más frecuente |
+| `acciones_entregas` | **compartido por las 4 acciones** | 30/min | 30 | Mueven estado y dinero; alternarlas no multiplica el cupo |
+| `tarreo` | propio | 30/min | 30 | Crea dinero |
+| `balones` | propio | 60/min | 60 | Lectura |
+| `resumen_hoy` | propio | 60/min | 60 | Una pasada por la actividad del día |
+| `historial` | propio | 20/min | 20 | La consulta más cara: recorre el mes día por día |
+| `perfil` | propio | 30/min | 30 | Arranque de identidad |
+| `version` | propio | 10/min | 10 | Se consulta al arrancar la app |
+| `dispositivos` | propio | 10/min | 10 | Alta o baja del teléfono: al iniciar y al cerrar sesión, nada más |
+| login | — | **sin cupo propio** | — | Lo cubre `django-axes` (5 fallos → 429 `bloqueado_login`) |
+
+**Cabeceras de estado** (trío legacy, en **toda** respuesta de un alcance limitado, el 200 incluido):
+
+| Cabecera | Semántica |
+|---|---|
+| `X-RateLimit-Limit` | Cupo sostenido del alcance |
+| `X-RateLimit-Remaining` | Peticiones que quedan en la ventana (`0` en el 429) |
+| `X-RateLimit-Reset` | **Segundos restantes** hasta el reinicio; **no** es epoch, el cliente no debe parsear fecha |
+| `X-RateLimit-Scope` | Cuál de los cubos se contó (hay un alcance por tipo de endpoint) |
+| `Retry-After` | Solo en el 429. **Manda sobre `Reset`** (regla del borrador IETF) y coincide con él |
+
+Son señales de planificación, **no un SLA**: el servidor puede bajar un cupo por estabilidad.
+
+**Sin overrides.** La API tiene una sola audiencia (camioneros), así que no hay camino de excepción por
+cuenta: subir el cupo de alguien es cambiar `POLITICA` y esta tabla. Los otros invariantes:
 
 - La clave sale del usuario, **nunca** de `X-Forwarded-For`: esa cabecera la controla el cliente, y usarla
   como clave permite evadir el límite rotándola.
 - `cache.add` fija el TTL en la misma operación que crea la clave: no existe el hueco del patrón
   "`INCR` y después `EXPIRE`", que deja la clave viva para siempre si el proceso muere en medio.
-- `Retry-After` es el tiempo que **realmente** queda de la ventana, no la ventana completa.
 - Si la caché falla, se **falla abierto** con aviso en el logger `security`: primero que el camionero vea
   sus pedidos, después el límite. Es una decisión explícita.
-- Límites: `entregas` 60/min, `perfil` 30/min, `version` 10/min, y las cuatro acciones 30/min
-  (clave `acciones_entregas`, F2: mueven estado y dinero, así que van más estrechas que el listado).
-  En F4 se agregan `balones` 60/min (lectura, igual que el listado) y `tarreo` 30/min (crea dinero, igual
-  que las acciones). En F6, `resumen_hoy` 60/min (lectura) e `historial` 20/min: recorre el mes día por día
-  y es la consulta más cara del API.
-  El login **no** lleva límite propio: ya lo cubre `django-axes`.
 
 **Alcance honesto:** esto frena bucles de cliente y martilleo de un usuario. **No** es protección DDoS —
-la saturación de red se resuelve en infraestructura. Y como `settings.CACHES` no está definido (se usa
-LocMemCache), el contador es **por proceso**: con más de una instancia el límite se multiplica (§10).
+la saturación de red se resuelve en infraestructura—, no hay *load shedding* de flota (un camionero bien
+portado no se ve afectado por la carga total) y como `settings.CACHES` no está definido (se usa
+LocMemCache), el contador es **por proceso**: con más de una instancia el cupo real se multiplica por la
+cantidad de instancias (§10). El cupo es por usuario y no hay techo de cuenta: N usuarios sostienen N ×
+el cupo sin válvula.
 
 ---
 
@@ -607,16 +650,60 @@ historial**.
 reemplazarlo por una pantalla de edición espejo de `editar_pedido.html` (método de pago, líneas con
 cantidades, sector y dirección) y, al guardar, recargar `ControladorEntregas`.
 
+### 7.7 `POST /api/v1/dispositivos/` y `/baja/` — avisos de la app nativa
+
+Canal **nuevo e independiente** del Web Push de la PWA (ver `PUSH_NOTIFICATIONS.md`): una app nativa no
+puede recibir Web Push —el endpoint pertenece al navegador—, así que registra acá el token de Firebase
+Cloud Messaging (FCM) de su teléfono. Implementado en `mockups/api/dispositivos.py` +
+`mockups/push_notifications_movil.py`, con el despacho a los dos canales en
+`mockups/notificaciones_pedidos.py`. **No** toca `PushSubscription` ni `notificar_nuevo_pedido`.
+
+| Método | Ruta | Cuerpo | Respuesta |
+|---|---|---|---|
+| POST | `/api/v1/dispositivos/` | `{"token": str, "plataforma": "android", "app_version": str}` | `{"registrado": true, "alta": bool}` |
+| POST | `/api/v1/dispositivos/baja/` | `{"token": str}` | `{"registrado": false}` |
+
+- Rol: **solo `camionero`**. Cupo `10/min` por usuario (§6.4).
+- `app_version` es opcional (tope 32 caracteres); el token hasta 255 y **nunca** se trunca.
+- **Idempotente por diseño:** la clave es el `token` (no el par usuario+token), así que reintentar el
+  registro **actualiza** la fila en vez de duplicarla. Es lo que la app hace en cada arranque y cada vez
+  que FCM rota el token: por eso este endpoint **no** exige `Idempotency-Key` (§6.2).
+- **Reasignación:** si el mismo teléfono entra con otro camionero, el token se mueve al usuario nuevo. Se
+  registra `PUSH_MOVIL_TOKEN_REASIGNADO` en el logger `security`: un token ajeno reutilizado se ve igual.
+- **El token es una credencial de envío.** No se devuelve al cliente y no se escribe completo en un log
+  (se usa el prefijo de 8 caracteres). No se puede hashear —FCM lo exige literal— así que se guarda en
+  claro: es una capacidad de un dispositivo, no una contraseña de usuario.
+- `baja` con el token de otro usuario responde igual (`200`) y no borra nada: no confirma si un token ajeno
+  existe.
+- **Envío:** al crearse o devolverse un pedido, el despachador intenta los dos canales y **ningún fallo de
+  push puede propagarse** (el pedido ya está creado o devuelto cuando se avisa). El mensaje de FCM lleva
+  `notification` y `data` en el mismo mensaje, para que Android pinte la notificación **sin despertar la app
+  y sin una petición al API**. Filtros idénticos a la web (`estado='pendiente'`, `origen` de teléfono o
+  tarreo) y se excluye al camionero que devuelve el pedido.
+- **Token muerto:** si FCM responde `UNREGISTERED` (app desinstalada) el dispositivo queda `activa=False`.
+  `INVALID_ARGUMENT` **no** desactiva: también se responde por un payload mal formado, y un bug propio no
+  puede dejar a un camionero sin avisos en silencio.
+- **Credenciales:** cuenta de servicio de Firebase en `FCM_CREDENCIALES_JSON` (o `FCM_CREDENCIALES_ARCHIVO`).
+  Sin ella el canal no envía nada y **el resto del sistema funciona igual**, con el mismo criterio que VAPID
+  vacío. Se usa la **API HTTP v1** (`/v1/projects/<id>/messages:send`) con JWT RS256: las APIs legacy se
+  deprecaron en septiembre de 2026. Sin dependencias nuevas (`cryptography` y `requests` ya venían con
+  `pywebpush`).
+
 ---
 
 ## 8. Testing
 
 - **Archivo:** `mockups/tests/api/test_movil.py`. **No** tocar los tests existentes.
+- **Archivo del canal móvil:** `mockups/tests/api/test_dispositivos.py` (**31 tests**, §7.7): registro
+  idempotente, reasignación del token, validaciones, `401`/`403`/`405`, cupo, baja, y el envío **con el
+  transporte simulado** —la suite no sale a internet ni necesita credenciales de Firebase—, incluida la
+  firma RS256 del JWT.
 - `django.test.TestCase` + `self.client` (ver `mockups/tests/pedidos/test_logica_negocio.py` como referencia).
 - **`Client(enforce_csrf_checks=True)`** es obligatorio para probar CSRF: el cliente de tests lo omite por
   defecto. Y `secure=True` para ejercitar la rama HTTPS de Django.
 - Estado: **78 tests en `mockups/tests/api/test_movil.py`, todos en verde** (F1 + F2 + F4 + F6), más
-  **45 de seguridad** en `mockups/tests/api/test_seguridad.py` (§8.1). Suite completa del app: 252 OK.
+  **53 de seguridad** en `mockups/tests/api/test_seguridad.py` (§8.1). Suite completa del API: **131 OK**
+  (el total del resto del app no se vuelve a medir en este cambio).
 - Mínimo exigido antes de dar un endpoint por terminado:
 
 | Caso | Se espera |
@@ -642,6 +729,9 @@ cantidades, sector y dirección) y, al guardar, recargar `ControladorEntregas`.
 | `Origin` fuera de `CSRF_TRUSTED_ORIGINS` | `403` |
 | `GET /auth/csrf/` | `200` + cookie `csrftoken`; tanto el token del cuerpo como el de la cookie sirven en `X-CSRFToken` |
 | Superar el límite por usuario de un endpoint | `429 demasiadas_peticiones` con `Retry-After`; otro usuario no se ve afectado |
+| Cualquier respuesta de un alcance limitado | Cabeceras `X-RateLimit-Limit/Remaining/Reset/Scope`, con `Reset` en **segundos restantes** |
+| Un 429 | `X-RateLimit-Remaining: 0` y `Retry-After` igual a `X-RateLimit-Reset` (manda sobre él) |
+| Una ruta sin cupo (`/auth/csrf/`) | No publica cabeceras de límite: no se le inventa un estado |
 | Caché caída en un endpoint limitado | `200` (falla abierto) y aviso `API_LIMITE_SIN_CACHE` en el logger `security` |
 | Intento de login fallido | Ni la base (`AccessAttempt`) ni los logs guardan la contraseña |
 | Listado con más pedidos | El número de consultas **no** crece (detector de N+1) |
@@ -660,7 +750,7 @@ nueva que quede sin protección hace fallar los tests aunque nadie se acuerde de
 | ¿Sesión sana? | `logout` mata la sesión **en el servidor** (la cookie vieja deja de servir); el login rota el identificador (anti-*fixation*); la cookie es `HttpOnly` + `SameSite` y **no** aparece en el cuerpo |
 | ¿Permisos? | Matriz de 4 roles no-camionero × 10 rutas de negocio → `403`; cambio de rol en caliente → `403` inmediato; las 4 acciones sobre un pedido ajeno → `409` **sin mutación** |
 | ¿CSRF? | Todo mutador sin `X-CSRFToken` → `403` (ninguno quedó `csrf_exempt` por descuido) |
-| ¿Límites? | Las 4 acciones **comparten** un cubo (no se multiplica el cupo alternándolas); rotar `X-Forwarded-For` **no** evade el límite; el cubo es por usuario, no por IP |
+| ¿Límites? | Las 4 acciones **comparten** un cubo (no se multiplica el cupo alternándolas); rotar `X-Forwarded-For` **no** evade el límite; el cubo es por usuario, no por IP; toda respuesta limitada publica su estado en `X-RateLimit-*` |
 | ¿Entrada? | `?mes=` absurdo → `400` (no `500`); fecha laxa → `400`; `balon_id` decimal o booleano → `400`; cantidad desmedida → `400` (no error de base); precio y descuento inyectados → se ignoran |
 | ¿Fuga? | Ningún error del sobre contiene `Traceback`, `SELECT`, `mockups_`, `sqlite`, `django.`, `SECRET_KEY` ni `File "` |
 
