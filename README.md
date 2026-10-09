@@ -387,6 +387,6 @@ Script de seguridad complementario (standalone, **no** es un módulo de tests de
 
 ## Licencia
 
-Copyright © 2026 GasFácil. Todos los derechos reservados.
+Copyright © 2026 Tomás Murúa. Todos los derechos reservados.
 
-Este software es propietario y confidencial. Ver archivo [LICENSE](LICENSE) para más detalles.
+Este proyecto se publica únicamente con fines de demostración y evaluación de portafolio. Queda estrictamente prohibida la copia, modificación, distribución o uso comercial o no comercial no autorizado. Consulta el archivo [LICENSE](LICENSE) para conocer los términos completos.
