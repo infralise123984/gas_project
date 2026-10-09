@@ -1,8 +1,15 @@
-from django.test import TestCase, Client
+"""Pruebas del flujo de verificación en dos pasos (TOTP).
+
+Ejecutar:
+    python manage.py test mockups.tests.auth.test_2fa -v 2
+"""
+
+import pyotp
+from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
-from mockups.models import Usuario
-import pyotp
+
+from mockups.tests.base import crear_usuario
 
 
 class TwoFactorAuthFlowTests(TestCase):
@@ -11,11 +18,7 @@ class TwoFactorAuthFlowTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.secret = pyotp.random_base32()
-        self.user = Usuario.objects.create_user(
-            username='testadmin2fa',
-            password='ClaveSegura123!',
-            rol='admin',
-        )
+        self.user = crear_usuario('admin', 'testadmin2fa', password='ClaveSegura123!')
         self.user.totp_secret = self.secret
         self.user.totp_activo = True
         self.user.save(update_fields=['totp_secret', 'totp_activo'])

@@ -9,7 +9,7 @@ from mockups.services.pedidos import (
     anular_pedido,
 )
 from mockups.utils.permisos import get_client_ip
-from .models import Usuario, TipoBalon, HistorialPrecioBalon, Sector, Pedido, DetallePedido, HistorialEstadoPedido, SobreDiario, LineaSobre, AuditoriaAccion, PushSubscription
+from .models import Usuario, TipoBalon, HistorialPrecioBalon, Sector, Pedido, DetallePedido, HistorialEstadoPedido, SobreDiario, LineaSobre, AuditoriaAccion, PushSubscription, DispositivoPush
 
 
 @admin.register(Usuario)
@@ -447,3 +447,48 @@ class PushSubscriptionAdmin(admin.ModelAdmin):
         queryset.update(activa=False)
         self.message_user(request, f'{queryset.count()} suscripciones desactivadas.')
     desactivar_suscripciones.short_description = 'Desactivar suscripciones seleccionadas'
+
+
+@admin.register(DispositivoPush)
+class DispositivoPushAdmin(admin.ModelAdmin):
+    """Admin del canal móvil (FCM): qué teléfonos reciben avisos.
+
+    El `token` es una credencial de envío, así que **no** se muestra completo en
+    el listado: basta el prefijo para reconocer el dispositivo y para probar un
+    envío desde la consola de Firebase sin copiar la credencial entera.
+    """
+
+    list_display = ('usuario', 'prefijo_token', 'plataforma', 'app_version', 'activa', 'actualizado_el')
+    list_filter = ('activa', 'plataforma', 'actualizado_el')
+    search_fields = ('usuario__username', 'usuario__first_name', 'usuario__last_name')
+    readonly_fields = ('token', 'creado_el', 'actualizado_el')
+    list_per_page = 25
+
+    def prefijo_token(self, obj):
+        return f'{obj.token[:8]}…'
+    prefijo_token.short_description = 'Token (prefijo)'
+
+    fieldsets = (
+        ('Camionero', {
+            'fields': ('usuario', 'activa')
+        }),
+        ('Dispositivo', {
+            'fields': ('token', 'plataforma', 'app_version')
+        }),
+        ('Fechas', {
+            'fields': ('creado_el', 'actualizado_el'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    actions = ['activar_dispositivos', 'desactivar_dispositivos']
+
+    def activar_dispositivos(self, request, queryset):
+        queryset.update(activa=True)
+        self.message_user(request, f'{queryset.count()} dispositivos activados.')
+    activar_dispositivos.short_description = 'Activar dispositivos seleccionados'
+
+    def desactivar_dispositivos(self, request, queryset):
+        queryset.update(activa=False)
+        self.message_user(request, f'{queryset.count()} dispositivos desactivados.')
+    desactivar_dispositivos.short_description = 'Desactivar dispositivos seleccionados'

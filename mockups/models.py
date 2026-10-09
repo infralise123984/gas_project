@@ -927,3 +927,99 @@ class AuditoriaAccion(models.Model):
         
         registro.save()
         return registro
+
+
+class UbicacionCamion(models.Model):
+    """Una muestra de posición del camionero (docs/API_MOVIL.md §7.6).
+
+    Vive **24 horas**: se poda en el propio endpoint de ingesta. No hay
+    histórico acumulativo ni forma de reconstruir días anteriores, que es el
+    argumento de minimización más fuerte del diseño (§6 del plan móvil).
+
+    Este modelo no se relaciona con `Pedido` ni con `SobreDiario`: no cambia
+    ningún estado del negocio, solo guarda muestras."""
+
+    trabajador = models.ForeignKey(
+        Usuario, on_delete=models.CASCADE, related_name="ubicaciones",
+        verbose_name="Camionero"
+    )
+    lat = models.DecimalField(max_digits=9, decimal_places=6, verbose_name="Latitud")
+    lng = models.DecimalField(max_digits=9, decimal_places=6, verbose_name="Longitud")
+    precision_m = models.FloatField(null=True, blank=True, verbose_name="Precisión (m)")
+    velocidad = models.FloatField(null=True, blank=True, verbose_name="Velocidad (m/s)")
+    bateria = models.PositiveSmallIntegerField(
+        null=True, blank=True, verbose_name="Batería (%)"
+    )
+    capturado_el = models.DateTimeField(verbose_name="Capturada el")
+    recibido_el = models.DateTimeField(auto_now_add=True, verbose_name="Recibida el")
+
+    class Meta:
+        verbose_name = "Ubicación del camión"
+        verbose_name_plural = "Ubicaciones del camión"
+        ordering = ["-capturado_el"]
+        indexes = [models.Index(fields=["trabajador", "capturado_el"])]
+
+    def __str__(self):
+        return (
+            f"{self.trabajador_id} · {self.lat},{self.lng} · "
+            f"{self.capturado_el:%d/%m %H:%M}"
+        )
+
+
+# ──────────────────────────────────────────────────────────────
+# DISPOSITIVOS CON NOTIFICACIONES DE LA APP NATIVA (FCM)
+# ──────────────────────────────────────────────────────────────
+class DispositivoPush(models.Model):
+    """Un teléfono suscrito a los avisos de la app nativa (docs/API_MOVIL.md §7.7).
+
+    Convive con `PushSubscription` (Web Push de la PWA): son dos canales
+    distintos y **no** se pisan. La PWA del camionero sigue con Web Push
+    intacto (D-2 del plan móvil).
+
+    El `token` es una credencial de envío: permite hacerle llegar avisos a ese
+    teléfono. **Nunca** se registra completo en logs ni se devuelve al cliente.
+    No se puede hashear —hay que mandarlo literal a FCM— y por eso se guarda en
+    claro: es una capacidad de un dispositivo, no una contraseña de usuario.
+
+    **Es el *registration token*, no el FID.** La v1 de FCM ya deprecia `token` a
+    favor de `fid`, pero el plugin de Flutter todavía **no** expone los Firebase
+    Installation IDs: `onRegistered` y `register()` no existen en
+    `firebase_messaging` 16.7.0. El token sigue plenamente soportado durante la
+    transición, así que es lo que el teléfono puede entregar hoy. Cuando el plugin
+    exponga el FID, el cambio es de a un lado y del otro: el cliente manda el FID
+    y el servidor lo envía en `"fid"` (`docs/API_MOVIL.md` §7.7).
+
+    `unique=True` en `token` (y no `unique_together` con `usuario`) porque el
+    mismo teléfono puede pasar de un camionero a otro: al registrarse, el
+    identificador se reasigna al usuario nuevo en vez de duplicar la fila."""
+
+    usuario = models.ForeignKey(
+        Usuario, on_delete=models.CASCADE, related_name="dispositivos_push",
+        verbose_name="Camionero"
+    )
+    token = models.CharField(
+        max_length=255, unique=True, verbose_name="Token de FCM",
+        help_text="Registration token de FCM del teléfono (nunca se registra completo en logs)"
+    )
+    plataforma = models.CharField(
+        max_length=16, default="android", choices=[("android", "Android")],
+        verbose_name="Plataforma"
+    )
+    app_version = models.CharField(
+        max_length=32, blank=True, default="", verbose_name="Versión de la app"
+    )
+    activa = models.BooleanField(
+        default=True, verbose_name="Activa",
+        help_text="Se desactiva cuando FCM responde que el token ya no existe"
+    )
+    creado_el = models.DateTimeField(auto_now_add=True, verbose_name="Registrado el")
+    actualizado_el = models.DateTimeField(auto_now=True, verbose_name="Última actualización")
+
+    class Meta:
+        verbose_name = "Dispositivo con notificaciones"
+        verbose_name_plural = "Dispositivos con notificaciones"
+        ordering = ["-actualizado_el"]
+
+    def __str__(self):
+        estado = "✓" if self.activa else "✗"
+        return f"{self.usuario.username} · {self.plataforma} [{estado}]"

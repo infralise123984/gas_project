@@ -277,8 +277,10 @@ gas_project/
 │   ├── management/          # Comandos personalizados
 │   ├── migrations/          # Migraciones de base de datos
 │   │
-│   ├── tests.py                      # Tests de flujo 2FA
-│   ├── tests_logica_negocio.py       # Tests de lógica y matemática
+│   ├── tests/                        # Suite de tests por dominio
+│   │   ├── base.py                   # Fábricas de datos compartidas
+│   │   └── auth/ · api/ · admin/     # 2FA · API v1 · acciones admin
+│   │       pedidos/ · bodega/ · notificaciones/
 │   └── views_monolith_backup.py      # Backup del monolito original (referencia)
 │
 ├── docs/                    # Documentación técnica (ver docs/README.md)
@@ -354,10 +356,10 @@ Notas:
 python manage.py test mockups -v 2
 
 # Solo lógica de negocio
-python manage.py test mockups.tests_logica_negocio -v 2
+python manage.py test mockups.tests.pedidos.test_logica_negocio -v 2
 
 # Solo flujo 2FA
-python manage.py test mockups.tests -v 2
+python manage.py test mockups.tests.auth.test_2fa -v 2
 ```
 
 Los tests cubren:
