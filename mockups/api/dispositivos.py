@@ -1,22 +1,23 @@
 """Registro del dispositivo para las notificaciones de la app nativa (§7.7).
 
-El endpoint es **transporte + validación**: guarda el token de FCM que la app
+El endpoint es **transporte + validación**: guarda el FID de Firebase que la app
 obtuvo al iniciar sesión. No hay lógica de negocio que reutilizar de la web
-—el canal móvil es nuevo— pero tampoco se inventa nada: el token es un dato del
-dispositivo, no del pedido.
+—el canal móvil es nuevo— pero tampoco se inventa nada: el FID es un dato del
+dispositivo, no del pedido. Se apunta con `fid` y no con el `token` legacy, que
+la v1 de FCM deprecó (`docs/API_MOVIL.md` §7.7).
 
 Decisiones que importan:
 
-* **Idempotente por diseño:** la clave es el ``token``, no el par
-  (usuario, token). Reintentar el registro —la app lo hace en cada arranque y
-  cuando FCM rota el token— actualiza la fila en vez de duplicarla. Es la misma
+* **Idempotente por diseño:** la clave es el ``fid``, no el par
+  (usuario, fid). Reintentar el registro —la app lo hace en cada arranque y
+  cuando Firebase reemite el FID— actualiza la fila en vez de duplicarla. Es la misma
   propiedad que busca el ``Idempotency-Key`` del §6.2, resuelta donde
   corresponde: un upsert.
 * **Reasignación explícita:** si el mismo teléfono entra con otro camionero, el
-  token se mueve al usuario nuevo. Eso es lo esperado (un teléfono por turno),
+  FID se mueve al usuario nuevo. Eso es lo esperado (un teléfono por turno),
   pero se registra en el logger de seguridad, porque también es lo que se vería
-  si alguien reutilizara un token ajeno.
-* **El token nunca se devuelve ni se registra completo.** Es una credencial de
+  si alguien reutilizara un identificador ajeno.
+* **El FID nunca se devuelve ni se registra completo.** Es una credencial de
   envío: quien lo tenga puede hacerle llegar notificaciones a ese teléfono.
 """
 
@@ -32,12 +33,12 @@ from mockups.models import DispositivoPush
 audit_logger = logging.getLogger('audit')
 security_logger = logging.getLogger('security')
 
-CAMPOS_REGISTRO = ('token', 'plataforma', 'app_version')
-CAMPOS_BAJA = ('token',)
+CAMPOS_REGISTRO = ('fid', 'plataforma', 'app_version')
+CAMPOS_BAJA = ('fid',)
 
 # Igual al `max_length` del modelo: se valida acá para responder 400 con sobre
 # en vez de dejar que reviente la base con un 500.
-LARGO_MAXIMO_TOKEN = 255
+LARGO_MAXIMO_FID = 255
 LARGO_MAXIMO_VERSION = 32
 
 # Se derivan del modelo en vez de repetirlas (mientras solo exista Android, la
@@ -45,14 +46,14 @@ LARGO_MAXIMO_VERSION = 32
 PLATAFORMAS = tuple(valor for valor, _ in DispositivoPush._meta.get_field('plataforma').choices)
 
 
-def _token_valido(valor):
-    """Token razonable, o ``None``. Nunca se trunca: truncar rompería el envío."""
+def _fid_valido(valor):
+    """FID razonable, o ``None``. Nunca se trunca: truncar rompería el envío."""
     if not isinstance(valor, str):
         return None
-    token = valor.strip()
-    if not token or len(token) > LARGO_MAXIMO_TOKEN:
+    fid = valor.strip()
+    if not fid or len(fid) > LARGO_MAXIMO_FID:
         return None
-    return token
+    return fid
 
 
 @never_cache
@@ -65,8 +66,8 @@ def registrar_dispositivo(request):
     if error_respuesta is not None:
         return error_respuesta
 
-    token = _token_valido(datos.get('token'))
-    if token is None:
+    fid = _fid_valido(datos.get('fid'))
+    if fid is None:
         return respuestas.error(
             'validacion', mensaje='Falta el identificador del dispositivo o no es válido.'
         )
@@ -85,7 +86,7 @@ def registrar_dispositivo(request):
         )
 
     dispositivo, creado = DispositivoPush.objects.update_or_create(
-        token=token,
+        fid=fid,
         defaults={
             'usuario': request.user,
             'plataforma': plataforma,
@@ -98,8 +99,8 @@ def registrar_dispositivo(request):
         # El teléfono cambió de manos. Es legítimo (turnos, reinstalación), pero
         # se deja rastro: un token ajeno reutilizado se ve exactamente igual.
         security_logger.warning(
-            f'PUSH_MOVIL_TOKEN_REASIGNADO | De: {dispositivo.usuario_id} | '
-            f'A: {request.user.username} | Token: {token[:8]}...'
+            f'PUSH_MOVIL_FID_REASIGNADO | De: {dispositivo.usuario_id} | '
+            f'A: {request.user.username} | FID: {fid[:8]}...'
         )
 
     audit_logger.info(
@@ -123,18 +124,18 @@ def baja_dispositivo(request):
     if error_respuesta is not None:
         return error_respuesta
 
-    token = _token_valido(datos.get('token'))
-    if token is None:
+    fid = _fid_valido(datos.get('fid'))
+    if fid is None:
         return respuestas.error(
             'validacion', mensaje='Falta el identificador del dispositivo o no es válido.'
         )
 
     eliminados, _ = DispositivoPush.objects.filter(
-        token=token, usuario=request.user
+        fid=fid, usuario=request.user
     ).delete()
 
     if eliminados:
         audit_logger.info(
-            f'PUSH_MOVIL_BAJA | User: {request.user.username} | Token: {token[:8]}...'
+            f'PUSH_MOVIL_BAJA | User: {request.user.username} | FID: {fid[:8]}...'
         )
     return respuestas.ok({'registrado': False})

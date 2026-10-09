@@ -660,29 +660,34 @@ Cloud Messaging (FCM) de su teléfono. Implementado en `mockups/api/dispositivos
 
 | Método | Ruta | Cuerpo | Respuesta |
 |---|---|---|---|
-| POST | `/api/v1/dispositivos/` | `{"token": str, "plataforma": "android", "app_version": str}` | `{"registrado": true, "alta": bool}` |
+| POST | `/api/v1/dispositivos/` | `{"fid": str, "plataforma": "android", "app_version": str}` | `{"registrado": true, "alta": bool}` |
 | POST | `/api/v1/dispositivos/baja/` | `{"token": str}` | `{"registrado": false}` |
 
 - Rol: **solo `camionero`**. Cupo `10/min` por usuario (§6.4).
-- `app_version` es opcional (tope 32 caracteres); el token hasta 255 y **nunca** se trunca.
-- **Idempotente por diseño:** la clave es el `token` (no el par usuario+token), así que reintentar el
+- `app_version` es opcional (tope 32 caracteres); el FID hasta 255 y **nunca** se trunca.
+- **`fid`, no `token`:** FCM migró de los *registration tokens* al **Firebase Installation ID (FID)**, y la
+  v1 de la API **deprecia `token` a favor de `fid`** (el `token` acepta un FID solo durante la transición).
+  El campo, el payload y el mensaje usan `fid`.
+- **Idempotente por diseño:** la clave es el `fid` (no el par usuario+fid), así que reintentar el
   registro **actualiza** la fila en vez de duplicarla. Es lo que la app hace en cada arranque y cada vez
-  que FCM rota el token: por eso este endpoint **no** exige `Idempotency-Key` (§6.2).
-- **Reasignación:** si el mismo teléfono entra con otro camionero, el token se mueve al usuario nuevo. Se
-  registra `PUSH_MOVIL_TOKEN_REASIGNADO` en el logger `security`: un token ajeno reutilizado se ve igual.
-- **El token es una credencial de envío.** No se devuelve al cliente y no se escribe completo en un log
+  que Firebase reemite el FID: por eso este endpoint **no** exige `Idempotency-Key` (§6.2).
+- **Reasignación:** si el mismo teléfono entra con otro camionero, el FID se mueve al usuario nuevo. Se
+  registra `PUSH_MOVIL_FID_REASIGNADO` en el logger `security`: un identificador ajeno reutilizado se ve igual.
+- **El FID es una credencial de envío.** No se devuelve al cliente y no se escribe completo en un log
   (se usa el prefijo de 8 caracteres). No se puede hashear —FCM lo exige literal— así que se guarda en
   claro: es una capacidad de un dispositivo, no una contraseña de usuario.
-- `baja` con el token de otro usuario responde igual (`200`) y no borra nada: no confirma si un token ajeno
-  existe.
+- `baja` con el FID de otro usuario responde igual (`200`) y no borra nada: no confirma si un
+  identificador ajeno existe.
 - **Envío:** al crearse o devolverse un pedido, el despachador intenta los dos canales y **ningún fallo de
   push puede propagarse** (el pedido ya está creado o devuelto cuando se avisa). El mensaje de FCM lleva
   `notification` y `data` en el mismo mensaje, para que Android pinte la notificación **sin despertar la app
   y sin una petición al API**. Filtros idénticos a la web (`estado='pendiente'`, `origen` de teléfono o
   tarreo) y se excluye al camionero que devuelve el pedido.
-- **Token muerto:** si FCM responde `UNREGISTERED` (app desinstalada) el dispositivo queda `activa=False`.
+- **FID muerto:** si FCM responde `UNREGISTERED` (app desinstalada) el dispositivo queda `activa=False`.
   `INVALID_ARGUMENT` **no** desactiva: también se responde por un payload mal formado, y un bug propio no
-  puede dejar a un camionero sin avisos en silencio.
+  puede dejar a un camionero sin avisos en silencio. La guía de FCM pide justamente ese cuidado al detectar
+  inválidos. Además, FCM expira una instalación de Android tras **270 días** sin actividad: `actualizado_el`
+  es la señal de frescura y la app vuelve a subir el FID en cada arranque.
 - **Credenciales:** cuenta de servicio de Firebase en `FCM_CREDENCIALES_JSON` (o `FCM_CREDENCIALES_ARCHIVO`).
   Sin ella el canal no envía nada y **el resto del sistema funciona igual**, con el mismo criterio que VAPID
   vacío. Se usa la **API HTTP v1** (`/v1/projects/<id>/messages:send`) con JWT RS256: las APIs legacy se
@@ -695,7 +700,7 @@ Cloud Messaging (FCM) de su teléfono. Implementado en `mockups/api/dispositivos
 
 - **Archivo:** `mockups/tests/api/test_movil.py`. **No** tocar los tests existentes.
 - **Archivo del canal móvil:** `mockups/tests/api/test_dispositivos.py` (**31 tests**, §7.7): registro
-  idempotente, reasignación del token, validaciones, `401`/`403`/`405`, cupo, baja, y el envío **con el
+  idempotente, reasignación del FID, validaciones, `401`/`403`/`405`, cupo, baja, y el envío **con el
   transporte simulado** —la suite no sale a internet ni necesita credenciales de Firebase—, incluida la
   firma RS256 del JWT.
 - `django.test.TestCase` + `self.client` (ver `mockups/tests/pedidos/test_logica_negocio.py` como referencia).

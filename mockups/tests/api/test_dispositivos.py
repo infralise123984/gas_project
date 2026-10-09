@@ -34,8 +34,8 @@ from mockups.tests.base import crear_balon_11kg, crear_pedido, crear_usuario
 RUTA_REGISTRO = '/api/v1/dispositivos/'
 RUTA_BAJA = '/api/v1/dispositivos/baja/'
 
-TOKEN_A = 'fcm-token-de-prueba-A'
-TOKEN_B = 'fcm-token-de-prueba-B'
+FID_A = 'fid-de-prueba-A'
+FID_B = 'fid-de-prueba-B'
 
 
 class RespuestaFalsa:
@@ -63,18 +63,18 @@ class BaseDispositivosTest(TestCase):
         self.telefonista = crear_usuario('telefonista', 'telefonista_disp')
         self.balon = crear_balon_11kg()
 
-    def _registrar(self, token=TOKEN_A, usuario=None, **extra):
+    def _registrar(self, fid=FID_A, usuario=None, **extra):
         self.client.force_login(usuario or self.camionero)
-        cuerpo = {'token': token, 'plataforma': 'android', 'app_version': '0.1.0'}
+        cuerpo = {'fid': fid, 'plataforma': 'android', 'app_version': '0.1.0'}
         cuerpo.update(extra)
         return self.client.post(
             RUTA_REGISTRO, data=json.dumps(cuerpo), content_type='application/json'
         )
 
-    def _baja(self, token, usuario=None):
+    def _baja(self, fid, usuario=None):
         self.client.force_login(usuario or self.camionero)
         return self.client.post(
-            RUTA_BAJA, data=json.dumps({'token': token}), content_type='application/json'
+            RUTA_BAJA, data=json.dumps({'fid': fid}), content_type='application/json'
         )
 
     def _pedido(self, **extra):
@@ -84,7 +84,7 @@ class BaseDispositivosTest(TestCase):
 
 
 class RegistroDispositivoTest(BaseDispositivosTest):
-    def test_alta_registra_el_token_del_camionero(self):
+    def test_alta_registra_el_fid_del_camionero(self):
         respuesta = self._registrar()
 
         self.assertEqual(respuesta.status_code, 200)
@@ -95,12 +95,12 @@ class RegistroDispositivoTest(BaseDispositivosTest):
 
         dispositivo = DispositivoPush.objects.get()
         self.assertEqual(dispositivo.usuario, self.camionero)
-        self.assertEqual(dispositivo.token, TOKEN_A)
+        self.assertEqual(dispositivo.fid, FID_A)
         self.assertTrue(dispositivo.activa)
 
-    def test_la_respuesta_no_expone_el_token(self):
+    def test_la_respuesta_no_expone_el_fid(self):
         respuesta = self._registrar()
-        self.assertNotIn(TOKEN_A, respuesta.content.decode())
+        self.assertNotIn(FID_A, respuesta.content.decode())
 
     def test_reintento_es_idempotente(self):
         self._registrar()
@@ -116,11 +116,11 @@ class RegistroDispositivoTest(BaseDispositivosTest):
         self.assertEqual(DispositivoPush.objects.count(), 1)
         self.assertEqual(DispositivoPush.objects.get().usuario, self.otro_camionero)
 
-    def test_token_invalido_se_rechaza(self):
-        for token in ('', '   ', 'x' * 256, 12345, None):
-            with self.subTest(token=token):
+    def test_fid_invalido_se_rechaza(self):
+        for fid in ('', '   ', 'x' * 256, 12345, None):
+            with self.subTest(fid=fid):
                 cache.clear()
-                respuesta = self._registrar(token=token)
+                respuesta = self._registrar(fid=fid)
                 self.assertEqual(respuesta.status_code, 400)
                 self.assertEqual(respuesta.json()['error']['codigo'], 'validacion')
 
@@ -137,7 +137,7 @@ class RegistroDispositivoTest(BaseDispositivosTest):
     def test_sin_sesion_responde_401_con_sobre(self):
         respuesta = self.client.post(
             RUTA_REGISTRO,
-            data=json.dumps({'token': TOKEN_A}),
+            data=json.dumps({'fid': FID_A}),
             content_type='application/json',
         )
 
@@ -169,17 +169,17 @@ class RegistroDispositivoTest(BaseDispositivosTest):
         self.assertIn('Retry-After', respuesta)
 
     def test_baja_solo_borra_el_dispositivo_propio(self):
-        self._registrar(token=TOKEN_A, usuario=self.camionero)
-        self._registrar(token=TOKEN_B, usuario=self.otro_camionero)
+        self._registrar(fid=FID_A, usuario=self.camionero)
+        self._registrar(fid=FID_B, usuario=self.otro_camionero)
 
-        # El token ajeno no se borra, y la respuesta no confirma si existe.
-        ajena = self._baja(TOKEN_B, usuario=self.camionero)
+        # El FID ajeno no se borra, y la respuesta no confirma si existe.
+        ajena = self._baja(FID_B, usuario=self.camionero)
         self.assertEqual(ajena.status_code, 200)
         self.assertEqual(DispositivoPush.objects.count(), 2)
 
-        respuesta = self._baja(TOKEN_A)
+        respuesta = self._baja(FID_A)
         self.assertFalse(respuesta.json()['data']['registrado'])
-        self.assertEqual([d.token for d in DispositivoPush.objects.all()], [TOKEN_B])
+        self.assertEqual([d.fid for d in DispositivoPush.objects.all()], [FID_B])
 
 
 class EnvioFcmTest(BaseDispositivosTest):
@@ -189,7 +189,7 @@ class EnvioFcmTest(BaseDispositivosTest):
 
     def test_sin_credenciales_no_envia_y_no_falla(self):
         with self.settings(FCM_CREDENCIALES=None):
-            ok, error = enviar_fcm(TOKEN_A, 'Titulo', 'Cuerpo')
+            ok, error = enviar_fcm(FID_A, 'Titulo', 'Cuerpo')
 
         self.assertFalse(ok)
         self.assertEqual(error, 'FCM no configurado')
@@ -199,8 +199,8 @@ class EnvioFcmTest(BaseDispositivosTest):
             self.assertEqual(notificar_nuevo_pedido_movil(self.pedido), 0)
 
     def test_avisa_a_todos_los_dispositivos_activos(self):
-        self._registrar(token=TOKEN_A)
-        self._registrar(token=TOKEN_B, usuario=self.otro_camionero)
+        self._registrar(fid=FID_A)
+        self._registrar(fid=FID_B, usuario=self.otro_camionero)
 
         with patch(
             'mockups.push_notifications_movil.enviar_fcm', return_value=(True, None)
@@ -209,12 +209,12 @@ class EnvioFcmTest(BaseDispositivosTest):
 
         self.assertEqual(enviados, 2)
         self.assertEqual(
-            {llamada.args[0] for llamada in envio.call_args_list}, {TOKEN_A, TOKEN_B}
+            {llamada.args[0] for llamada in envio.call_args_list}, {FID_A, FID_B}
         )
 
     def test_no_avisa_al_camionero_que_devuelve(self):
-        self._registrar(token=TOKEN_A)
-        self._registrar(token=TOKEN_B, usuario=self.otro_camionero)
+        self._registrar(fid=FID_A)
+        self._registrar(fid=FID_B, usuario=self.otro_camionero)
 
         with patch(
             'mockups.push_notifications_movil.enviar_fcm', return_value=(True, None)
@@ -224,7 +224,7 @@ class EnvioFcmTest(BaseDispositivosTest):
             )
 
         self.assertEqual(enviados, 1)
-        self.assertEqual(envio.call_args.args[0], TOKEN_B)
+        self.assertEqual(envio.call_args.args[0], FID_B)
 
     def test_un_dispositivo_inactivo_no_recibe(self):
         self._registrar()
@@ -237,7 +237,7 @@ class EnvioFcmTest(BaseDispositivosTest):
 
         envio.assert_not_called()
 
-    def test_token_muerto_desactiva_el_dispositivo(self):
+    def test_fid_muerto_desactiva_el_dispositivo(self):
         self._registrar()
 
         with patch(
@@ -273,15 +273,15 @@ class EnvioFcmTest(BaseDispositivosTest):
         envio.assert_not_called()
 
     def test_solo_avisa_a_camioneros(self):
-        DispositivoPush.objects.create(usuario=self.telefonista, token=TOKEN_A)
-        DispositivoPush.objects.create(usuario=self.camionero, token=TOKEN_B)
+        DispositivoPush.objects.create(usuario=self.telefonista, fid=FID_A)
+        DispositivoPush.objects.create(usuario=self.camionero, fid=FID_B)
 
         with patch(
             'mockups.push_notifications_movil.enviar_fcm', return_value=(True, None)
         ) as envio:
             self.assertEqual(notificar_nuevo_pedido_movil(self.pedido), 1)
 
-        self.assertEqual(envio.call_args.args[0], TOKEN_B)
+        self.assertEqual(envio.call_args.args[0], FID_B)
 
     def test_despachador_aisla_el_fallo_de_web_push(self):
         self._registrar()
@@ -323,7 +323,7 @@ class MensajeFcmTest(TestCase):
             return_value=('acceso-de-prueba', None),
         ), patch('mockups.push_notifications_movil.requests.post') as post:
             post.return_value = RespuestaFalsa(status_code=200, cuerpo={})
-            resultado = enviar_fcm(TOKEN_A, 'Titulo', 'Cuerpo', **extra)
+            resultado = enviar_fcm(FID_A, 'Titulo', 'Cuerpo', **extra)
         return resultado, post
 
     def test_lleva_notification_y_data_en_el_mismo_mensaje(self):
@@ -331,7 +331,7 @@ class MensajeFcmTest(TestCase):
 
         self.assertTrue(ok, error)
         mensaje = post.call_args.kwargs['json']['message']
-        self.assertEqual(mensaje['token'], TOKEN_A)
+        self.assertEqual(mensaje['fid'], FID_A)
         self.assertEqual(mensaje['notification'], {'title': 'Titulo', 'body': 'Cuerpo'})
         # Todo valor de `data` tiene que ser texto: FCM rechaza los números.
         self.assertEqual(mensaje['data'], {'pedido_id': '12'})
@@ -355,7 +355,7 @@ class MensajeFcmTest(TestCase):
             post.call_args.kwargs['headers']['Authorization'], 'Bearer acceso-de-prueba'
         )
 
-    def test_un_error_de_fcm_no_filtra_el_token(self):
+    def test_un_error_de_fcm_no_filtra_el_fid(self):
         with self.settings(FCM_CREDENCIALES=self.CREDENCIALES), patch(
             'mockups.push_notifications_movil.token_de_acceso',
             return_value=('acceso-de-prueba', None),
@@ -364,10 +364,10 @@ class MensajeFcmTest(TestCase):
                 status_code=503,
                 cuerpo={'error': {'status': 'UNAVAILABLE', 'message': 'try again'}},
             )
-            ok, error = enviar_fcm(TOKEN_A, 'Titulo', 'Cuerpo')
+            ok, error = enviar_fcm(FID_A, 'Titulo', 'Cuerpo')
 
         self.assertFalse(ok)
-        self.assertNotIn(TOKEN_A, str(error))
+        self.assertNotIn(FID_A, str(error))
 
 
 class CodigoDeErrorFcmTest(TestCase):
