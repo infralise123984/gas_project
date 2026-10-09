@@ -24,7 +24,7 @@ Rama `refactor/cambios-criticos-validacion` — commits `ca8c553`, `6acd524` (pr
 
 | Archivo(s) | Cambio |
 |------------|--------|
-| `mockups/tests_logica_negocio.py` | **9 tests** baseline: totales, kilos camionero, sync sobres, fechas Chile/UTC |
+| `mockups/tests/pedidos/test_logica_negocio.py` | **9 tests** baseline: totales, kilos camionero, sync sobres, fechas Chile/UTC |
 | `mockups/models.py` | Eliminada clase `LineaSobre` duplicada (M4) |
 | `mockups/views.py`, `admin.py`, `forms.py`, `settings.py` | Limpieza cosmética (docstrings, comentarios obsoletos) |
 
@@ -36,7 +36,7 @@ Commit `bd63100` — sync AJAX de sobres operativos.
 |------------|--------|
 | `mockups/views.py` | GET sin sync salvo sobre vacío; POST borrador guarda declarada y luego sync solo **calculada**; `refrescar_sobre_diario` devuelve `balon_id` |
 | `mockups/templates/sobres/sobres.html` | AJAX al cargar, polling **5 min**, botón «Actualizar ahora», `visibilitychange`, fix emparejamiento filas DOM |
-| `mockups/tests_logica_negocio.py` | **10 tests** — nuevo: declarada fija tras borrador aunque suba calculada |
+| `mockups/tests/pedidos/test_logica_negocio.py` | **10 tests** — nuevo: declarada fija tras borrador aunque suba calculada |
 
 **Regla de negocio confirmada:** `cantidad_declarada` la fija el bodeguero al guardar borrador; la sync solo actualiza `cantidad_calculada` en líneas existentes.
 
@@ -87,7 +87,7 @@ No se detectó un sistema de caché (`CACHES`) ni tareas asíncronas formales (C
 | C2 | ⏳ Pendiente | Vistas | `reporte_ventas` (`views.py` ~2445–2526) | Itera **todos los pedidos del mes** en Python para rendimiento por trabajador y ventas por día. Además, por cada trabajador ejecuta **2 consultas `count()`** adicionales (`registrador_id` y `entregador_id`) → patrón N+1. | Mover agregaciones a SQL con `values().annotate()` o `Case/When`. Precalcular métricas diarias en tabla materializada o job nocturno. |
 | C3 | ⏳ Pendiente | Vistas | `reporte_sobres` (`views.py` ~2701–2894) | Aunque usa `prefetch_related`, las funciones `calcular_metricas` y la tabla final llaman `s.lineas.all()`, `s.gastos.all()`, `s.pagos.all()` en bucles. Con muchos sobres del mes, el prefetch ayuda pero sigue siendo costoso en CPU. Además, `Usuario.objects.get(id=clave)` dentro de bucles. | Agregar con `annotate(Sum(...))` a nivel de queryset. Precargar usuarios con un diccionario `{id: usuario}` en una sola consulta. |
 | C4 | ⏳ Pendiente | Vistas | `consultas_pedidos` (`views.py` ~2142–2153) | Búsqueda con múltiples `icontains` sobre FKs + join a `detalles__balon__nombre` + `.distinct()`. En tablas grandes, esto fuerza scans y joins pesados. | Limitar campos buscables, usar índice full-text (MySQL FULLTEXT / PostgreSQL `tsvector`), o motor dedicado (Elasticsearch/Meilisearch) si la búsqueda es frecuente. |
-| C5 | ⏳ Pendiente | Modelos | `SobreDiario.calcular_desde_pedidos` (`models.py` ~460–477) | Usa `fecha__date=...` (no usa índice en `fecha`) y filtro bodega incorrecto (`registrador=self.trabajador` con `trabajador=None` → siempre 0). Tests lo documentan en `tests_logica_negocio.py`. | Reutilizar lógica de `get_pedidos_queryset_para_sobre`; actualizar test que hoy espera el bug. **Próximo paso técnico recomendado.** |
+| C5 | ⏳ Pendiente | Modelos | `SobreDiario.calcular_desde_pedidos` (`models.py` ~460–477) | Usa `fecha__date=...` (no usa índice en `fecha`) y filtro bodega incorrecto (`registrador=self.trabajador` con `trabajador=None` → siempre 0). Tests lo documentan en `tests/pedidos/test_logica_negocio.py`. | Reutilizar lógica de `get_pedidos_queryset_para_sobre`; actualizar test que hoy espera el bug. **Próximo paso técnico recomendado.** |
 
 ---
 
@@ -189,7 +189,7 @@ Estas prácticas **no requieren cambio inmediato** y deben mantenerse:
 4. ✅ **Unificar consultas** en `consultas_pedidos` y conteos en `camionero_entregas`.
 5. ✅ **Flatpickr / Chart.js** solo donde se usan.
 6. ✅ **Service Worker** limitado a `/static/` (`sw.js` v4).
-7. ✅ **Tests de lógica** (`tests_logica_negocio.py`, 10 tests).
+7. ✅ **Tests de lógica** (`tests/pedidos/test_logica_negocio.py`, 10 tests).
 
 ### Fase 2 — Base de datos (2–4 semanas)
 

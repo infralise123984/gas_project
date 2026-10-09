@@ -50,12 +50,14 @@ VAPID_ADMIN_EMAIL=mailto:admin@tudominio.cl
 > **no se envían notificaciones**: `send_push_notification()` responde
 > `'Claves VAPID no configuradas'`.
 >
-> ⚠️ **Deuda de seguridad conocida (2026-09-16).** `gasmanager/settings.py` define
-> además un **par por defecto hardcodeado** para `VAPID_PUBLIC_KEY` y
-> `VAPID_PRIVATE_KEY`, y ese par quedó registrado en el historial de git. Hasta que
-> se elimine ese valor por defecto **y** se rote el par, hay que asumir que la clave
-> privada es pública: no usarla en entornos nuevos y tratar cualquier notificación
-> inesperada en los teléfonos de los camioneros como un posible envío suplantado.
+> ⚠️ **Deuda de seguridad: el par VAPID por defecto ya no está en el código, pero falta rotarlo.**
+> El 2026-10-09 se quitaron los valores por defecto hardcodeados de `VAPID_PUBLIC_KEY` y
+> `VAPID_PRIVATE_KEY` en `gasmanager/settings.py`, así que ya no se pueden usar por accidente en un entorno
+> nuevo. **Eso no es una rotación:** el par viejo sigue en el historial de git, así que hay que asumir que la
+> clave privada es pública hasta que se genere un par nuevo (`python scripts/generate_vapid.py`) y se cargue
+> en `.env` y en las variables de Render. Al rotar, **todas las suscripciones existentes quedan inválidas** y
+> cada camionero debe volver a activar las notificaciones desde la PWA.
+> Ojo al mergear: cualquier rama que conserve el default **reintroduce el secreto**.
 
 ### Cómo generar las claves VAPID
 
@@ -197,4 +199,6 @@ Para iOS, el usuario debe:
 - Las claves VAPID deben mantenerse privadas
 - Las suscripciones expiradas se desactivan automáticamente
 - Todas las acciones se registran en auditoría
-- ⚠️ **Pendiente:** el par VAPID por defecto hardcodeado en `gasmanager/settings.py` está expuesto en el historial de git (ver la nota en "Variables de entorno"). Requiere eliminar el default y rotar el par; ambas acciones quedaron **decididas como no urgentes** el 2026-09-16.
+- ⚠️ **Pendiente:** el par VAPID viejo sigue en el historial de git. El default hardcodeado ya se quitó del
+  código (2026-10-09), pero **la rotación está pendiente**: mientras no se genere un par nuevo y se cargue en
+  `.env`/Render, la clave privada vieja debe tratarse como pública.

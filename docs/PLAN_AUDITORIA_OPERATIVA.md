@@ -35,7 +35,7 @@ Hoy la auditoría es **solo del lado del servidor**: `AuditoriaAccion` registra 
 | Permisos | `require_roles(request, [...], redirect_to, mensaje)` para HTML y `require_roles_api(request, [...])` para JSON. **Ambas auditan `PERM_DENIED` automáticamente**. Usar siempre estas, no `if user.rol == ...` |
 | Auditoría | `AuditoriaAccion.registrar(request=..., tipo=..., descripcion=..., objeto=..., datos_anteriores=..., datos_nuevos=...)` — guarda IP y User-Agent del request |
 | Logs | Loggers `audit` (INFO) y `security` (WARNING), configurados en `gasmanager/settings.py`. Patrón: `audit_logger.info("EVENTO | dato | dato")` y `security_logger.warning("EVENTO_FAIL | ...")` |
-| Tests | `django.test.TestCase` (ver `mockups/tests_logica_negocio.py`). Comando: `python manage.py test <ruta> -v 2` |
+| Tests | `django.test.TestCase` (ver `mockups/tests/pedidos/test_logica_negocio.py`). Comando: `python manage.py test <ruta> -v 2` |
 | Timezone | `America/Santiago`. Para fechas usar helpers de `mockups/utils/fechas.py` (`today_chile`, `now_chile`, `rango_dia_chile`) — **no** `datetime.now()` a secas |
 | Base de datos | Local SQLite; producción según `DB_ENGINE` en variables de entorno. **Las migraciones deben ser compatibles con MySQL y PostgreSQL**: nada de campos específicos de un motor |
 | Migraciones | Última aplicada: `0031_rename_mockups_ped_sector_...`. **Nunca editar migraciones existentes** |
@@ -69,7 +69,7 @@ Cualquier desviación de esta sección debe consultarse antes con el dueño del 
 - `backups/*.sql` y `logs/*` — datos y logs.
 - `graphify-out/` y `mockups/graphify-out/` — artefactos generados por herramienta de análisis; se regeneran solos.
 - `.env`, `render.yaml` (salvo que se pida explícitamente), `Procfile`.
-- `mockups/tests.py` y `mockups/tests_logica_negocio.py` — **no modificar los tests existentes**. Si se necesitan tests nuevos, crear archivo aparte (`mockups/tests_auditoria.py`).
+- `mockups/tests/` — **no modificar los tests existentes**. Si se necesitan tests nuevos, crear el archivo en el subpaquete correspondiente (p. ej. `mockups/tests/auditoria/`).
 
 ### 3.2 Comportamiento que NO se cambia
 - **No cambiar la semántica de la cancelación.** `camionero_cancelar_entrega` debe seguir dejando el pedido en `estado='cancelado'` y conservando `entregador` (hay una decisión de negocio validada: el pedido cancelado queda ligado al camionero para trazabilidad). El cambio a "devolver a pendiente" es **otro plan** y requiere decisión del dueño.
@@ -412,7 +412,7 @@ except Exception as e:
   - Opcionales: `--tipo TIPO`, `--usuario username`, `--dry-run`.
   - Salida: cantidad de filas que se borrarían / se borraron.
   - Nunca borrar `AuditoriaAccion` ni `AlertaOperativa` desde este comando.
-- [ ] Tests nuevos en `mockups/tests_auditoria.py` (**no tocar** los tests existentes):
+- [ ] Tests nuevos en `mockups/tests/auditoria/` (**no tocar** los tests existentes):
   - telemetría: requiere login (302/403 sin sesión), rechaza GET (405), ignora tipos inválidos, trunca strings largos, ignora la IP enviada por el cliente y usa la del request;
   - `forense_pedido`: 403/redirect para `camionero`, 200 para `jefe`/`admin`; número de queries constante;
   - cancelación: crea `AlertaOperativa` para telefonistas y **no falla** si el envío de push lanza excepción (mockear `send_push_notification`);
@@ -425,7 +425,7 @@ except Exception as e:
 ## 6. Definición de "terminado" (Definition of Done)
 
 1. `python manage.py makemigrations --check --dry-run` no reporta cambios pendientes.
-2. `python manage.py test mockups.tests_auditoria mockups.tests_logica_negocio -v 2` pasa completo.
+2. `python manage.py test mockups.tests.auditoria mockups.tests.pedidos.test_logica_negocio -v 2` pasa completo.
 3. `python manage.py check --deploy` no agrega advertencias nuevas respecto de la rama base.
 4. En un teléfono Android real: se registran `UI_TAP`, `UI_MODAL_*`, `PUSH_SHOWN` y `APP_HEARTBEAT`.
 5. La línea de tiempo de un pedido cancelado muestra el orden completo de eventos con sus deltas.
@@ -492,4 +492,4 @@ except Exception as e:
 | Admin read-only de auditoría (patrón) | `mockups/admin.py` → `AuditoriaAccionAdmin` |
 | Visor de auditoría actual | `mockups/views/catalogos.py` → `auditoria_lista`, template `auditoria/lista_auditoria.html` |
 | Comando de limpieza (patrón) | `mockups/management/commands/limpiar_sobres.py` |
-| Estilos de test | `mockups/tests_logica_negocio.py` |
+| Estilos de test | `mockups/tests/pedidos/test_logica_negocio.py` |

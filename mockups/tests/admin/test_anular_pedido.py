@@ -2,7 +2,7 @@
 Pruebas de la anulación administrativa de pedidos.
 
 Ejecutar:
-    python manage.py test mockups.tests_anular_pedido -v 2
+    python manage.py test mockups.tests.admin.test_anular_pedido -v 2
 
 Cubren:
 - El admin puede anular un pedido ya entregado (antes imposible desde la app).
@@ -13,32 +13,25 @@ Cubren:
 - El template del detalle solo muestra la anulación al admin.
 """
 
-from datetime import date, datetime, time
+from datetime import date
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from django.contrib import admin
-from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
-from django.utils import timezone
 
 from mockups.admin import PedidoAdmin
 from mockups.models import (
     AuditoriaAccion,
-    DetallePedido,
     HistorialCambioPedido,
     HistorialEstadoPedido,
     Pedido,
     SobreDiario,
-    TipoBalon,
 )
 from mockups.services.pedidos import AnulacionNoPermitida, anular_pedido
 from mockups.services.sobres import sincronizar_sobre_desde_pedidos
-
-User = get_user_model()
-TZ_CHILE = ZoneInfo('America/Santiago')
+from mockups.tests.base import crear_balon_5kg, crear_pedido, crear_usuario, dt_chile
 
 MOTIVO_PRUEBA = 'Entrega cargada a la cuenta equivocada.'
 
@@ -48,51 +41,26 @@ class AnulacionFixturesMixin:
 
     @classmethod
     def setUpTestData(cls):
-        cls.admin = User.objects.create_user(
-            username='admin_anula', password='test12345', rol='admin',
-        )
-        cls.jefe = User.objects.create_user(
-            username='jefe_anula', password='test12345', rol='jefe',
-        )
-        cls.telefonista = User.objects.create_user(
-            username='telefonista_anula', password='test12345', rol='telefonista',
-        )
-        cls.bodeguero = User.objects.create_user(
-            username='bodeguero_anula', password='test12345', rol='bodeguero',
-        )
-        cls.camionero = User.objects.create_user(
-            username='camionero_anula', password='test12345', rol='camionero',
-        )
+        cls.admin = crear_usuario('admin', 'admin_anula')
+        cls.jefe = crear_usuario('jefe', 'jefe_anula')
+        cls.telefonista = crear_usuario('telefonista', 'telefonista_anula')
+        cls.bodeguero = crear_usuario('bodeguero', 'bodeguero_anula')
+        cls.camionero = crear_usuario('camionero', 'camionero_anula')
 
-        cls.balon_5 = TipoBalon.objects.create(
-            nombre='Balón 5 kg', peso_neto_gas=5, tipo_gas='normal',
-            precio_compra=4000, precio_local=7000, precio_domicilio=8500, activo=True,
-        )
+        cls.balon_5 = crear_balon_5kg()
 
         cls.fecha_dia = date(2026, 6, 15)
-        cls.mediodia_chile = timezone.make_aware(
-            datetime.combine(cls.fecha_dia, time(12, 0)), TZ_CHILE,
-        )
+        cls.mediodia_chile = dt_chile(cls.fecha_dia)
 
     def _crear_pedido(self, *, estado='entregado', entregador=None, cantidad=2, origen='telefono'):
-        pedido = Pedido.objects.create(
+        return crear_pedido(
             registrador=self.telefonista,
             entregador=entregador if entregador is not None else self.camionero,
-            origen=origen,
             estado=estado,
-            metodo_pago='efectivo',
+            origen=origen,
             fecha=self.mediodia_chile,
+            lineas=[(self.balon_5, cantidad)],
         )
-        DetallePedido.objects.create(
-            pedido=pedido,
-            balon=self.balon_5,
-            cantidad=cantidad,
-            precio_venta_unitario=self.balon_5.precio_domicilio,
-            precio_compra_unitario=self.balon_5.precio_compra,
-        )
-        pedido.calcular_totales()
-        pedido.refresh_from_db()
-        return pedido
 
     def _url_anular(self, pedido):
         return reverse('pedidos_anular', args=[pedido.id])
