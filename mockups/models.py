@@ -976,17 +976,20 @@ class DispositivoPush(models.Model):
     distintos y **no** se pisan. La PWA del camionero sigue con Web Push
     intacto (D-2 del plan móvil).
 
-    El `fid` es una credencial de envío: permite hacerle llegar avisos a ese
+    El `token` es una credencial de envío: permite hacerle llegar avisos a ese
     teléfono. **Nunca** se registra completo en logs ni se devuelve al cliente.
     No se puede hashear —hay que mandarlo literal a FCM— y por eso se guarda en
     claro: es una capacidad de un dispositivo, no una contraseña de usuario.
 
-    **FID, no el token legacy:** FCM migró de los *registration tokens* al Firebase
-    Installation ID, y la v1 de la API **deprecia `token` a favor de `fid`** (el
-    `token` acepta un FID solo durante la transición). Por eso el campo se llama
-    `fid` y el envío lo manda en `"fid"` (`docs/API_MOVIL.md` §7.7).
+    **Es el *registration token*, no el FID.** La v1 de FCM ya deprecia `token` a
+    favor de `fid`, pero el plugin de Flutter todavía **no** expone los Firebase
+    Installation IDs: `onRegistered` y `register()` no existen en
+    `firebase_messaging` 16.7.0. El token sigue plenamente soportado durante la
+    transición, así que es lo que el teléfono puede entregar hoy. Cuando el plugin
+    exponga el FID, el cambio es de a un lado y del otro: el cliente manda el FID
+    y el servidor lo envía en `"fid"` (`docs/API_MOVIL.md` §7.7).
 
-    `unique=True` en `fid` (y no `unique_together` con `usuario`) porque el
+    `unique=True` en `token` (y no `unique_together` con `usuario`) porque el
     mismo teléfono puede pasar de un camionero a otro: al registrarse, el
     identificador se reasigna al usuario nuevo en vez de duplicar la fila."""
 
@@ -994,9 +997,9 @@ class DispositivoPush(models.Model):
         Usuario, on_delete=models.CASCADE, related_name="dispositivos_push",
         verbose_name="Camionero"
     )
-    fid = models.CharField(
-        max_length=255, unique=True, verbose_name="Installation ID (FID)",
-        help_text="Firebase Installation ID del teléfono (nunca se registra completo en logs)"
+    token = models.CharField(
+        max_length=255, unique=True, verbose_name="Token de FCM",
+        help_text="Registration token de FCM del teléfono (nunca se registra completo en logs)"
     )
     plataforma = models.CharField(
         max_length=16, default="android", choices=[("android", "Android")],
