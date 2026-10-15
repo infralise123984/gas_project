@@ -1,0 +1,331 @@
+{% extends 'base.html' %}
+
+{# Panel de monitoreo de la flota (docs/PLAN_MONITOREO_FLOTA.md).
+   Responde a lo que la telefonista hacía con los GPS arrendados: ver quién lleva
+   rato sin moverse y llamarlo. No hay alertas automáticas ni push: alguien mira
+   y decide. #}
+
+{% block title %}Flota - ValGas{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+    #mapaFlota {
+        height: 420px;
+        border-radius: .5rem;
+        z-index: 0; /* por debajo de la navbar fija */
+    }
+    .flota-punto {
+        font-variant-numeric: tabular-nums;
+    }
+    .flota-bitacora {
+        max-height: 320px;
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+        <h1 class="h4 mb-0"><i class="bi bi-truck-front"></i> Flota en la calle</h1>
+        <p class="text-muted mb-0 small">
+            Última actualización: <span id="flotaActualizado">—</span>
+        </p>
+    </div>
+    <button type="button" class="btn btn-outline-primary btn-sm" id="flotaRefrescar">
+        <i class="bi bi-arrow-clockwise"></i> Actualizar
+    </button>
+</div>
+
+<div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+    <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="verRastro" checked>
+        <label class="form-check-label small" for="verRastro">
+            Recorrido del día <span class="text-muted">(donde pasó el camión)</span>
+        </label>
+    </div>
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col-4">
+        <div class="card text-center h-100 border-success">
+            <div class="card-body py-2">
+                <div class="fs-4 fw-bold text-success" id="kpiMovimiento">0</div>
+                <div class="small text-muted">En movimiento</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-4">
+        <div class="card text-center h-100 border-warning">
+            <div class="card-body py-2">
+                <div class="fs-4 fw-bold text-warning" id="kpiDetenidos">0</div>
+                <div class="small text-muted">Detenidos</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-4">
+        <div class="card text-center h-100 border-secondary">
+            <div class="card-body py-2">
+                <div class="fs-4 fw-bold text-secondary" id="kpiSinSenal">0</div>
+                <div class="small text-muted">Sin señal</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="mapaFlota" class="mb-3 border"></div>
+
+<div class="table-responsive">
+    <table class="table table-sm align-middle">
+        <thead>
+            <tr>
+                <th>Camionero</th>
+                <th>Estado</th>
+                <th class="text-end">Sin moverse</th>
+                <th class="text-end">Pedidos</th>
+                <th class="text-end">Tarreo</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody id="flotaTabla">
+            <tr><td colspan="6" class="text-center text-muted py-3">Cargando…</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="modal fade" id="modalBitacora" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h6 mb-0" id="bitacoraTitulo">Bitácora</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body flota-bitacora" id="bitacoraCuerpo"></div>
+            <div class="modal-footer">
+                <p class="text-muted small mb-0 me-auto">
+                    Los tramos "sin señal" son huecos del reporte, no paradas confirmadas.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+    'use strict';
+
+    var RUTA_API = '/flota/api/';
+    var INTERVALO_MS = 30000;
+
+    // Centro por defecto (Santiago) para cuando todavía no hay ninguna posición.
+    var CENTRO = [-33.45, -70.66];
+
+    var ETIQUETAS = {
+        movimiento: 'En movimiento',
+        detenido: 'Detenido',
+        sin_senal: 'Sin señal'
+    };
+    var COLORES = {
+        movimiento: '#198754',
+        detenido: '#ffc107',
+        sin_senal: '#6c757d'
+    };
+
+    var minutosDetenido = 45; // se reemplaza con el valor del servidor
+    var mapa = null;
+    var capa = null;
+
+    // Un color por camionero, para poder seguir su línea en el mapa cuando hay
+    // varios. El marcador usa el color del estado; la línea, el del camionero.
+    var PALETA = ['#0d6efd', '#fd7e14', '#6f42c1', '#20c997', '#d63384', '#0dcaf0', '#ffc107', '#198754'];
+    var capaRastro = null;
+    var ultimosCamiones = [];
+
+    function colorDeRastro(indice) {
+        return PALETA[indice % PALETA.length];
+    }
+
+    function minutosTexto(minutos) {
+        if (minutos === null || minutos === undefined) {
+            return '—';
+        }
+        if (minutos < 60) {
+            return minutos + ' min';
+        }
+        return Math.floor(minutos / 60) + ' h ' + (minutos % 60) + ' min';
+    }
+
+    function colorDe(camion) {
+        if (camion.estado !== 'detenido') {
+            return COLORES[camion.estado];
+        }
+        return camion.minutos >= minutosDetenido ? '#dc3545' : COLORES.detenido;
+    }
+
+    function pesoDe(camion) {
+        if (camion.estado !== 'detenido') {
+            return ETIQUETAS[camion.estado];
+        }
+        return camion.minutos >= minutosDetenido
+            ? 'Detenido hace rato'
+            : ETIQUETAS.detenido;
+    }
+
+    function filaHtml(camion, indice) {
+        var color = colorDe(camion);
+        return '<tr>' +
+            '<td><span class="d-inline-block rounded-circle me-2" ' +
+                'style="width:10px;height:10px;background-color:' + colorDeRastro(indice) + '"></span>' +
+                camion.nombre + '</td>' +
+            '<td><span class="badge" style="background-color:' + color + '">' +
+                pesoDe(camion) + '</span></td>' +
+            '<td class="text-end flota-punto">' + minutosTexto(camion.minutos) + '</td>' +
+            '<td class="text-end flota-punto">' + camion.pedidos + '</td>' +
+            '<td class="text-end flota-punto">$' + camion.monto_tarreo.toLocaleString('es-CL') + '</td>' +
+            '<td class="text-end">' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" ' +
+                'data-bitacora="' + indice + '">Bitácora</button>' +
+            '</td>' +
+        '</tr>';
+    }
+
+    function pintarMapa(camiones) {
+        ultimosCamiones = camiones;
+        // Limpiar aquí y no en quien llama: el interruptor del recorrido vuelve a
+        // pintar sin consultar al servidor, y sin esto los marcadores se
+        // apilarían uno encima de otro.
+        capa.clearLayers();
+        capaRastro.clearLayers();
+
+        // El recorrido va primero, para que los marcadores queden por encima.
+        if (document.getElementById('verRastro').checked) {
+            camiones.forEach(function (camion, indice) {
+                if (!camion.rastro || camion.rastro.length < 2) {
+                    return;
+                }
+                L.polyline(camion.rastro, {
+                    color: colorDeRastro(indice),
+                    weight: 5,
+                    opacity: 0.8,
+                    lineJoin: 'round'
+                }).bindTooltip('Recorrido de ' + camion.nombre).addTo(capaRastro);
+            });
+        }
+
+        var puntos = [];
+        camiones.forEach(function (camion) {
+            if (camion.lat === null || camion.lng === null) {
+                return;
+            }
+            var marcador = L.circleMarker([camion.lat, camion.lng], {
+                radius: 9,
+                color: '#ffffff',
+                weight: 2,
+                fillColor: colorDe(camion),
+                fillOpacity: 0.9
+            });
+            marcador.bindTooltip(camion.nombre + ' · ' + minutosTexto(camion.minutos));
+            marcador.addTo(capa);
+            puntos.push([camion.lat, camion.lng]);
+        });
+
+        if (puntos.length) {
+            mapa.fitBounds(puntos, { padding: [40, 40], maxZoom: 15 });
+        }
+    }
+
+    function pintarTabla(camiones) {
+        var cuerpo = document.getElementById('flotaTabla');
+        if (!camiones.length) {
+            cuerpo.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">' +
+                'No hay camioneros activos.</td></tr>';
+            return;
+        }
+        cuerpo.innerHTML = camiones.map(filaHtml).join('');
+
+        cuerpo.querySelectorAll('[data-bitacora]').forEach(function (boton) {
+            boton.addEventListener('click', function () {
+                abrirBitacora(camiones[Number(boton.dataset.bitacora)]);
+            });
+        });
+    }
+
+    function pintarKpis(camiones) {
+        var cuenta = { movimiento: 0, detenido: 0, sin_senal: 0 };
+        camiones.forEach(function (camion) { cuenta[camion.estado] += 1; });
+        document.getElementById('kpiMovimiento').textContent = cuenta.movimiento;
+        document.getElementById('kpiDetenidos').textContent = cuenta.detenido;
+        document.getElementById('kpiSinSenal').textContent = cuenta.sin_senal;
+    }
+
+    function abrirBitacora(camion) {
+        document.getElementById('bitacoraTitulo').textContent = 'Bitácora · ' + camion.nombre;
+        var cuerpo = document.getElementById('bitacoraCuerpo');
+        if (!camion.tramos.length) {
+            cuerpo.innerHTML = '<p class="text-muted mb-0">Sin datos de hoy.</p>';
+        } else {
+            cuerpo.innerHTML = '<ul class="list-unstyled mb-0">' + camion.tramos.map(function (tramo) {
+                var hora = new Date(tramo.inicio).toLocaleTimeString('es-CL', {
+                    hour: '2-digit', minute: '2-digit'
+                });
+                var hasta = new Date(tramo.fin).toLocaleTimeString('es-CL', {
+                    hour: '2-digit', minute: '2-digit'
+                });
+                return '<li class="border-bottom py-2">' +
+                    '<span class="badge" style="background-color:' + COLORES[tramo.tipo] + '">' +
+                        ETIQUETAS[tramo.tipo] + '</span> ' +
+                    '<span class="ms-2">' + hora + ' – ' + hasta + '</span> ' +
+                    '<span class="text-muted small">(' + tramo.minutos + ' min)</span>' +
+                '</li>';
+            }).join('') + '</ul>';
+        }
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalBitacora')).show();
+    }
+
+    function consultar() {
+        return fetch(RUTA_API, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (respuesta) {
+                if (!respuesta.ok) { throw new Error('HTTP ' + respuesta.status); }
+                return respuesta.json();
+            })
+            .then(function (datos) {
+                if (typeof datos.minutos_detenido === 'number') {
+                    minutosDetenido = datos.minutos_detenido;
+                }
+                pintarKpis(datos.camiones);
+                pintarTabla(datos.camiones);
+                pintarMapa(datos.camiones);
+                document.getElementById('flotaActualizado').textContent =
+                    new Date(datos.servidor_ahora).toLocaleTimeString('es-CL');
+            })
+            .catch(function () {
+                document.getElementById('flotaActualizado').textContent =
+                    'sin conexión con el servidor';
+            });
+    }
+
+    mapa = L.map('mapaFlota').setView(CENTRO, 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(mapa);
+    // El rastro se crea ANTES que los marcadores: en el orden de inserción de
+    // Leaflet, la línea queda debajo y no tapa el punto actual.
+    capaRastro = L.layerGroup().addTo(mapa);
+    capa = L.layerGroup().addTo(mapa);
+
+    document.getElementById('flotaRefrescar').addEventListener('click', consultar);
+    document.getElementById('verRastro').addEventListener('change', function () {
+        pintarMapa(ultimosCamiones);
+    });
+    consultar();
+    setInterval(consultar, INTERVALO_MS);
+})();
+</script>
+{% endblock %}

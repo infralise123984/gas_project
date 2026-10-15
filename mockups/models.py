@@ -958,6 +958,15 @@ class UbicacionCamion(models.Model):
         verbose_name_plural = "Ubicaciones del camión"
         ordering = ["-capturado_el"]
         indexes = [models.Index(fields=["trabajador", "capturado_el"])]
+        constraints = [
+            # Un momento no se repite para el mismo camionero. Es lo que hace
+            # idempotente el reenvío de un lote: la app reintenta tras un corte
+            # de red y las muestras ya guardadas se ignoran en vez de duplicarse.
+            models.UniqueConstraint(
+                fields=["trabajador", "capturado_el"],
+                name="ubicacion_unica_por_momento",
+            ),
+        ]
 
     def __str__(self):
         return (

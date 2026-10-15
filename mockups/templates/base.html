@@ -408,6 +408,12 @@
                             <i class="bi bi-clock-history"></i> Mis Pedidos
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'flota_panel' %}active{% endif %}"
+                            href="{% url 'flota_panel' %}">
+                            <i class="bi bi-truck-front"></i> Flota
+                        </a>
+                    </li>
                     {% endif %}
                     {% if user.rol == "bodeguero" %}
                     <li class="nav-item">
@@ -464,6 +470,12 @@
                     </li>
                     {% endif %}
                     {% if user.rol == "jefe" or user.rol == "admin" %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'flota_panel' %}active{% endif %}"
+                            href="{% url 'flota_panel' %}">
+                            <i class="bi bi-truck-front"></i> Flota
+                        </a>
+                    </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'reportes_ventas' or request.resolver_match.url_name == 'reportes_sobres' or request.resolver_match.url_name == 'reportes_resumen' %}active{% endif %}"
                            href="#" data-bs-toggle="dropdown" aria-expanded="false">

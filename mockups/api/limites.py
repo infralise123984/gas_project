@@ -82,6 +82,9 @@ POLITICA = {
     'version': Cupo(10, 60),
     # Alta o baja del teléfono: pasa al iniciar y al cerrar sesión, no más.
     'dispositivos': Cupo(10, 60),
+    # Ingesta de ubicación: la app manda un lote cada 2-3 min, así que 20/min es
+    # holgado para el uso real y corta un bucle de reintentos descontrolado.
+    'ubicacion': Cupo(20, 60),
 }
 
 

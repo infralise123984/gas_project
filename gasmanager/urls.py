@@ -130,6 +130,13 @@ urlpatterns = [
     path('sw.js', views.service_worker, name='service_worker'),
 
     # ────────────────────────────────────────────────
+    # Panel de monitoreo de la flota
+    # Plan: docs/PLAN_MONITOREO_FLOTA.md
+    # ────────────────────────────────────────────────
+    path('flota/', views.flota_panel, name='flota_panel'),
+    path('flota/api/', views.flota_api, name='flota_api'),
+
+    # ────────────────────────────────────────────────
     # API JSON para la app móvil del camionero
     # Contrato: docs/API_MOVIL.md
     # ────────────────────────────────────────────────

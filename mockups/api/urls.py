@@ -7,7 +7,7 @@ Se incluye desde ``gasmanager/urls.py`` con una sola línea, al final:
 
 from django.urls import path
 
-from mockups.api import auth, catalogos, dispositivos, entregas, historial, tarreo
+from mockups.api import auth, catalogos, dispositivos, entregas, historial, tarreo, ubicacion
 
 app_name = 'api_v1'
 
@@ -43,4 +43,7 @@ urlpatterns = [
     # Notificaciones de la app nativa (§7.7): el token de FCM del teléfono.
     path('dispositivos/', dispositivos.registrar_dispositivo, name='dispositivos'),
     path('dispositivos/baja/', dispositivos.baja_dispositivo, name='dispositivos_baja'),
+
+    # Ubicación de la flota (§7.8): el teléfono reporta posición en jornada.
+    path('ubicacion/', ubicacion.registrar_ubicacion, name='ubicacion'),
 ]

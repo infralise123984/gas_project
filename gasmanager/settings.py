@@ -333,9 +333,36 @@ UBICACION_JORNADA_INICIO = int(os.getenv('UBICACION_JORNADA_INICIO', 8))    # 08
 UBICACION_JORNADA_FIN = int(os.getenv('UBICACION_JORNADA_FIN', 20))         # 20:00
 
 # Ventana móvil de retención. No hay histórico acumulativo: lo que pasa de estas
-# horas se borra en el propio POST de ingesta (sin cron).
-UBICACION_RETENCION_HORAS = int(os.getenv('UBICACION_RETENCION_HORAS', 24))
+# horas se borra en el propio POST de ingesta (sin cron). 72 h cubre la jornada
+# de hoy, la de ayer y el fin de semana, que es lo que se revisa de verdad.
+UBICACION_RETENCION_HORAS = int(os.getenv('UBICACION_RETENCION_HORAS', 72))
 
-# Máximo de muestras aceptadas en un solo lote. El que envía la app son pocas
-# (una cada 30-60 s), así que cualquier cosa mayor es un abuso.
+# Máximo de muestras aceptadas en un solo lote. La app reporta cada 2-3 min, así
+# que un lote grande es la cola acumulada de un bache sin señal, no lo normal.
 UBICACION_MAX_MUESTRAS = int(os.getenv('UBICACION_MAX_MUESTRAS', 120))
+
+# Techo del cuerpo del POST de ingesta, en bytes. El límite global del API
+# (4 KB) es para payloads diminutos; un lote de 120 muestras ronda los 18 KB.
+UBICACION_LIMITE_CUERPO_BYTES = int(os.getenv('UBICACION_LIMITE_CUERPO_BYTES', 32768))
+
+# Criterio de cálculo, no de politica: por debajo de este desplazamiento entre
+# dos muestras consecutivas se considera que el camión no se movió.
+UBICACION_MIN_DESPLAZAMIENTO_M = int(os.getenv('UBICACION_MIN_DESPLAZAMIENTO_M', 100))
+
+# Muestras peores que esto se descartan antes de calcular tramos: un error de
+# GPS grande inventaría una parada o un movimiento que no ocurrieron.
+UBICACION_PRECISION_MAXIMA_M = int(os.getenv('UBICACION_PRECISION_MAXIMA_M', 100))
+
+# Hueco entre muestras que se reporta como tramo "sin señal" (se apagó el
+# teléfono, se cerró la app o no había red). Distinto de "detenido".
+UBICACION_MINUTOS_SIN_SENAL = int(os.getenv('UBICACION_MINUTOS_SIN_SENAL', 15))
+
+# Tolerancia del rastro que dibuja el panel, en metros. El recorrido del día se
+# simplifica antes de mandarlo (Douglas-Peucker): una jornada son cientos de
+# muestras y el panel se refresca cada 30 s. Con 30 m, una calle sigue siendo
+# una línea reconocible y el JSON baja a una fracción.
+UBICACION_RASTRO_TOLERANCIA_M = int(os.getenv('UBICACION_RASTRO_TOLERANCIA_M', 30))
+
+# Minutos sin desplazarse a partir de los cuales el panel marca el camión como
+# detenido. Es una referencia de color, no una alerta: la telefonista decide.
+UBICACION_MINUTOS_DETENIDO = int(os.getenv('UBICACION_MINUTOS_DETENIDO', 45))
