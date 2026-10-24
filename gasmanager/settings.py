@@ -58,6 +58,11 @@ USE_THOUSAND_SEPARATOR = True  # Esto es clave para activar los separadores de m
 # Para habilitarlo sin tocar código: CONTEO_BALONES_HABILITADO=True en el entorno.
 CONTEO_BALONES_HABILITADO = os.getenv("CONTEO_BALONES_HABILITADO", "False").lower() == "true"
 
+# Descarga de la app del camionero. Apunta al asset del último release de GitHub
+# (docs/API_MOVIL.md §7.5): el APK no vive en el repo ni en el filesystem efímero
+# de Render. Vacío = no se ofrece descarga y `version_api` devuelve null.
+APK_URL = os.getenv("APK_URL", "").strip()
+
 # Application definition
 
 INSTALLED_APPS = [

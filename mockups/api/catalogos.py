@@ -1,5 +1,6 @@
 """Catálogos y metadatos del API v1 (docs/API_MOVIL.md §7.5)."""
 
+from django.conf import settings
 from django.views.decorators.cache import never_cache
 
 from mockups.api.acceso import ROLES_CAMIONERO, acceso_api
@@ -10,10 +11,16 @@ from mockups.services.catalogos import get_balones_activos_ordenados
 
 VERSION_MINIMA = '0.1.0'
 
-# Sin hosting definido todavía: no hay carpeta `apk/` ni ruta que la sirva, y el
-# filesystem de Render es efímero (docs/API_MOVIL.md §7.5). Se devuelve None en
-# vez de una URL que daría 404; la app debe tolerarlo.
-URL_APK = None
+
+def url_de_descarga() -> str | None:
+    """URL del APK publicado como release de GitHub, o ``None`` si no hay.
+
+    El filesystem de Render es efímero, así que el binario no se sirve desde el
+    proyecto (§7.5). Se lee de ``settings.APK_URL`` y se devuelve ``None`` cuando
+    está vacía: la app debe tolerarlo y no ofrecer descarga en vez de recibir
+    una URL que daría 404.
+    """
+    return (getattr(settings, 'APK_URL', '') or '').strip() or None
 
 
 @never_cache
@@ -24,7 +31,7 @@ def version_api(request):
 
     Exige sesión: sin ella, cualquiera podría sondear la ruta de distribución.
     """
-    return ok({'version_minima': VERSION_MINIMA, 'url_apk': URL_APK})
+    return ok({'version_minima': VERSION_MINIMA, 'url_apk': url_de_descarga()})
 
 
 @never_cache
