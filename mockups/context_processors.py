@@ -21,7 +21,11 @@ def secciones_activas(request):
 
     Conteo de balones: la sección existe pero no se muestra ni se enlaza hasta
     liberarla (``CONTEO_BALONES_HABILITADO``).
+
+    Descarga de la app: ``url_apk`` vacío significa que no hay release publicado,
+    así el botón no aparece y nunca queda un enlace roto.
     """
     return {
         'conteo_balones_habilitado': getattr(settings, 'CONTEO_BALONES_HABILITADO', False),
+        'url_apk': (getattr(settings, 'APK_URL', '') or '').strip(),
     }

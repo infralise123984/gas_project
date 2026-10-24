@@ -20,7 +20,7 @@ from axes.models import AccessAttempt
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 
 from mockups.api.limites import consumir
@@ -740,6 +740,19 @@ class VersionTest(BaseApiTest):
         self.assertIsNone(
             datos['url_apk'],
             'mientras no exista hosting del APK debe ser null, no una URL rota',
+        )
+
+    @override_settings(
+        APK_URL='https://github.com/usuario/gas_facil_movil/releases/latest/download/app-release.apk'
+    )
+    def test_version_expone_el_release_cuando_esta_configurado(self):
+        # El APK vive en un release de GitHub, no en el filesystem de Render.
+        self.client.force_login(self.camionero_a)
+        datos = self.client.get(RUTA_VERSION).json()['data']
+
+        self.assertEqual(
+            datos['url_apk'],
+            'https://github.com/usuario/gas_facil_movil/releases/latest/download/app-release.apk',
         )
 
 

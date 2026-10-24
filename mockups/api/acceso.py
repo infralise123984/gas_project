@@ -71,12 +71,14 @@ def solo_post(vista):
     return envoltorio
 
 
-def cuerpo_json(request, *, permitidos):
+def cuerpo_json(request, *, permitidos, limite_bytes=LIMITE_CUERPO_BYTES):
     """Lee el cuerpo UNA vez y valida forma, tamaño y campos.
 
     Devuelve ``(datos, None)`` o ``(None, respuesta_de_error)``. Se rechaza:
 
-    * cuerpo mayor que ``LIMITE_CUERPO_BYTES`` (antes de parsear);
+    * cuerpo mayor que ``limite_bytes`` (antes de parsear). Por defecto
+      ``LIMITE_CUERPO_BYTES``, que es el techo correcto para payloads diminutos;
+      la ingesta de ubicación pasa el suyo porque manda lotes;
     * ``Content-Type`` no soportado;
     * JSON inválido o que no sea un objeto;
     * cualquier campo que no esté en ``permitidos`` (un ``role`` colado en el
@@ -85,7 +87,7 @@ def cuerpo_json(request, *, permitidos):
 
     largo = request.META.get('CONTENT_LENGTH') or '0'
     try:
-        if int(largo) > LIMITE_CUERPO_BYTES:
+        if int(largo) > limite_bytes:
             return None, respuestas.error(
                 'validacion', mensaje='El cuerpo de la petición es demasiado grande.'
             )
