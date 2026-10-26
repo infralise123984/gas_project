@@ -60,12 +60,16 @@ CONTEO_BALONES_HABILITADO = os.getenv("CONTEO_BALONES_HABILITADO", "False").lowe
 
 # Descarga de la app del camionero. Apunta al asset del último release de GitHub:
 # el APK no vive en este repositorio ni en el filesystem efímero de Render. La URL
-# "latest/download/<asset>" se actualiza sola con cada release nuevo; se puede
-# sobreescribir por entorno y vaciarla para no ofrecer descarga.
+# "latest/download/<asset>" se actualiza sola con cada release nuevo.
+#
+# Sin la variable, o con la variable vacía, se usa este valor: una variable vacía
+# en el panel de despliegue no debe dejar la descarga sin enlace. Para apagarla a
+# propósito, APK_URL=off.
 _APK_POR_DEFECTO = (
     "https://github.com/infralise123984/gas_facil_movil/releases/latest/download/app-release.apk"
 )
-APK_URL = os.getenv("APK_URL", _APK_POR_DEFECTO).strip()
+_apk_desde_entorno = (os.getenv("APK_URL") or "").strip()
+APK_URL = "" if _apk_desde_entorno.lower() == "off" else (_apk_desde_entorno or _APK_POR_DEFECTO)
 
 # Application definition
 
