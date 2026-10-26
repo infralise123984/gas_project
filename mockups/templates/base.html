@@ -469,6 +469,14 @@
                             <i class="bi bi-calendar3"></i> Historial
                         </a>
                     </li>
+                    {% if url_apk %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_apk }}" target="_blank" rel="noopener noreferrer"
+                            title="Descargar la app para el teléfono">
+                            <i class="bi bi-android2"></i> Descargar app
+                        </a>
+                    </li>
+                    {% endif %}
                     {% endif %}
                     {% if user.rol == "jefe" or user.rol == "admin" %}
                     {% comment %}Mismo ocultamiento del enlace de flota que en el bloque de la telefonista.{% endcomment %}

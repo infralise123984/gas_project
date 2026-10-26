@@ -58,10 +58,14 @@ USE_THOUSAND_SEPARATOR = True  # Esto es clave para activar los separadores de m
 # Para habilitarlo sin tocar código: CONTEO_BALONES_HABILITADO=True en el entorno.
 CONTEO_BALONES_HABILITADO = os.getenv("CONTEO_BALONES_HABILITADO", "False").lower() == "true"
 
-# Descarga de la app del camionero. Apunta al asset del último release de GitHub
-# (docs/API_MOVIL.md §7.5): el APK no vive en el repo ni en el filesystem efímero
-# de Render. Vacío = no se ofrece descarga y `version_api` devuelve null.
-APK_URL = os.getenv("APK_URL", "").strip()
+# Descarga de la app del camionero. Apunta al asset del último release de GitHub:
+# el APK no vive en este repositorio ni en el filesystem efímero de Render. La URL
+# "latest/download/<asset>" se actualiza sola con cada release nuevo; se puede
+# sobreescribir por entorno y vaciarla para no ofrecer descarga.
+_APK_POR_DEFECTO = (
+    "https://github.com/infralise123984/gas_facil_movil/releases/latest/download/app-release.apk"
+)
+APK_URL = os.getenv("APK_URL", _APK_POR_DEFECTO).strip()
 
 # Application definition
 

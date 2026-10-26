@@ -244,9 +244,9 @@
                 </div>
             </div>
 
-            {% if url_apk %}
-            <!-- App del camionero: el APK se publica como release de GitHub
-                 (docs/API_MOVIL.md §7.5). Sin APK_URL el bloque no se renderiza. -->
+            {% if url_apk and user.rol == "camionero" %}
+            <!-- App del camionero: el APK se publica como release de GitHub.
+                 Solo el camionero la instala; sin APK_URL el bloque no se renderiza. -->
             <div class="row justify-content-center mt-4">
                 <div class="col-12 col-md-8 col-lg-6">
                     <div class="card border-0 shadow-sm rounded-4">
