@@ -309,7 +309,6 @@ gas_project/
 ├── requirements-render.txt  # Dependencias producción (Render)
 ├── requirements-local.txt   # Dependencias desarrollo local
 ├── README.md
-├── LICENSE
 └── .gitignore
 ```
 
@@ -369,7 +368,7 @@ Los tests cubren:
 - Bloqueo tras 5 intentos fallidos
 - Coherencia de fechas Chile/UTC
 
-Script de seguridad complementario (standalone, **no** es un módulo de tests de Django): `python scripts/security_tests.py`. Ver [`docs/SECURITY_TESTING.md`](docs/SECURITY_TESTING.md).
+Script de seguridad complementario (standalone, **no** es un módulo de tests de Django): `python scripts/security_tests.py`.
 
 ---
 
@@ -377,18 +376,4 @@ Script de seguridad complementario (standalone, **no** es un módulo de tests de
 
 | Documento | Contenido |
 |---|---|
-| [`docs/README.md`](docs/README.md) | Índice de toda la documentación técnica |
-| [`docs/PUSH_NOTIFICATIONS.md`](docs/PUSH_NOTIFICATIONS.md) | Web Push: suscripciones, service worker, diagnóstico |
-| [`docs/SECURITY_TESTING.md`](docs/SECURITY_TESTING.md) | Checklist de seguridad y comandos de verificación |
-| [`docs/REPORTE_RENDIMIENTO.md`](docs/REPORTE_RENDIMIENTO.md) | Hallazgos de rendimiento priorizados |
-| [`docs/CIERRE_AUTOMATICO_SOBRES.md`](docs/CIERRE_AUTOMATICO_SOBRES.md) | Reglas del cierre automático nocturno de sobres |
-| [`docs/PLAN_AUDITORIA_OPERATIVA.md`](docs/PLAN_AUDITORIA_OPERATIVA.md) | Plan pendiente de auditoría operativa y alertas de cancelación |
 | [`scripts/README.md`](scripts/README.md) | Inventario de scripts y utilidades |
-
----
-
-## Licencia
-
-Copyright © 2026 GasFácil. Todos los derechos reservados.
-
-Este software es propietario y confidencial. Ver archivo [LICENSE](LICENSE) para más detalles.
