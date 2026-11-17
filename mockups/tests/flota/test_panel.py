@@ -110,6 +110,29 @@ class PlantillaPanelTest(BasePanelTest):
         self.assertIn('id="verRastro"', contenido)
 
 
+class EnlaceMenuFlotaTest(BasePanelTest):
+    """El panel existe desde antes, pero sin enlace nadie lo encuentra.
+
+    La telefonista es quien lo usa en el día a día —es a quien se le achacó la
+    caída de las ventas de tarreo cuando se quedó sin GPS—, así que su menú tiene
+    que mostrarlo. Los roles sin acceso no deben verlo: un enlace que termina en
+    "sin permiso" es peor que no tener enlace.
+    """
+
+    def _menu(self, usuario):
+        self.client.force_login(usuario)
+        return self.client.get(reverse('index')).content.decode()
+
+    def test_la_telefonista_ve_el_enlace(self):
+        self.assertIn('href="{}"'.format(reverse('flota_panel')), self._menu(self.telefonista))
+
+    def test_el_camionero_no_ve_el_enlace(self):
+        self.assertNotIn('href="{}"'.format(reverse('flota_panel')), self._menu(self.camionero))
+
+    def test_el_bodeguero_no_ve_el_enlace(self):
+        self.assertNotIn('href="{}"'.format(reverse('flota_panel')), self._menu(self.bodeguero))
+
+
 class ApiFlotaTest(BasePanelTest):
     def _consultar(self, usuario=None):
         self.client.force_login(usuario or self.telefonista)
